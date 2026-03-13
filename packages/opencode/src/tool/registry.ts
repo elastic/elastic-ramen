@@ -27,7 +27,30 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 
+import { ChartTool } from "./chart"
 import { ApplyPatchTool } from "./apply_patch"
+import {
+  KibanaListWorkflows,
+  KibanaGetWorkflow,
+  KibanaCreateWorkflow,
+  KibanaUpdateWorkflow,
+  KibanaDeleteWorkflow,
+  KibanaValidateWorkflow,
+  KibanaRunWorkflow,
+  KibanaGetExecution,
+  KibanaListExecutions,
+  KibanaListTools,
+  KibanaGetTool,
+  KibanaCreateTool,
+  KibanaUpdateTool,
+  KibanaDeleteTool,
+  KibanaListAgents,
+  KibanaGetAgent,
+  KibanaCreateAgent,
+  KibanaUpdateAgent,
+  KibanaDeleteAgent,
+  KibanaListConnectors,
+} from "./kibana"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
@@ -116,7 +139,28 @@ export namespace ToolRegistry {
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
+      ChartTool,
       ApplyPatchTool,
+      KibanaListWorkflows,
+      KibanaGetWorkflow,
+      KibanaCreateWorkflow,
+      KibanaUpdateWorkflow,
+      KibanaDeleteWorkflow,
+      KibanaValidateWorkflow,
+      KibanaRunWorkflow,
+      KibanaGetExecution,
+      KibanaListExecutions,
+      KibanaListTools,
+      KibanaGetTool,
+      KibanaCreateTool,
+      KibanaUpdateTool,
+      KibanaDeleteTool,
+      KibanaListAgents,
+      KibanaGetAgent,
+      KibanaCreateAgent,
+      KibanaUpdateAgent,
+      KibanaDeleteAgent,
+      KibanaListConnectors,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),

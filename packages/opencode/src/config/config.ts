@@ -76,7 +76,7 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
-    // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
+    // Config loading order (low -> high precedence): https://elastic-console.ai/docs/config#precedence-order
     // 1) Remote .well-known/opencode (org defaults)
     // 2) Global config (~/.config/opencode/opencode.json{,c})
     // 3) Custom config (OPENCODE_CONFIG)
@@ -97,7 +97,7 @@ export namespace Config {
         const wellknown = (await response.json()) as any
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://elastic-console.ai/config.json"
         result = mergeConfigConcatArrays(
           result,
           await load(JSON.stringify(remoteConfig), {
@@ -939,7 +939,7 @@ export namespace Config {
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
+      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: elastic-console.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
     .strict()
@@ -1017,11 +1017,11 @@ export namespace Config {
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       logLevel: Log.Level.optional().describe("Log level"),
-      server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      server: Server.optional().describe("Server configuration for elastic-console serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
-        .describe("Command configuration, see https://opencode.ai/docs/commands"),
+        .describe("Command configuration, see https://elastic-console.ai/docs/commands"),
       skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({
@@ -1088,7 +1088,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agents"),
+        .describe("Agent configuration, see https://elastic-console.ai/docs/agents"),
       provider: z
         .record(z.string(), Provider)
         .optional()
@@ -1225,7 +1225,7 @@ export namespace Config {
         .then(async (mod) => {
           const { provider, model, ...rest } = mod.default
           if (provider && model) result.model = `${provider}/${model}`
-          result["$schema"] = "https://opencode.ai/config.json"
+          result["$schema"] = "https://elastic-console.ai/config.json"
           result = mergeDeep(result, rest)
           await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
           await fs.unlink(legacy)
@@ -1246,6 +1246,7 @@ export namespace Config {
   }
 
   async function load(text: string, options: { path: string } | { dir: string; source: string }) {
+    text = text.replace(/\$\{([^}]+)\}/g, (m, k) => process.env[k] ?? m)
     const original = text
     const source = "path" in options ? options.path : options.source
     const isFile = "path" in options
@@ -1262,15 +1263,15 @@ export namespace Config {
       delete copy.theme
       delete copy.keybinds
       delete copy.tui
-      log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
+      log.warn("tui keys in elastic-console config are deprecated; move them to tui.json", { path: source })
       return copy
     })()
 
     const parsed = Info.safeParse(normalized)
     if (parsed.success) {
       if (!parsed.data.$schema && isFile) {
-        parsed.data.$schema = "https://opencode.ai/config.json"
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        parsed.data.$schema = "https://elastic-console.ai/config.json"
+        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://elastic-console.ai/config.json",')
         await Filesystem.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data

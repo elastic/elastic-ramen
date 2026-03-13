@@ -64,12 +64,12 @@ async function input(value?: string) {
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start opencode tui",
+  describe: "start elastic-console tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start elastic-console in",
       })
       .option("model", {
         type: "string",
@@ -97,6 +97,11 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("kibana-base", {
+        type: "string",
+        describe: "Kibana base URL for onboarding link",
+        default: "http://localhost:5601",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -212,6 +217,7 @@ export const TuiThreadCommand = cmd({
             model: args.model,
             prompt,
             fork: args.fork,
+            kibanaBase: args.kibanaBase,
           },
         })
       } finally {

@@ -135,9 +135,9 @@ type IssueQueryResponse = {
   }
 }
 
-const AGENT_USERNAME = "opencode-agent[bot]"
+const AGENT_USERNAME = "elastic-console-agent[bot]"
 const AGENT_REACTION = "eyes"
-const WORKFLOW_FILE = ".github/workflows/opencode.yml"
+const WORKFLOW_FILE = ".github/workflows/elastic-console.yml"
 
 // Event categories for routing
 // USER_EVENTS: triggered by user actions, have actor/issueId, support reactions/comments
@@ -242,9 +242,9 @@ export const GithubInstallCommand = cmd({
                 `    1. Commit the \`${WORKFLOW_FILE}\` file and push`,
                 step2,
                 "",
-                "    3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action",
+                "    3. Go to a GitHub issue and comment `/ec summarize` to see the agent in action",
                 "",
-                "   Learn more about the GitHub agent - https://opencode.ai/docs/github/#usage-examples",
+                "   Learn more about the GitHub agent - https://elastic-console.ai/docs/github/#usage-examples",
               ].join("\n"),
             )
           }
@@ -326,7 +326,7 @@ export const GithubInstallCommand = cmd({
             if (installation) return s.stop("GitHub app already installed")
 
             // Open browser
-            const url = "https://github.com/apps/opencode-agent"
+            const url = "https://github.com/apps/elastic-console-agent"
             const command =
               process.platform === "darwin"
                 ? `open "${url}"`
@@ -387,12 +387,12 @@ on:
     types: [created]
 
 jobs:
-  opencode:
+  elastic-console:
     if: |
-      contains(github.event.comment.body, ' /oc') ||
-      startsWith(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      contains(github.event.comment.body, ' /ec') ||
+      startsWith(github.event.comment.body, '/ec') ||
+      contains(github.event.comment.body, ' /elastic-console') ||
+      startsWith(github.event.comment.body, '/elastic-console')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -405,8 +405,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run opencode
-        uses: anomalyco/opencode/github@latest${envStr}
+      - name: Run elastic-console
+        uses: elastic/elastic-console/github@latest${envStr}
         with:
           model: ${provider}/${model}`,
             )
@@ -476,7 +476,7 @@ export const GithubRunCommand = cmd({
           ? (payload as IssueCommentEvent | IssuesEvent).issue.number
           : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-      const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
+      const shareBaseUrl = isMock ? "https://dev.elastic-console.ai" : "https://elastic-console.ai"
 
       let appToken: string
       let octoRest: Octokit
@@ -562,7 +562,7 @@ export const GithubRunCommand = cmd({
           await Session.share(session.id)
           return session.id.slice(-8)
         })()
-        console.log("opencode session", session.id)
+        console.log("elastic-console session", session.id)
 
         // Handle event types:
         // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
@@ -784,7 +784,7 @@ export const GithubRunCommand = cmd({
         }
 
         const reviewContext = getReviewCommentContext()
-        const mentions = (process.env["MENTIONS"] || "/opencode,/oc")
+        const mentions = (process.env["MENTIONS"] || "/elastic-console,/ec")
           .split(",")
           .map((m) => m.trim().toLowerCase())
           .filter(Boolean)
@@ -1027,7 +1027,7 @@ export const GithubRunCommand = cmd({
 
       async function getOidcToken() {
         try {
-          return await core.getIDToken("opencode-github-action")
+          return await core.getIDToken("elastic-console-github-action")
         } catch (error) {
           console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
@@ -1403,9 +1403,9 @@ export const GithubRunCommand = cmd({
           const titleAlt = encodeURIComponent(session.title.substring(0, 50))
           const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-          return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+          return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/elastic-console-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
         })()
-        const shareUrl = shareId ? `[opencode session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+        const shareUrl = shareId ? `[elastic-console session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
         return `\n\n${image}${shareUrl}[github run](${runUrl})`
       }
 

@@ -253,7 +253,7 @@ export const ProvidersLoginCommand = cmd({
   builder: (yargs) =>
     yargs
       .positional("url", {
-        describe: "opencode auth provider",
+        describe: "elastic-console auth provider",
         type: "string",
       })
       .option("provider", {

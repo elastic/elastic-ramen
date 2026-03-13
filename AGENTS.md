@@ -1,4 +1,5 @@
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
+- To rebuild the opencode package, run `bun run script/build.ts` from `packages/opencode`. This requires full network access (`required_permissions: ["full_network"]`).
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.

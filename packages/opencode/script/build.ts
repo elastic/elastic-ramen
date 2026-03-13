@@ -146,6 +146,34 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
+// Build the elastic CLI for each target platform
+const elasticCliDir = process.env.ELASTIC_CLI_DIR || path.resolve(dir, "../../../cli")
+const goTargetMap: Record<string, { goos: string; goarch: string }> = {
+  darwin: { goos: "darwin", goarch: "" },
+  linux: { goos: "linux", goarch: "" },
+  win32: { goos: "windows", goarch: "" },
+}
+const goArchMap: Record<string, string> = {
+  arm64: "arm64",
+  x64: "amd64",
+}
+
+const seen = new Set<string>()
+for (const item of targets) {
+  const goos = goTargetMap[item.os]?.goos ?? item.os
+  const goarch = goArchMap[item.arch] ?? item.arch
+  const key = `${goos}-${goarch}`
+  if (seen.has(key)) continue
+  seen.add(key)
+  const ext = goos === "windows" ? ".exe" : ""
+  const out = path.resolve(dir, `dist/elastic-cli/${key}/elastic${ext}`)
+  await $`mkdir -p ${path.dirname(out)}`
+  console.log(`building elastic CLI for ${key}`)
+  await $`CGO_ENABLED=0 GOOS=${goos} GOARCH=${goarch} go build -trimpath -ldflags="-s -w" -o ${out} ./cmd/elastic`.cwd(
+    elasticCliDir,
+  )
+}
+
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
@@ -200,6 +228,26 @@ for (const item of targets) {
   })
 
   await $`rm -rf ./dist/${name}/bin/tui`
+
+  // Copy the bundled elastic CLI binary into this target's bin dir
+  const goos = goTargetMap[item.os]?.goos ?? item.os
+  const goarch = goArchMap[item.arch] ?? item.arch
+  const ext = goos === "windows" ? ".exe" : ""
+  const src = path.resolve(dir, `dist/elastic-cli/${goos}-${goarch}/elastic${ext}`)
+  const dst = `dist/${name}/bin/elastic${ext}`
+  if (fs.existsSync(src)) {
+    await $`cp ${src} ${dst}`
+    console.log(`  bundled elastic CLI -> ${dst}`)
+  }
+
+  // Copy bundled elastic skills alongside the binary
+  const skillsSrc = path.resolve(dir, "src/elastic/skills")
+  const skillsDst = `dist/${name}/elastic/skills`
+  if (fs.existsSync(skillsSrc)) {
+    await $`mkdir -p ${skillsDst}`
+    await $`cp -r ${skillsSrc}/ ${skillsDst}/`
+    console.log(`  bundled elastic skills -> ${skillsDst}`)
+  }
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {

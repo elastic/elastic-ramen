@@ -34,6 +34,7 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { ElasticAuth } from "./elastic/auth"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -54,7 +55,7 @@ process.on("SIGHUP", () => process.exit())
 
 let cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName("elastic-console")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
@@ -84,7 +85,13 @@ let cli = yargs(hideBin(process.argv))
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
-    Log.Default.info("opencode", {
+    // Ensure bundled elastic CLI is on PATH
+    const binDir = path.dirname(process.execPath)
+    if (!process.env.PATH?.includes(binDir)) {
+      process.env.PATH = binDir + ":" + (process.env.PATH ?? "")
+    }
+
+    Log.Default.info("elastic-console", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
@@ -125,6 +132,54 @@ let cli = yargs(hideBin(process.argv))
       }
       process.stderr.write("Database migration complete." + EOL)
     }
+
+    if (opts.resetAuth) {
+      await ElasticAuth.reset()
+      process.stderr.write("Elastic credentials removed." + EOL)
+    }
+
+    // Check elastic auth for headless commands (TUI has its own setup dialog)
+    const args = process.argv.slice(2)
+    const cmd = args.find((a) => !a.startsWith("-"))
+    const headless = cmd === "run" || cmd === "serve"
+    if (headless) {
+      const status = await ElasticAuth.check()
+      if (!status.configured) {
+        const missing = status.missing?.join(", ") ?? "credentials"
+        process.stderr.write(
+          EOL +
+            "\x1b[38;5;37m" +
+            "Elastic Console requires authentication to your Elasticsearch deployment." +
+            "\x1b[0m" +
+            EOL +
+            EOL +
+            "Missing: " +
+            missing +
+            EOL +
+            EOL +
+            "Run the TUI (elastic-console) to set up via the onboarding dialog," +
+            EOL +
+            "or write ~/.config/elastic/config.yaml:" +
+            EOL +
+            EOL +
+            "  current-context: default" +
+            EOL +
+            "  contexts:" +
+            EOL +
+            "    default:" +
+            EOL +
+            '      elasticsearch_url: "https://..."' +
+            EOL +
+            '      api_key: "your-api-key"' +
+            EOL +
+            EOL,
+        )
+      }
+    }
+  })
+  .option("reset-auth", {
+    describe: "remove stored Elastic credentials and re-prompt on next launch",
+    type: "boolean",
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")

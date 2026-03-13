@@ -3,7 +3,7 @@ import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, onCleanup, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
@@ -41,6 +41,13 @@ import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
+import { ElasticAuth } from "@/elastic/auth"
+import { ElasticAlerts } from "@/elastic/alerts"
+import { Handover } from "@/elastic/handover"
+import type { KibanaClient } from "@/elastic/client"
+import { AlertsProvider, useAlerts } from "@tui/context/alerts"
+import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
+import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -158,7 +165,9 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <App />
+                                              <AlertsProvider>
+                                                <App />
+                                              </AlertsProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
@@ -265,20 +274,20 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle("Elastic Console")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle("Elastic Console")
         return
       }
 
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`EC | ${title}`)
     }
   })
 
@@ -343,6 +352,199 @@ function App() {
         toast.show({ message: "Failed to fork session", variant: "error" })
       }
     })
+  })
+
+  // Alert polling for connected Kibana instance
+  const alertsCtx = useAlerts()
+  let alertPoller: ReturnType<typeof ElasticAlerts.poller> | undefined
+
+  function startAlerts(url: string, key: string) {
+    if (alertPoller) return
+    alertPoller = ElasticAlerts.poller(url, key)
+      .on((fresh, all) => {
+        alertsCtx.set(all)
+        if (fresh.length === 1) {
+          toast.show({
+            variant: "warning",
+            title: "Active Alert",
+            message: fresh[0].name,
+            duration: 8000,
+          })
+        } else if (fresh.length > 1) {
+          toast.show({
+            variant: "warning",
+            title: `${fresh.length} Active Alerts`,
+            message: fresh.map((a) => `• ${a.name}`).join("\n"),
+            duration: 10000,
+          })
+        }
+      })
+      .start()
+  }
+
+  // Handover polling for Kibana Agent Builder sessions
+  let handoverPoller: ReturnType<typeof Handover.poller> | undefined
+  const pending: Handover.Pending[] = []
+
+  async function takeover(item: Handover.Pending) {
+    try {
+      const res = await sdk.client.session.create({})
+      if (res.error || !res.data) {
+        toast.show({ variant: "error", message: "Handover failed: could not create session", duration: 5000 })
+        return
+      }
+      const sessionID = res.data.id
+      Handover.link(sessionID, item.id)
+      await sdk.client.session.update({ sessionID, title: `Kibana: ${item.title}` }).catch(() => {})
+
+      const model = local.model.current()
+      if (model) {
+        await sdk.fetch(`${sdk.url}/session/${sessionID}/seed`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rounds: Handover.rounds(item.conversation),
+            model,
+            agent: local.agent.current().name,
+          }),
+        })
+      }
+
+      await Handover.clear(item.id).catch(() => {})
+      const idx = pending.indexOf(item)
+      if (idx >= 0) pending.splice(idx, 1)
+
+      route.navigate({ type: "session", sessionID })
+    } catch (err) {
+      toast.show({ variant: "error", message: `Handover failed: ${err instanceof Error ? err.message : String(err)}`, duration: 5000 })
+    }
+  }
+
+  function startHandover() {
+    if (handoverPoller) return
+    handoverPoller = Handover.poller()
+      .on((items) => {
+        pending.push(...items)
+        if (items.length === 1) {
+          const item = items[0]
+          toast.show({
+            variant: "info",
+            title: "Kibana Handover",
+            message: item.title,
+            duration: 15000,
+            action: "Take over",
+            onAction: () => takeover(item),
+          })
+        } else {
+          toast.show({
+            variant: "info",
+            title: "Kibana Handover",
+            message: `${items.length} sessions waiting`,
+            duration: 15000,
+            action: "View sessions",
+            onAction: () => dialog.replace(() => <DialogKibanaTakeover />),
+          })
+        }
+      })
+      .start()
+  }
+
+  const [kibanaReady, setKibanaReady] = createSignal(false)
+  function buildRounds(sessionID: string): KibanaClient.ConversationRound[] {
+    const msgs = sync.data.message[sessionID] ?? []
+    const result: KibanaClient.ConversationRound[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+      if (msg.role !== "user") continue
+      const parts = sync.data.part[msg.id] ?? []
+      const text = parts.flatMap((p) => p.type === "text" && !p.synthetic ? [p.text] : []).join("\n")
+      if (!text.trim()) continue
+
+      const texts: string[] = []
+      const steps: KibanaClient.ConversationRound["steps"] = []
+      for (let j = i + 1; j < msgs.length && msgs[j].role === "assistant"; j++) {
+        const ap = sync.data.part[msgs[j].id] ?? []
+        for (const p of ap) {
+          if (p.type === "text") texts.push(p.text)
+          if (p.type === "tool" && (p.state.status === "completed" || p.state.status === "error")) {
+            steps.push({
+              type: "tool_call" as const,
+              tool_call_id: p.callID,
+              tool_id: p.tool,
+              params: p.state.input,
+              results: [{
+                type: "text" as const,
+                tool_result_id: `${p.callID}-result`,
+                value: p.state.status === "completed" ? p.state.output.slice(0, 2000) : p.state.error,
+              }],
+            })
+          }
+          if (p.type === "reasoning") steps.push({ type: "reasoning" as const, reasoning: p.text })
+        }
+      }
+
+      result.push(Handover.round({
+        id: `round-${result.length + 1}`,
+        user: text,
+        assistant: texts.join("\n"),
+        started: new Date(msg.time.created).toISOString(),
+        steps,
+      }))
+    }
+    return result
+  }
+
+  const prev = new Map<string, string>()
+  createEffect(() => {
+    if (!kibanaReady()) return
+    const statuses = sync.data.session_status
+    for (const [sessionID, status] of Object.entries(statuses)) {
+      const last = prev.get(sessionID)
+      prev.set(sessionID, status.type)
+      if (last === "busy" && status.type === "idle") {
+        const session = sync.session.get(sessionID)
+        if (!session) continue
+        const rounds = buildRounds(sessionID)
+        Handover.sync(sessionID, session.title, rounds).catch((err) => {
+          toast.show({ variant: "error", message: `Kibana sync failed: ${err instanceof Error ? err.message : String(err)}`, duration: 5000 })
+        })
+      }
+    }
+  })
+
+  onCleanup(() => {
+    alertPoller?.stop()
+    handoverPoller?.stop()
+  })
+
+  // Check elastic auth on mount; show setup dialog if not configured
+  onMount(async () => {
+    const status = await ElasticAuth.check()
+    if (!status.configured) {
+      dialog.replace(() => (
+        <DialogElasticSetup
+          kibanaBase={args.kibanaBase}
+          onComplete={async () => {
+            dialog.clear()
+            await sdk.client.mcp.connect({ name: "elastic-agent-builder" })
+            const fresh = await sdk.client.mcp.status()
+            if (fresh.data) sync.set("mcp", fresh.data)
+            const creds = await ElasticAlerts.resolve()
+            if (creds) startAlerts(creds.url, creds.key)
+            startHandover()
+            setKibanaReady(true)
+          }}
+        />
+      ))
+      return
+    }
+    const url = status.context?.elasticsearch_url
+    const key = status.context?.api_key
+    if (url && key) startAlerts(url, key)
+    if (status.context?.kibana_url && status.context?.api_key) {
+      startHandover()
+      setKibanaReady(true)
+    }
   })
 
   createEffect(
@@ -410,6 +612,18 @@ function App() {
           workspaceID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Take over Kibana session",
+      value: "kibana.takeover",
+      category: "Kibana",
+      slash: {
+        name: "kibana-sessions",
+        aliases: ["kibana", "kibana-takeover"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogKibanaTakeover />)
       },
     },
     {
@@ -533,7 +747,7 @@ function App() {
     {
       title: "View status",
       keybind: "status_view",
-      value: "opencode.status",
+      value: "elastic-console.status",
       slash: {
         name: "status",
       },
@@ -578,7 +792,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
+        open("https://elastic-console.ai/docs").catch(() => {})
         dialog.clear()
       },
       category: "System",
@@ -685,7 +899,7 @@ function App() {
         DialogAlert.show(
           dialog,
           "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
+          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Elastic Console Zen\nhttps://elastic-console.ai/zen",
         ).then(() => kv.set("openrouter_warning", true))
       })
     }
@@ -747,7 +961,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      message: `Elastic Console v${evt.properties.version} is available. Run 'elastic-console upgrade' to update manually.`,
       duration: 10000,
     })
   })
@@ -802,7 +1016,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/elastic/elastic-console/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -824,7 +1038,7 @@ function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("opencode-version", Installation.VERSION)
+  issueURL.searchParams.set("elastic-console-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {

@@ -7,7 +7,10 @@ import { TextAttributes } from "@opentui/core"
 import z from "zod"
 import { TuiEvent } from "../event"
 
-export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
+export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties> & {
+  action?: string
+  onAction?: () => void
+}
 
 export function Toast() {
   const toast = useToast()
@@ -41,6 +44,22 @@ export function Toast() {
           <text fg={theme.text} wrapMode="word" width="100%">
             {current().message}
           </text>
+          <Show when={current().action && current().onAction}>
+            <box
+              marginTop={1}
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={theme[current().variant]}
+              onMouseUp={() => {
+                current().onAction?.()
+                toast.dismiss()
+              }}
+            >
+              <text attributes={TextAttributes.BOLD} fg={theme.backgroundPanel}>
+                {current().action}
+              </text>
+            </box>
+          </Show>
         </box>
       )}
     </Show>
@@ -56,13 +75,19 @@ function init() {
 
   const toast = {
     show(options: ToastOptions) {
-      const parsedOptions = TuiEvent.ToastShow.properties.parse(options)
-      const { duration, ...currentToast } = parsedOptions
-      setStore("currentToast", currentToast)
+      const { action, onAction, ...rest } = options
+      const parsed = TuiEvent.ToastShow.properties.parse(rest)
+      const { duration, ...base } = parsed
+      setStore("currentToast", { ...base, action, onAction })
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {
         setStore("currentToast", null)
       }, duration).unref()
+    },
+    dismiss() {
+      if (timeoutHandle) clearTimeout(timeoutHandle)
+      timeoutHandle = null
+      setStore("currentToast", null)
     },
     error: (err: any) => {
       if (err instanceof Error)

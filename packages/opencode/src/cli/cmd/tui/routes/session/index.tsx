@@ -46,6 +46,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
+import { ChartTool, BAR_WIDTH, render as renderBar, fmt as fmtNum } from "@/tool/chart"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -253,7 +254,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}elastic-console -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -1568,6 +1569,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "chart"}>
+          <Chart {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -1618,6 +1622,109 @@ function GenericTool(props: ToolProps<any>) {
           </Show>
         </box>
       </BlockTool>
+    </Show>
+  )
+}
+
+const CHART_COLORS = (theme: ReturnType<typeof useTheme>["theme"]) => [
+  theme.primary,
+  theme.success,
+  theme.warning,
+  theme.secondary,
+  theme.info,
+  theme.accent,
+]
+
+function Chart(props: ToolProps<typeof ChartTool>) {
+  const { theme } = useTheme()
+  const data = createMemo(() => props.metadata.data as
+    | { title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
+    | undefined)
+
+  const widths = createMemo(() => {
+    const d = data()
+    if (!d) return { lw: 8, nw: [] as number[], cw: [] as number[] }
+    const nums = d.rows.map((r) => d.columns.map((_, i) => fmtNum(r.values[i] ?? 0)))
+    const lw = Math.max(8, ...d.rows.map((r) => r.label.length))
+    const nw = d.columns.map((_, i) => Math.max(0, ...nums.map((n) => n[i].length)))
+    const cw = d.columns.map((col, i) => Math.max(col.length, BAR_WIDTH + 1 + nw[i]))
+    return { lw, nw, cw }
+  })
+
+  const borderLine = (left: string, mid: string, right: string) => {
+    const w = widths()
+    const d = data()
+    if (!d) return ""
+    return left + "─".repeat(w.lw + 2) + d.columns.map((_, i) => mid + "─".repeat(w.cw[i] + 2)).join("") + right
+  }
+
+  const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length))
+
+  return (
+    <Show
+      when={data()}
+      fallback={
+        <InlineTool icon="📊" pending="Generating chart..." complete={props.output} part={props.part}>
+          chart
+        </InlineTool>
+      }
+    >
+      {(d) => {
+        const colors = CHART_COLORS(theme)
+        return (
+          <BlockTool title={`# 📊 ${d().title ?? "Chart"}`} part={props.part}>
+            <box>
+              <text fg={theme.textMuted}>{borderLine("┌", "┬", "┐")}</text>
+              <text>
+                <span style={{ fg: theme.textMuted }}>│ </span>
+                <span style={{ fg: theme.text, bold: true }}>{pad("Category", widths().lw)}</span>
+                <span style={{ fg: theme.textMuted }}> </span>
+                <For each={d().columns}>
+                  {(col, ci) => (
+                    <>
+                      <span style={{ fg: theme.textMuted }}>│ </span>
+                      <span style={{ fg: colors[ci() % colors.length], bold: true }}>
+                        {pad(col, widths().cw[ci()])}
+                      </span>
+                      <span style={{ fg: theme.textMuted }}> </span>
+                    </>
+                  )}
+                </For>
+                <span style={{ fg: theme.textMuted }}>│</span>
+              </text>
+              <text fg={theme.textMuted}>{borderLine("├", "┼", "┤")}</text>
+              <For each={d().rows}>
+                {(row) => (
+                  <text>
+                    <span style={{ fg: theme.textMuted }}>│ </span>
+                    <span style={{ fg: theme.text }}>{pad(row.label, widths().lw)}</span>
+                    <span style={{ fg: theme.textMuted }}> </span>
+                    <For each={d().columns}>
+                      {(_, ci) => {
+                        const val = row.values[ci()] ?? 0
+                        const bar = renderBar(val, d().maxes[ci()])
+                        const num = fmtNum(val)
+                        return (
+                          <>
+                            <span style={{ fg: theme.textMuted }}>│ </span>
+                            <span style={{ fg: colors[ci() % colors.length] }}>{bar}</span>
+                            <span style={{ fg: theme.text }}>
+                              {" " + pad(num, widths().cw[ci()] - BAR_WIDTH - 1)}
+                            </span>
+                            <span style={{ fg: theme.textMuted }}> </span>
+                          </>
+                        )
+                      }}
+                    </For>
+                    <span style={{ fg: theme.textMuted }}>│</span>
+                  </text>
+                )}
+              </For>
+              <text fg={theme.textMuted}>{borderLine("└", "┴", "┘")}</text>
+            </box>
+          </BlockTool>
+        )
+      }}
     </Show>
   )
 }

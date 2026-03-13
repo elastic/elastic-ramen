@@ -530,7 +530,7 @@ export namespace ACP {
           "terminal-auth": {
             command: "opencode",
             args: ["auth", "login"],
-            label: "OpenCode Login",
+            label: "Elastic Console Login",
           },
         }
       }
@@ -555,7 +555,7 @@ export namespace ACP {
         },
         authMethods: [authMethod],
         agentInfo: {
-          name: "OpenCode",
+          name: "Elastic Console",
           version: Installation.VERSION,
         },
       }

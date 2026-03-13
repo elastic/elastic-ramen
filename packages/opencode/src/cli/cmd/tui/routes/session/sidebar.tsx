@@ -10,6 +10,7 @@ import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
+import { useAlerts } from "../../context/alerts"
 import { TodoItem } from "../../component/todo-item"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
@@ -20,11 +21,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
+  const alertsCtx = useAlerts()
+
   const [expanded, setExpanded] = createStore({
     mcp: true,
     diff: true,
     todo: true,
     lsp: true,
+    alerts: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -167,6 +171,44 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
               </box>
             </Show>
+            <Show when={alertsCtx.alerts.length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => alertsCtx.alerts.length > 2 && setExpanded("alerts", !expanded.alerts)}
+                >
+                  <Show when={alertsCtx.alerts.length > 2}>
+                    <text fg={theme.text}>{expanded.alerts ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Alerts</b>
+                    <Show when={!expanded.alerts}>
+                      <span style={{ fg: theme.warning }}> ({alertsCtx.alerts.length} active)</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={alertsCtx.alerts.length <= 2 || expanded.alerts}>
+                  <For each={alertsCtx.alerts}>
+                    {(alert) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} style={{ fg: theme.warning }}>
+                          •
+                        </text>
+                        <text fg={theme.text} wrapMode="word">
+                          {alert.name}{" "}
+                          <Show when={alert.start}>
+                            <span style={{ fg: theme.textMuted }}>
+                              {new Date(alert.start!).toLocaleTimeString()}
+                            </span>
+                          </Show>
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
             <box>
               <box
                 flexDirection="row"
@@ -292,7 +334,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     ✕
                   </text>
                 </box>
-                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
+                <text fg={theme.textMuted}>Elastic Console includes free models so you can start immediately.</text>
                 <text fg={theme.textMuted}>
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
                 </text>
@@ -308,9 +350,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
           </text>
           <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
+            <span style={{ fg: theme.success }}>•</span> <b>Elastic</b>
             <span style={{ fg: theme.text }}>
-              <b>Code</b>
+              <b>Console</b>
             </span>{" "}
             <span>{Installation.VERSION}</span>
           </text>

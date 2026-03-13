@@ -122,6 +122,23 @@ export namespace Skill {
       }
     }
 
+    // Scan bundled Elastic skills
+    const bundled = path.join(path.dirname(process.execPath), "..", "elastic", "skills")
+    const bundledFallback = path.resolve(__dirname, "../elastic/skills")
+    for (const candidate of [bundled, bundledFallback]) {
+      if (!(await Filesystem.isDir(candidate))) continue
+      const matches = await Glob.scan(SKILL_PATTERN, {
+        cwd: candidate,
+        absolute: true,
+        include: "file",
+        symlink: true,
+      })
+      for (const match of matches) {
+        await addSkill(match)
+      }
+      break
+    }
+
     // Scan .opencode/skill/ directories
     for (const dir of await Config.directories()) {
       const matches = await Glob.scan(OPENCODE_SKILL_PATTERN, {

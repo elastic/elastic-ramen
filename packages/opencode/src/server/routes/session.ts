@@ -16,6 +16,7 @@ import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { PermissionID } from "@/permission/schema"
+import { Instance } from "@/project/instance"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -27,7 +28,7 @@ export const SessionRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "List sessions",
-        description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
+        description: "Get a list of all Elastic Console sessions, sorted by most recently updated.",
         operationId: "session.list",
         responses: {
           200: {
@@ -95,7 +96,7 @@ export const SessionRoutes = lazy(() =>
       "/:sessionID",
       describeRoute({
         summary: "Get session",
-        description: "Retrieve detailed information about a specific OpenCode session.",
+        description: "Retrieve detailed information about a specific Elastic Console session.",
         tags: ["Session"],
         operationId: "session.get",
         responses: {
@@ -188,7 +189,7 @@ export const SessionRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "Create session",
-        description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
+        description: "Create a new Elastic Console session for interacting with AI assistants and managing conversations.",
         operationId: "session.create",
         responses: {
           ...errors(400),
@@ -933,6 +934,111 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const session = await SessionRevert.unrevert({ sessionID })
         return c.json(session)
+      },
+    )
+    .post(
+      "/:sessionID/seed",
+      describeRoute({
+        summary: "Seed session with conversation history",
+        description:
+          "Populate a session with existing conversation rounds as proper alternating user/assistant messages. Used when taking over a Kibana Agent Builder session.",
+        operationId: "session.seed",
+        responses: {
+          200: {
+            description: "Successfully seeded session",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          rounds: z.array(
+            z.object({
+              input: z.string(),
+              output: z.string(),
+              started: z.string().optional(),
+            }),
+          ),
+          model: z.object({
+            providerID: z.string(),
+            modelID: z.string(),
+          }),
+          agent: z.string(),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+
+        for (const round of body.rounds) {
+          const userID = MessageID.ascending()
+          const assistantID = MessageID.ascending()
+          const created = round.started ? new Date(round.started).getTime() : Date.now()
+
+          await Session.updateMessage({
+            id: userID,
+            role: "user",
+            sessionID,
+            time: { created },
+            agent: body.agent,
+            model: body.model,
+          })
+
+          await Session.updatePart({
+            id: PartID.ascending(),
+            sessionID,
+            messageID: userID,
+            type: "text",
+            text: round.input,
+          })
+
+          const completed = created + 1
+          await Session.updateMessage({
+            id: assistantID,
+            role: "assistant",
+            sessionID,
+            parentID: userID,
+            time: { created: completed, completed },
+            modelID: body.model.modelID,
+            providerID: body.model.providerID,
+            mode: body.agent,
+            agent: body.agent,
+            path: {
+              cwd: Instance.directory,
+              root: Instance.worktree,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            finish: "stop",
+          })
+
+          await Session.updatePart({
+            id: PartID.ascending(),
+            sessionID,
+            messageID: assistantID,
+            type: "text",
+            text: round.output,
+          })
+        }
+
+        return c.json(true)
       },
     )
     .post(

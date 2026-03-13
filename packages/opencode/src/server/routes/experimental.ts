@@ -192,7 +192,7 @@ export const ExperimentalRoutes = lazy(() =>
       describeRoute({
         summary: "List sessions",
         description:
-          "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+          "Get a list of all Elastic Console sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
         operationId: "experimental.session.list",
         responses: {
           200: {
