@@ -875,10 +875,20 @@ export namespace SessionPrompt {
           result,
         )
 
+        // dynamicTool (e.g. MCP tools) may return a plain string instead of {content: [...]}
+        const content: Array<any> =
+          typeof result === "string"
+            ? [{ type: "text" as const, text: result }]
+            : Array.isArray(result?.content)
+              ? result.content
+              : typeof result?.content === "string"
+                ? [{ type: "text" as const, text: result.content }]
+                : [{ type: "text" as const, text: JSON.stringify(result) }]
+
         const textParts: string[] = []
         const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
 
-        for (const contentItem of result.content) {
+        for (const contentItem of content) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
@@ -905,7 +915,7 @@ export namespace SessionPrompt {
 
         const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
         const metadata = {
-          ...(result.metadata ?? {}),
+          ...(typeof result === "object" && result?.metadata ? result.metadata : {}),
           truncated: truncated.truncated,
           ...(truncated.truncated && { outputPath: truncated.outputPath }),
         }
@@ -920,7 +930,7 @@ export namespace SessionPrompt {
             sessionID: ctx.sessionID,
             messageID: input.processor.message.id,
           })),
-          content: result.content, // directly return content to preserve ordering when outputting to model
+          content, // directly return content to preserve ordering when outputting to model
         }
       }
       tools[key] = item

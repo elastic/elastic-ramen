@@ -134,26 +134,37 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        const result = await client.callTool(
-          {
-            name: mcpTool.name,
-            arguments: (args || {}) as Record<string, unknown>,
-          },
-          CallToolResultSchema,
-          {
-            resetTimeoutOnProgress: true,
-            timeout,
-          },
-        )
-        // Convert MCP content array to a plain string for AI SDK compatibility
-        if (result.content && Array.isArray(result.content)) {
-          const text = result.content
-            .filter((c: any) => c.type === "text")
-            .map((c: any) => c.text)
-            .join("\n")
-          return text || JSON.stringify(result.content)
+        try {
+          const result = await client.callTool(
+            {
+              name: mcpTool.name,
+              arguments: (args || {}) as Record<string, unknown>,
+            },
+            CallToolResultSchema,
+            {
+              resetTimeoutOnProgress: true,
+              timeout,
+            },
+          )
+          if (!result) return "MCP tool returned no result"
+          // Convert MCP content array to a plain string for AI SDK compatibility
+          if (result.content && Array.isArray(result.content)) {
+            const text = result.content
+              .filter((c: any) => c.type === "text")
+              .map((c: any) => c.text)
+              .join("\n")
+            return text || JSON.stringify(result.content)
+          }
+          if (result.isError) return `MCP tool error: ${JSON.stringify(result)}`
+          return typeof result === "string" ? result : JSON.stringify(result)
+        } catch (err) {
+          log.error("MCP tool execute failed", {
+            tool: mcpTool.name,
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          })
+          return `MCP tool error: ${err instanceof Error ? err.message : String(err)}`
         }
-        return result
       },
     })
   }
