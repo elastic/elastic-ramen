@@ -44,7 +44,7 @@ import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
-import type { KibanaClient } from "@/elastic/client"
+import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
@@ -382,77 +382,10 @@ function App() {
       .start()
   }
 
-  // Handover polling for Kibana Agent Builder sessions
-  let handoverPoller: ReturnType<typeof Handover.poller> | undefined
-  const pending: Handover.Pending[] = []
-
-  async function takeover(item: Handover.Pending) {
-    try {
-      const res = await sdk.client.session.create({})
-      if (res.error || !res.data) {
-        toast.show({ variant: "error", message: "Handover failed: could not create session", duration: 5000 })
-        return
-      }
-      const sessionID = res.data.id
-      Handover.link(sessionID, item.id)
-      await sdk.client.session.update({ sessionID, title: `Kibana: ${item.title}` }).catch(() => {})
-
-      const model = local.model.current()
-      if (model) {
-        await sdk.fetch(`${sdk.url}/session/${sessionID}/seed`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rounds: Handover.rounds(item.conversation),
-            model,
-            agent: local.agent.current().name,
-          }),
-        })
-      }
-
-      await Handover.clear(item.id).catch(() => {})
-      const idx = pending.indexOf(item)
-      if (idx >= 0) pending.splice(idx, 1)
-
-      route.navigate({ type: "session", sessionID })
-    } catch (err) {
-      toast.show({ variant: "error", message: `Handover failed: ${err instanceof Error ? err.message : String(err)}`, duration: 5000 })
-    }
-  }
-
-  function startHandover() {
-    if (handoverPoller) return
-    handoverPoller = Handover.poller()
-      .on((items) => {
-        pending.push(...items)
-        if (items.length === 1) {
-          const item = items[0]
-          toast.show({
-            variant: "info",
-            title: "Kibana Handover",
-            message: item.title,
-            duration: 15000,
-            action: "Take over",
-            onAction: () => takeover(item),
-          })
-        } else {
-          toast.show({
-            variant: "info",
-            title: "Kibana Handover",
-            message: `${items.length} sessions waiting`,
-            duration: 15000,
-            action: "View sessions",
-            onAction: () => dialog.replace(() => <DialogKibanaTakeover />),
-          })
-        }
-      })
-      .start()
-  }
-
-  const [kibanaReady, setKibanaReady] = createSignal(false)
-  function buildRounds(sessionID: string): KibanaClient.ConversationRound[] {
+  const [esReady, setEsReady] = createSignal(false)
+  function buildRounds(sessionID: string): ConversationRound[] {
     const msgs = sync.data.message[sessionID] ?? []
-    const result: KibanaClient.ConversationRound[] = []
+    const result: ConversationRound[] = []
     for (let i = 0; i < msgs.length; i++) {
       const msg = msgs[i]
       if (msg.role !== "user") continue
@@ -461,7 +394,7 @@ function App() {
       if (!text.trim()) continue
 
       const texts: string[] = []
-      const steps: KibanaClient.ConversationRound["steps"] = []
+      const steps: ConversationRound["steps"] = []
       for (let j = i + 1; j < msgs.length && msgs[j].role === "assistant"; j++) {
         const ap = sync.data.part[msgs[j].id] ?? []
         for (const p of ap) {
@@ -496,7 +429,7 @@ function App() {
 
   const prev = new Map<string, string>()
   createEffect(() => {
-    if (!kibanaReady()) return
+    if (!esReady()) return
     const statuses = sync.data.session_status
     for (const [sessionID, status] of Object.entries(statuses)) {
       const last = prev.get(sessionID)
@@ -506,7 +439,7 @@ function App() {
         if (!session) continue
         const rounds = buildRounds(sessionID)
         Handover.sync(sessionID, session.title, rounds).catch((err) => {
-          toast.show({ variant: "error", message: `Kibana sync failed: ${err instanceof Error ? err.message : String(err)}`, duration: 5000 })
+          toast.show({ variant: "error", message: `Kibana conversation sync failed: ${err instanceof Error ? err.message : String(err)}`, duration: 5000 })
         })
       }
     }
@@ -514,7 +447,6 @@ function App() {
 
   onCleanup(() => {
     alertPoller?.stop()
-    handoverPoller?.stop()
   })
 
   // Check elastic auth on mount; show setup dialog if not configured
@@ -526,13 +458,32 @@ function App() {
           kibanaBase={args.kibanaBase}
           onComplete={async () => {
             dialog.clear()
-            await sdk.client.mcp.connect({ name: "elastic-agent-builder" })
-            const fresh = await sdk.client.mcp.status()
-            if (fresh.data) sync.set("mcp", fresh.data)
+
+            // Dispose the server-side instance so it re-reads config files
+            await sdk.client.instance.dispose().catch(() => {})
+
+            // Re-bootstrap to pick up the new provider config written during auth
+            await sync.bootstrap()
+
+            try {
+              toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
+              await sdk.client.mcp.connect({ name: "eab" })
+              const fresh = await sdk.client.mcp.status()
+              if (fresh.data) {
+                sync.set("mcp", fresh.data)
+                const mcpStatus = fresh.data["eab"]
+                if (mcpStatus?.status === "connected") {
+                  toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
+                } else {
+                  toast.show({ variant: "error", message: `MCP server eab status: ${mcpStatus?.status ?? "unknown"}${"error" in (mcpStatus ?? {}) ? ` - ${(mcpStatus as any).error}` : ""}`, duration: 8000 })
+                }
+              }
+            } catch (err) {
+              toast.show({ variant: "error", message: `MCP connect failed: ${err instanceof Error ? err.message : String(err)}`, duration: 8000 })
+            }
             const creds = await ElasticAlerts.resolve()
             if (creds) startAlerts(creds.url, creds.key)
-            startHandover()
-            setKibanaReady(true)
+            setEsReady(true)
           }}
         />
       ))
@@ -541,10 +492,7 @@ function App() {
     const url = status.context?.elasticsearch_url
     const key = status.context?.api_key
     if (url && key) startAlerts(url, key)
-    if (status.context?.kibana_url && status.context?.api_key) {
-      startHandover()
-      setKibanaReady(true)
-    }
+    if (url && key) setEsReady(true)
   })
 
   createEffect(
@@ -615,11 +563,11 @@ function App() {
       },
     },
     {
-      title: "Take over Kibana session",
+      title: "Take over Kibana conversation",
       value: "kibana.takeover",
       category: "Kibana",
       slash: {
-        name: "kibana-sessions",
+        name: "kibana-conversations",
         aliases: ["kibana", "kibana-takeover"],
       },
       onSelect: () => {

@@ -174,6 +174,18 @@ for (const item of targets) {
   )
 }
 
+// Read all SKILL.md files to embed as a define constant
+const skillsDir = path.resolve(dir, "src/elastic/skills")
+const embeddedSkills: Record<string, string> = {}
+if (fs.existsSync(skillsDir)) {
+  for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const md = path.join(skillsDir, entry.name, "SKILL.md")
+    if (fs.existsSync(md)) embeddedSkills[entry.name] = fs.readFileSync(md, "utf8")
+  }
+  console.log(`Embedded ${Object.keys(embeddedSkills).length} skills`)
+}
+
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
@@ -202,6 +214,18 @@ for (const item of targets) {
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
   const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
 
+  // Read the Go CLI binary for this target and embed as base64
+  const goos = goTargetMap[item.os]?.goos ?? item.os
+  const goarch = goArchMap[item.arch] ?? item.arch
+  const ext = goos === "windows" ? ".exe" : ""
+  const elasticBinPath = path.resolve(dir, `dist/elastic-cli/${goos}-${goarch}/elastic${ext}`)
+  const elasticBinB64 = fs.existsSync(elasticBinPath)
+    ? fs.readFileSync(elasticBinPath).toString("base64")
+    : ""
+  if (elasticBinB64) {
+    console.log(`  embedding elastic CLI (${(elasticBinB64.length / 1024 / 1024 * 0.75).toFixed(1)} MB)`)
+  }
+
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
@@ -212,7 +236,7 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      outfile: `dist/${name}/bin/elastic-console`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -224,34 +248,13 @@ for (const item of targets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+      ELASTIC_CLI_B64: JSON.stringify(elasticBinB64),
+      ELASTIC_SKILLS_EMBEDDED: JSON.stringify(embeddedSkills),
     },
   })
 
   await $`rm -rf ./dist/${name}/bin/tui`
 
-  // Copy opencode binary as elastic-console so both names are available
-  const ocExt = item.os === "win32" ? ".exe" : ""
-  await $`cp dist/${name}/bin/opencode${ocExt} dist/${name}/bin/elastic-console${ocExt}`
-
-  // Copy the bundled elastic CLI binary into this target's bin dir
-  const goos = goTargetMap[item.os]?.goos ?? item.os
-  const goarch = goArchMap[item.arch] ?? item.arch
-  const ext = goos === "windows" ? ".exe" : ""
-  const src = path.resolve(dir, `dist/elastic-cli/${goos}-${goarch}/elastic${ext}`)
-  const dst = `dist/${name}/bin/elastic${ext}`
-  if (fs.existsSync(src)) {
-    await $`cp ${src} ${dst}`
-    console.log(`  bundled elastic CLI -> ${dst}`)
-  }
-
-  // Copy bundled elastic skills alongside the binary
-  const skillsSrc = path.resolve(dir, "src/elastic/skills")
-  const skillsDst = `dist/${name}/elastic/skills`
-  if (fs.existsSync(skillsSrc)) {
-    await $`mkdir -p ${skillsDst}`
-    await $`cp -r ${skillsSrc}/ ${skillsDst}/`
-    console.log(`  bundled elastic skills -> ${skillsDst}`)
-  }
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
@@ -270,9 +273,9 @@ for (const item of targets) {
 if (Script.release) {
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${key}.tar.gz elastic-console*`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${key}.zip elastic-console*`.cwd(`dist/${key}/bin`)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`

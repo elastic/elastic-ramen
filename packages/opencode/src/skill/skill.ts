@@ -17,6 +17,9 @@ import { pathToFileURL } from "url"
 import type { Agent } from "@/agent/agent"
 import { PermissionNext } from "@/permission/next"
 
+// Injected at build time via Bun's define
+declare const ELASTIC_SKILLS_EMBEDDED: Record<string, string> | undefined
+
 export namespace Skill {
   const log = Log.create({ service: "skill" })
   export const Info = z.object({
@@ -122,21 +125,39 @@ export namespace Skill {
       }
     }
 
-    // Scan bundled Elastic skills
-    const bundled = path.join(path.dirname(process.execPath), "..", "elastic", "skills")
-    const bundledFallback = path.resolve(__dirname, "../elastic/skills")
-    for (const candidate of [bundled, bundledFallback]) {
-      if (!(await Filesystem.isDir(candidate))) continue
-      const matches = await Glob.scan(SKILL_PATTERN, {
-        cwd: candidate,
-        absolute: true,
-        include: "file",
-        symlink: true,
-      })
-      for (const match of matches) {
-        await addSkill(match)
+    // Load embedded Elastic skills (compiled mode) or scan filesystem (dev mode)
+    if (typeof ELASTIC_SKILLS_EMBEDDED !== "undefined" && ELASTIC_SKILLS_EMBEDDED && Object.keys(ELASTIC_SKILLS_EMBEDDED).length > 0) {
+      for (const [name, content] of Object.entries(ELASTIC_SKILLS_EMBEDDED)) {
+        const md = await ConfigMarkdown.parseContent(content).catch((err) => {
+          log.error("failed to parse embedded skill", { skill: name, err })
+          return undefined
+        })
+        if (!md) continue
+        const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+        if (!parsed.success) continue
+        skills[parsed.data.name] = {
+          name: parsed.data.name,
+          description: parsed.data.description,
+          location: `embedded:elastic/skills/${name}/SKILL.md`,
+          content: md.content,
+        }
       }
-      break
+    } else {
+      const bundled = path.join(path.dirname(process.execPath), "..", "elastic", "skills")
+      const bundledFallback = path.resolve(__dirname, "../elastic/skills")
+      for (const candidate of [bundled, bundledFallback]) {
+        if (!(await Filesystem.isDir(candidate))) continue
+        const matches = await Glob.scan(SKILL_PATTERN, {
+          cwd: candidate,
+          absolute: true,
+          include: "file",
+          symlink: true,
+        })
+        for (const match of matches) {
+          await addSkill(match)
+        }
+        break
+      }
     }
 
     // Scan .opencode/skill/ directories
@@ -224,7 +245,7 @@ export namespace Skill {
           `  <skill>`,
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
+          `    <location>${skill.location.startsWith("embedded:") ? skill.location : pathToFileURL(skill.location).href}</location>`,
           `  </skill>`,
         ]),
         "</available_skills>",

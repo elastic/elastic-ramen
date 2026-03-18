@@ -1,5 +1,40 @@
 import { ElasticAuth } from "./auth"
 
+export interface ConversationRound {
+  id: string
+  status: "in_progress" | "completed" | "awaiting_prompt"
+  input: { message: string }
+  steps: Array<
+    | { type: "tool_call"; tool_call_id: string; tool_id: string; params: unknown; results: Array<{ type: "text"; tool_result_id: string; value: string }> }
+    | { type: "reasoning"; reasoning: string }
+  >
+  response: { message: string }
+  started_at: string
+  time_to_first_token: number
+  time_to_last_token: number
+  model_usage: {
+    connector_id: string
+    llm_calls: number
+    input_tokens: number
+    output_tokens: number
+  }
+}
+
+export interface Conversation {
+  id: string
+  agent_id: string
+  user_name: string
+  space: string
+  title: string
+  created_at: string
+  updated_at: string
+  conversation_rounds: ConversationRound[]
+  attachments?: unknown[]
+  state?: unknown
+}
+
+export type ConversationSummary = Omit<Conversation, "conversation_rounds">
+
 export namespace KibanaClient {
   function api(base: string, suffix: string, space?: string) {
     const prefix = space && space !== "default" ? `/s/${space}` : ""
@@ -168,70 +203,27 @@ export namespace KibanaClient {
     }
   }
 
-  // Conversations (Agent Builder session sync)
-
-  export interface ConversationRound {
-    id: string
-    status: "in_progress" | "completed" | "awaiting_prompt"
-    input: { message: string }
-    steps: Array<
-      | { type: "tool_call"; tool_call_id: string; tool_id: string; params: unknown; results: Array<{ type: "text"; tool_result_id: string; value: string }> }
-      | { type: "reasoning"; reasoning: string }
-    >
-    response: { message: string }
-    started_at: string
-    time_to_first_token: number
-    time_to_last_token: number
-    model_usage: {
-      connector_id: string
-      llm_calls: number
-      input_tokens: number
-      output_tokens: number
-    }
-  }
-
-  export interface Conversation {
-    id: string
-    agent_id: string
-    user: { id: string; username: string }
-    title: string
-    created_at: string
-    updated_at: string
-    rounds: ConversationRound[]
-    attachments?: unknown[]
-    state?: unknown
-    handover_requested: boolean
-  }
-
-  export type ConversationSummary = Omit<Conversation, "rounds">
+  // Conversations
 
   export function conversations(space?: string) {
     return {
-      list(opts?: { agent_id?: string; handover_requested?: boolean }) {
+      async list(opts?: { agent_id?: string }): Promise<{ results: ConversationSummary[] }> {
         const params = new URLSearchParams()
         if (opts?.agent_id) params.set("agent_id", opts.agent_id)
-        if (opts?.handover_requested !== undefined) params.set("handover_requested", String(opts.handover_requested))
         const qs = params.toString()
-        return request<{ results: ConversationSummary[] }>(api("/api/agent_builder/conversations", qs ? `?${qs}` : "", space))
+        return request(api("/internal/elastic_console/conversations", qs ? "?" + qs : "", space))
       },
-      get(id: string) {
-        return request<Conversation>(api("/api/agent_builder/conversations", `/${id}`, space))
+      async get(id: string): Promise<Conversation> {
+        return request(api("/internal/elastic_console/conversations", `/${encodeURIComponent(id)}`, space))
       },
-      create(body: { agent_id: string; title: string; rounds: ConversationRound[]; attachments?: unknown[]; handover_requested?: boolean }) {
-        return request<{ conversation: Conversation }>(api("/api/agent_builder/conversations", "", space), { method: "POST", body })
+      async create(body: { agent_id: string; title: string; conversation_rounds: ConversationRound[]; user_name?: string; attachments?: unknown[] }): Promise<{ id: string }> {
+        return request(api("/internal/elastic_console/conversations", "", space), { method: "POST", body })
       },
-      update(id: string, body: { title?: string; rounds?: ConversationRound[] }) {
-        return request<{ conversation: Conversation }>(api("/api/agent_builder/conversations", `/${id}`, space), { method: "PUT", body })
-      },
-      handover(id: string, requested: boolean) {
-        return request<{ conversation: ConversationSummary }>(api("/api/agent_builder/conversations", `/${id}/_handover`, space), {
-          method: "POST",
-          body: { requested },
-        })
-      },
-      del(id: string) {
-        return request<{ success: boolean }>(api("/api/agent_builder/conversations", `/${id}`, space), { method: "DELETE" })
+      async update(id: string, body: { title?: string; conversation_rounds?: ConversationRound[] }): Promise<void> {
+        await request(api("/internal/elastic_console/conversations", `/${encodeURIComponent(id)}`, space), { method: "PUT", body })
       },
     }
   }
+
 }
+

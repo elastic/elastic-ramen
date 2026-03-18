@@ -89,6 +89,24 @@ export namespace ConfigMarkdown {
     }
   }
 
+  export async function parseContent(template: string) {
+    try {
+      return matter(template)
+    } catch {
+      try {
+        return matter(fallbackSanitization(template))
+      } catch (err) {
+        throw new FrontmatterError(
+          {
+            path: "<embedded>",
+            message: `Failed to parse YAML frontmatter: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          { cause: err },
+        )
+      }
+    }
+  }
+
   export const FrontmatterError = NamedError.create(
     "ConfigFrontmatterError",
     z.object({

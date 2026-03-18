@@ -8,12 +8,21 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
+  /** Map of canonical config names to their preferred (elastic_console) and legacy (opencode) filenames. */
+  const CONFIG_NAMES: Record<string, string[]> = {
+    opencode: ["elastic_console", "opencode"],
+    tui: ["tui"],
+  }
+
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
-    for (const file of [`${name}.jsonc`, `${name}.json`]) {
-      const found = await Filesystem.findUp(file, directory, worktree)
-      for (const resolved of found.toReversed()) {
-        files.push(resolved)
+    const names = CONFIG_NAMES[name] ?? [name]
+    for (const n of names) {
+      for (const file of [`${n}.jsonc`, `${n}.json`]) {
+        const found = await Filesystem.findUp(file, directory, worktree)
+        for (const resolved of found.toReversed()) {
+          files.push(resolved)
+        }
       }
     }
     return files

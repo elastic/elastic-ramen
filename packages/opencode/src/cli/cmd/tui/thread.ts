@@ -100,8 +100,7 @@ export const TuiThreadCommand = cmd({
       })
       .option("kibana-base", {
         type: "string",
-        describe: "Kibana base URL for onboarding link",
-        default: "http://localhost:5601",
+        describe: "Kibana base URL (experimental: enables Kibana callback onboarding flow)",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.

@@ -941,7 +941,7 @@ export const SessionRoutes = lazy(() =>
       describeRoute({
         summary: "Seed session with conversation history",
         description:
-          "Populate a session with existing conversation rounds as proper alternating user/assistant messages. Used when taking over a Kibana Agent Builder session.",
+          "Populate a session with existing conversation rounds as proper alternating user/assistant messages. Used when taking over a Kibana Agent Builder conversation.",
         operationId: "session.seed",
         responses: {
           200: {

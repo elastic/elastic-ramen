@@ -140,7 +140,7 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
+        for (const file of ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
@@ -206,7 +206,7 @@ export namespace Config {
     // which would fail on system directories requiring elevated permissions
     // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedDir)) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
+      for (const file of ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
         result = mergeConfigConcatArrays(result, await loadFile(path.join(managedDir, file)))
       }
     }
@@ -1211,6 +1211,8 @@ export namespace Config {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.jsonc"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
@@ -1327,13 +1329,14 @@ export namespace Config {
   }
 
   function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
       if (existsSync(file)) return file
     }
-    return candidates[0]
+    // Default to elastic_console.json for new files
+    return path.join(Global.Path.config, "elastic_console.json")
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {

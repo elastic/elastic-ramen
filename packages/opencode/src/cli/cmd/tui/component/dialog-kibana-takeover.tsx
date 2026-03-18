@@ -7,7 +7,7 @@ import { useToast } from "../ui/toast"
 import { createSignal, createMemo, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Handover } from "@/elastic/handover"
-import type { KibanaClient } from "@/elastic/client"
+import type { ConversationSummary } from "@/elastic/client"
 
 export function DialogKibanaTakeover() {
   const dialog = useDialog()
@@ -16,16 +16,16 @@ export function DialogKibanaTakeover() {
   const local = useLocal()
   const toast = useToast()
 
-  const [sessions, setSessions] = createSignal<KibanaClient.ConversationSummary[]>()
+  const [conversations, setConversations] = createSignal<ConversationSummary[]>()
   const [loading, setLoading] = createSignal(true)
 
   onMount(async () => {
     dialog.setSize("large")
     try {
       const res = await Handover.list()
-      setSessions(res.results)
+      setConversations(res.results)
     } catch (err) {
-      toast.show({ variant: "error", message: err instanceof Error ? err.message : "Failed to list Kibana sessions", duration: 5000 })
+      toast.show({ variant: "error", message: err instanceof Error ? err.message : "Failed to list Kibana conversations", duration: 5000 })
     } finally {
       setLoading(false)
     }
@@ -33,8 +33,8 @@ export function DialogKibanaTakeover() {
 
   const options = createMemo(() => {
     if (loading()) return [{ title: "Loading…", value: "", disabled: true }]
-    const items = sessions()
-    if (!items?.length) return [{ title: "No sessions found", value: "", disabled: true }]
+    const items = conversations()
+    if (!items?.length) return [{ title: "No conversations found", value: "", disabled: true }]
     return items.map((c) => ({
       title: c.title,
       value: c.id,
@@ -44,7 +44,7 @@ export function DialogKibanaTakeover() {
 
   return (
     <DialogSelect
-      title="Take over Kibana session"
+      title="Take over Kibana conversation"
       options={options()}
       onSelect={async (option) => {
         if (!option.value) return
@@ -76,7 +76,7 @@ export function DialogKibanaTakeover() {
           toast.show({ variant: "info", title: "Kibana Takeover", message: `Picked up: ${conv.title}`, duration: 5000 })
           route.navigate({ type: "session", sessionID })
         } catch (err) {
-          toast.show({ variant: "error", message: err instanceof Error ? err.message : "Failed to take over session", duration: 5000 })
+          toast.show({ variant: "error", message: err instanceof Error ? err.message : "Failed to take over conversation", duration: 5000 })
         }
       }}
     />

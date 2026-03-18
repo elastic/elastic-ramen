@@ -85,10 +85,12 @@ let cli = yargs(hideBin(process.argv))
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
-    // Ensure bundled elastic CLI is on PATH
-    const binDir = path.dirname(process.execPath)
-    if (!process.env.PATH?.includes(binDir)) {
-      process.env.PATH = binDir + ":" + (process.env.PATH ?? "")
+    // Extract embedded elastic CLI and ensure it's on PATH
+    const { ElasticBin } = await import("./elastic/bin")
+    const elasticBinPath = await ElasticBin.resolve()
+    const elasticBinDir = path.dirname(elasticBinPath)
+    if (!process.env.PATH?.includes(elasticBinDir)) {
+      process.env.PATH = elasticBinDir + ":" + (process.env.PATH ?? "")
     }
 
     Log.Default.info("elastic-console", {
@@ -168,7 +170,7 @@ let cli = yargs(hideBin(process.argv))
             EOL +
             "    default:" +
             EOL +
-            '      elasticsearch_url: "https://..."' +
+            '      cloud_id: "my-deployment:base64..."   # or elasticsearch_url: "https://..."' +
             EOL +
             '      api_key: "your-api-key"' +
             EOL +

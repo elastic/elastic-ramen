@@ -10,6 +10,7 @@ export namespace ElasticAuth {
     password?: string
     elasticsearch_url?: string
     kibana_url?: string
+    auth_mode?: string
   }
 
   export interface Status {
@@ -24,6 +25,7 @@ export namespace ElasticAuth {
     cloud_id?: string
     kibana_url?: string
     api_key?: string
+    auth_mode?: string
     provider?: Record<string, unknown>
     model?: string
   }
@@ -39,6 +41,23 @@ export namespace ElasticAuth {
 
   function filepath() {
     return path.join(dir(), "config.yaml")
+  }
+
+  /** Decode a Cloud ID into ES and Kibana URLs. Format: `name:base64(host$es_uuid$kibana_uuid)` */
+  export function decodeCloudId(cloudId: string): { elasticsearch_url: string; kibana_url: string } | undefined {
+    const parts = cloudId.split(":")
+    if (parts.length < 2) return undefined
+    try {
+      const decoded = Buffer.from(parts.slice(1).join(":"), "base64").toString("utf-8")
+      const [host, esUuid, kibanaUuid] = decoded.split("$")
+      if (!host || !esUuid) return undefined
+      return {
+        elasticsearch_url: `https://${esUuid}.${host}`,
+        kibana_url: kibanaUuid ? `https://${kibanaUuid}.${host}` : undefined!,
+      }
+    } catch {
+      return undefined
+    }
   }
 
   function parseYaml(raw: string): Record<string, any> {
@@ -93,6 +112,7 @@ export namespace ElasticAuth {
       if (ctx.api_key) lines.push(`    api_key: "${ctx.api_key}"`)
       if (ctx.username) lines.push(`    username: "${ctx.username}"`)
       if (ctx.password) lines.push(`    password: "${ctx.password}"`)
+      if (ctx.auth_mode) lines.push(`    auth_mode: "${ctx.auth_mode}"`)
     }
     lines.push("")
     return lines.join("\n")
@@ -112,6 +132,15 @@ export namespace ElasticAuth {
     const ctx = cfg.contexts?.[name] as Context | undefined
     if (!ctx) return { configured: false, missing: [`context "${name}"`] }
 
+    // Derive ES/Kibana URLs from Cloud ID if not explicitly set
+    if (ctx.cloud_id && (!ctx.elasticsearch_url || !ctx.kibana_url)) {
+      const decoded = decodeCloudId(ctx.cloud_id)
+      if (decoded) {
+        if (!ctx.elasticsearch_url) ctx.elasticsearch_url = decoded.elasticsearch_url
+        if (!ctx.kibana_url && decoded.kibana_url) ctx.kibana_url = decoded.kibana_url
+      }
+    }
+
     const missing: string[] = []
     if (!ctx.cloud_id && !ctx.elasticsearch_url) missing.push("elasticsearch_url or cloud_id")
     if (!ctx.api_key && !(ctx.username && ctx.password)) missing.push("api_key")
@@ -122,7 +151,8 @@ export namespace ElasticAuth {
 
   async function configJson(): Promise<string | undefined> {
     const cwd = process.cwd()
-    for (const name of ["opencode.json", "opencode.jsonc"]) {
+    // Prefer elastic_console.json, fall back to opencode.json
+    for (const name of ["elastic_console.json", "elastic_console.jsonc", "opencode.json", "opencode.jsonc"]) {
       const fp = path.join(cwd, name)
       if (await Filesystem.exists(fp)) return fp
     }
@@ -155,17 +185,47 @@ export namespace ElasticAuth {
     if (input.elasticsearch_url) ctx.elasticsearch_url = input.elasticsearch_url
     if (input.kibana_url) ctx.kibana_url = input.kibana_url
     if (input.api_key) ctx.api_key = input.api_key
+    if (input.auth_mode) ctx.auth_mode = input.auth_mode
 
     const yaml = toYaml({ current: "default", contexts: { default: ctx } })
     await Bun.write(fp, yaml, { mode: 0o600 } as any)
 
     if (input.provider) {
-      const cfg = await configJson()
-      if (cfg) {
-        const json = await Filesystem.readJson(cfg).catch(() => ({}))
-        json.provider = input.provider
-        if (input.model) json.model = input.model
-        await Filesystem.writeJson(cfg, json)
+      let cfg = await configJson()
+      if (!cfg) cfg = path.join(process.cwd(), "elastic_console.json")
+      const json = await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://opencode.ai/config.json" }))
+      json.provider = input.provider
+      if (input.model) json.model = input.model
+
+      // Ensure MCP config for eab is present
+      if (!json.mcp) json.mcp = {}
+      if (!json.mcp["eab"]) {
+        json.mcp["eab"] = {
+          type: "local",
+          command: ["elastic", "ab", "mcp", "proxy"],
+          enabled: true,
+        }
+      }
+      // Auto-allow MCP tools
+      if (!json.permission) json.permission = {}
+      if (!json.permission["eab_*"]) {
+        json.permission["eab_*"] = "allow"
+      }
+
+      await Filesystem.writeJson(cfg, json)
+
+      // Also clear provider/model overrides from .opencode/opencode.jsonc so they don't
+      // take precedence over the project-level config we just wrote
+      for (const name of ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
+        const override = path.join(process.cwd(), ".opencode", name)
+        if (await Filesystem.exists(override)) {
+          const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
+          if (overrideJson && (overrideJson.provider || overrideJson.model)) {
+            delete overrideJson.provider
+            delete overrideJson.model
+            await Filesystem.writeJson(override, overrideJson)
+          }
+        }
       }
     }
   }

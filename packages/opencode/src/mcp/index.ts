@@ -23,6 +23,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { ElasticAuth } from "@/elastic/auth"
+import { ElasticBin } from "@/elastic/bin"
 import open from "open"
 
 export namespace MCP {
@@ -133,7 +134,7 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool(
+        const result = await client.callTool(
           {
             name: mcpTool.name,
             arguments: (args || {}) as Record<string, unknown>,
@@ -144,6 +145,15 @@ export namespace MCP {
             timeout,
           },
         )
+        // Convert MCP content array to a plain string for AI SDK compatibility
+        if (result.content && Array.isArray(result.content)) {
+          const text = result.content
+            .filter((c: any) => c.type === "text")
+            .map((c: any) => c.text)
+            .join("\n")
+          return text || JSON.stringify(result.content)
+        }
+        return result
       },
     })
   }
@@ -205,7 +215,7 @@ export namespace MCP {
           }
 
           // Defer elastic MCP server until auth is configured
-          if (key === "elastic-agent-builder") {
+          if (key === "eab") {
             const auth = await ElasticAuth.check()
             if (!auth.configured) {
               status[key] = {
@@ -216,10 +226,32 @@ export namespace MCP {
             }
           }
 
-          const result = await create(key, mcp).catch(() => undefined)
+          const result = await create(key, mcp).catch((err) => {
+            log.error("MCP create failed", { key, error: err instanceof Error ? err.message : String(err) })
+            status[key] = {
+              status: "failed",
+              error: err instanceof Error ? err.message : String(err),
+            }
+            Bus.publish(TuiEvent.ToastShow, {
+              title: "MCP Init Failed",
+              message: `Server "${key}" failed to start: ${err instanceof Error ? err.message : String(err)}`,
+              variant: "error",
+              duration: 8000,
+            }).catch(() => {})
+            return undefined
+          })
           if (!result) return
 
           status[key] = result.status
+
+          if (result.status.status === "failed") {
+            Bus.publish(TuiEvent.ToastShow, {
+              title: "MCP Init Failed",
+              message: `Server "${key}": ${result.status.error ?? "unknown error"}`,
+              variant: "error",
+              duration: 8000,
+            }).catch(() => {})
+          }
 
           if (result.mcpClient) {
             clients[key] = result.mcpClient
@@ -463,7 +495,16 @@ export namespace MCP {
     }
 
     if (mcp.type === "local") {
-      const [cmd, ...args] = mcp.command
+      let [cmd, ...args] = mcp.command
+      // Resolve the elastic CLI binary via ElasticBin so it works even when not on PATH
+      if (cmd === "elastic") {
+        try {
+          cmd = await ElasticBin.resolve()
+          log.info("resolved elastic CLI binary", { key, path: cmd })
+        } catch (err) {
+          log.error("failed to resolve elastic CLI binary", { key, error: err instanceof Error ? err.message : String(err) })
+        }
+      }
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
         stderr: "pipe",
@@ -476,8 +517,11 @@ export namespace MCP {
           ...mcp.environment,
         },
       })
+      const stderrChunks: string[] = []
       transport.stderr?.on("data", (chunk: Buffer) => {
-        log.info(`mcp stderr: ${chunk.toString()}`, { key })
+        const text = chunk.toString()
+        stderrChunks.push(text)
+        log.info(`mcp stderr: ${text}`, { key })
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -493,15 +537,18 @@ export namespace MCP {
           status: "connected",
         }
       } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error)
+        const stderr = stderrChunks.join("").trim()
+        const detail = stderr ? `${errMsg} (stderr: ${stderr.slice(0, 200)})` : errMsg
         log.error("local mcp startup failed", {
           key,
           command: mcp.command,
           cwd,
-          error: error instanceof Error ? error.message : String(error),
+          error: detail,
         })
         status = {
           status: "failed" as const,
-          error: error instanceof Error ? error.message : String(error),
+          error: detail,
         }
       }
     }
@@ -583,7 +630,16 @@ export namespace MCP {
       return
     }
 
-    const result = await create(name, { ...mcp, enabled: true })
+    const result = await create(name, { ...mcp, enabled: true }).catch((err) => {
+      log.error("MCP connect create failed", { name, error: err instanceof Error ? err.message : String(err) })
+      Bus.publish(TuiEvent.ToastShow, {
+        title: "MCP Connect Failed",
+        message: `Server "${name}": ${err instanceof Error ? err.message : String(err)}`,
+        variant: "error",
+        duration: 8000,
+      }).catch(() => {})
+      return undefined
+    })
 
     if (!result) {
       const s = await state()
@@ -596,6 +652,14 @@ export namespace MCP {
 
     const s = await state()
     s.status[name] = result.status
+    if (result.status.status === "failed") {
+      Bus.publish(TuiEvent.ToastShow, {
+        title: "MCP Connect Failed",
+        message: `Server "${name}": ${result.status.error ?? "unknown error"}`,
+        variant: "error",
+        duration: 8000,
+      }).catch(() => {})
+    }
     if (result.mcpClient) {
       // Close existing client if present to prevent memory leaks
       const existingClient = s.clients[name]

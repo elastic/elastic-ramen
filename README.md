@@ -1,141 +1,273 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# Elastic Console
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
-
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) — the open-source AI coding agent — extended with native Kibana/Elasticsearch integration for SRE and observability workflows.
 
 ---
 
-### Installation
+## Getting Started
+
+### Option A: Manual setup (default)
+
+Run the TUI with no flags:
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+elastic-console
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+The onboarding dialog shows two fields:
 
-### Desktop App (BETA)
+- **Cloud ID or Elasticsearch URL** — enter a Cloud ID (`my-deployment:dXMtY2Vud...`) or a full URL (`https://my-cluster.es.cloud:443`)
+- **API Key** — an Elasticsearch API key
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+Press `Tab` to switch between fields and `Ctrl+Enter` to connect.
 
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+When a Cloud ID is provided, the Kibana URL is derived automatically and the **LLM Gateway provider** is configured — so you can start chatting immediately without a separate LLM API key.
+
+### Option B: One-click Kibana setup (experimental)
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+elastic-console --kibana-base=http://localhost:5601
 ```
 
-#### Installation Directory
+This starts a local callback server and shows a Kibana onboarding link. Open the link in your browser, click **Generate credentials**, and Kibana will automatically deliver:
 
-The install script respects the following priority order for the installation path:
+- Elasticsearch URL + API key (saved to `~/.config/elastic/config.yaml`)
+- **LLM Gateway provider** — routes model requests through Kibana's AI connectors via an OpenAI-compatible proxy at `/internal/elastic_console/v1`
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+You can also click **"Or enter credentials manually"** to fall back to the two-field form.
+
+### What happens during auth
+
+The auth flow writes:
+
+1. **Elastic credentials** to `~/.config/elastic/config.yaml` (elasticsearch_url, kibana_url, api_key)
+2. **Provider + MCP + permissions** to `elastic_console.json` in the current working directory:
+   - `provider.kibana` — Kibana LLM Gateway (OpenAI-compatible)
+   - `mcp.eab` — Elastic Agent Builder MCP server (`elastic ab mcp proxy`)
+   - `permission.eab_*: "allow"` — auto-allow MCP tools
+
+After saving, the server-side instance is disposed and the TUI re-bootstraps to pick up the new config immediately.
+
+### Manual config
+
+You can skip the dialog entirely by writing the config files yourself:
+
+```yaml
+# ~/.config/elastic/config.yaml
+current-context: default
+contexts:
+  default:
+    cloud_id: "my-deployment:base64..."   # or elasticsearch_url: "https://..."
+    kibana_url: "https://my-kibana.kb.cloud:443"
+    api_key: "your-api-key"
+```
+
+For headless commands (`elastic-console run`, `elastic-console serve`), the config file must exist before launch.
+
+### Resetting auth
 
 ```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+elastic-console --reset-auth
 ```
 
-### Agents
+This removes stored credentials from `~/.config/elastic/config.yaml` and clears `provider`/`model` from `elastic_console.json`. The setup dialog will show on next launch.
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+### API key requirements
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+The API key needs privileges for cluster health, data streams, Kibana APIs, and alert polling (`.alerts-*` indices).
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+Create the key via the Elasticsearch Dev Tools console or API:
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+```
+POST /_security/api_key
+{
+  "name": "elastic-console",
+  "expiration": "30d",
+  "role_descriptors": {
+    "elastic-console": {
+      "cluster": ["all"],
+      "indices": [
+        {
+          "names": ["*"],
+          "privileges": ["all"],
+          "allow_restricted_indices": true
+        }
+      ],
+      "applications": [
+        {
+          "application": "*",
+          "privileges": ["*"],
+          "resources": ["*"]
+        }
+      ]
+    }
+  }
+}
+```
 
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Out-of-the-box LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
+Use the `encoded` value from the response as your API key.
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+## LLM Gateway
+
+The Kibana plugin at `x-pack/platform/plugins/shared/elastic_console/` exposes an OpenAI-compatible API that routes through Kibana-configured AI connectors. When using the auth flow (either manual with Cloud ID or one-click Kibana setup), this is configured automatically.
+
+The provider uses the internal Kibana API at `/internal/elastic_console/v1/chat/completions` with required headers:
+
+- `Authorization: ApiKey <base64-encoded-key>`
+- `kbn-xsrf: true`
+- `x-elastic-internal-origin: kibana`
+- `elastic-api-version: 2023-10-31`
+
+### What works
+
+- Chat completions (streaming and non-streaming)
+- Tool/function calling
+- Multi-turn conversations
+- Any connector configured in Kibana (the `"default"` model ID resolves to the default inference connector)
+
+### What doesn't work (yet)
+
+- **Attachments / image content** — the provider is configured with `attachment: false`
+- **Reasoning / extended thinking** — configured with `reasoning: false`
+- **Multiple models** — only a single `"default"` model is registered; you cannot select specific connectors by name from the TUI
+- **Token usage tracking** — cost is set to `0` since tokens are metered on the Kibana/connector side
+
+### Manual LLM Gateway setup
+
+If you didn't use the auth flow, you can manually add the provider to `elastic_console.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "kibana": {
+      "name": "Kibana LLM Gateway",
+      "id": "kibana",
+      "npm": "@ai-sdk/openai-compatible",
+      "env": [],
+      "models": {
+        "default": {
+          "id": "default",
+          "name": "Default Connector",
+          "attachment": false,
+          "reasoning": false,
+          "temperature": true,
+          "tool_call": true,
+          "release_date": "2025-01-01",
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 128000, "output": 8192 }
+        }
+      },
+      "options": {
+        "baseURL": "https://my-kibana:5601/internal/elastic_console/v1",
+        "apiKey": "ignored",
+        "headers": {
+          "Authorization": "ApiKey <your-base64-encoded-api-key>",
+          "kbn-xsrf": "true",
+          "x-elastic-internal-origin": "kibana",
+          "elastic-api-version": "2023-10-31"
+        }
+      }
+    }
+  },
+  "model": "kibana/default"
+}
+```
+
+The `apiKey` field is required by the AI SDK but ignored — actual auth is via the `Authorization` header.
+
+---
+
+## MCP Server (Elastic Agent Builder)
+
+The `eab` MCP server provides additional Elasticsearch capabilities (ES|QL queries, index operations, documentation search) through the `elastic ab mcp proxy` command. It is configured automatically during the auth flow.
+
+Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permission.eab_*: "allow"` in `elastic_console.json`.
+
+### Elastic CLI
+
+The `elastic` CLI binary is embedded in the build and available on PATH at runtime. It uses the same credentials from `~/.config/elastic/config.yaml`. Key commands:
+
+- `elastic es query "<ESQL>"` — run an ES|QL query
+- `elastic es raw <method> <path> [-d '<body>']` — raw Elasticsearch HTTP requests
+- `elastic es indices list` — list indices
+- `elastic es data-streams list` — list data streams
+- `elastic es cluster health` — check cluster health
+- `elastic kb raw <method> <path> [-d '<body>']` — raw Kibana HTTP requests
+- `elastic docs search "<query>"` — search Elastic documentation
+- `elastic docs read <url>` — read an Elastic docs page
+- `elastic slos list` — list SLOs
+
+Use `--format json` for machine-readable output. Use `elastic <command> --help` for full options.
+
+---
+
+## Conversation Sync
+
+Sessions in elastic-console are automatically synced to Kibana as conversations. When a session transitions from busy to idle, the conversation rounds (user messages, assistant responses, tool calls) are pushed to the Kibana conversations API at `/internal/elastic_console/conversations`.
+
+### Kibana Conversation Takeover
+
+Use the `/kibana-conversations` command (or `/kibana-takeover`) to continue a conversation started in Kibana Agent Builder. The dialog lists remote conversations and imports their history into a new local session.
+
+---
+
+## What's changed from OpenCode
+
+### Branding & CLI
+
+- Renamed CLI from `opencode` to `elastic-console`
+- Config file: `elastic_console.json` (searched first, falls back to `opencode.json`)
+- Custom ASCII logo using Elastic brand colors
+
+### Elastic Authentication
+
+- Two-mode onboarding: manual Cloud ID + API Key (default) or Kibana callback (experimental, with `--kibana-base`)
+- Credentials stored in `~/.config/elastic/config.yaml`
+- `--reset-auth` CLI flag to clear stored credentials
+- Auth flow writes provider, MCP, and permissions to `elastic_console.json`
+
+### Native Kibana Tools
+
+20 built-in tools for interacting with Kibana APIs directly (no MCP server required):
+
+- **Workflows**: `kibana_list_workflows`, `kibana_get_workflow`, `kibana_create_workflow`, `kibana_update_workflow`, `kibana_delete_workflow`, `kibana_validate_workflow`, `kibana_run_workflow`, `kibana_get_execution`, `kibana_list_executions`
+- **Agent Builder Tools**: `kibana_list_tools`, `kibana_get_tool`, `kibana_create_tool`, `kibana_update_tool`, `kibana_delete_tool`
+- **Agent Builder Agents**: `kibana_list_agents`, `kibana_get_agent`, `kibana_create_agent`, `kibana_update_agent`, `kibana_delete_agent`
+- **Connectors**: `kibana_list_connectors`
+
+### Chart Tool
+
+Terminal-based chart rendering (`chart` tool) for visualizing ES|QL query results with Unicode bar charts.
+
+### Elastic Alerts
+
+Live active-alert polling from Elasticsearch (`.alerts-*` indices), surfaced in the TUI sidebar.
+
+### Built-in Elastic Skills
+
+Three domain-specific skills bundled under `src/elastic/skills/`:
+
+- **elasticsearch-esql** — ES|QL query patterns and best practices
+- **observability-rca** — Root cause analysis workflow for incidents
+- **slo-management** — SLO creation and management guidance
+
+### System Prompt
+
+Custom SRE-focused system instructions injected into sessions, covering the RCA workflow, available Kibana tools, ES|QL query patterns, and the `elastic` CLI.
+
+---
+
+## Building
+
+```bash
+cd packages/opencode && bun run build
+```
+
+---
+
+## Upstream
+
+Based on [OpenCode](https://github.com/anomalyco/opencode). See the upstream repo for general configuration, agent docs, and provider setup.

@@ -55,11 +55,13 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {},
       })
 
-      const dir = path.dirname(skill.location)
-      const base = pathToFileURL(dir).href
+      const embedded = skill.location.startsWith("embedded:")
+      const dir = embedded ? "" : path.dirname(skill.location)
+      const base = embedded ? skill.location : pathToFileURL(dir).href
 
       const limit = 10
       const files = await iife(async () => {
+        if (embedded) return []
         const arr = []
         for await (const file of Ripgrep.files({
           cwd: dir,

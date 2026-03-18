@@ -102,8 +102,8 @@ describe("tui thread", () => {
       "mdns-domain": "opencode.local",
       mdnsDomain: "opencode.local",
       cors: [],
-      "kibana-base": "http://localhost:5601",
-      kibanaBase: "http://localhost:5601",
+      "kibana-base": undefined,
+      kibanaBase: undefined,
     }
     return TuiThreadCommand.handler(args)
   }
