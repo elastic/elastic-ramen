@@ -229,6 +229,10 @@ for (const item of targets) {
 
   await $`rm -rf ./dist/${name}/bin/tui`
 
+  // Copy opencode binary as elastic-console so both names are available
+  const ocExt = item.os === "win32" ? ".exe" : ""
+  await $`cp dist/${name}/bin/opencode${ocExt} dist/${name}/bin/elastic-console${ocExt}`
+
   // Copy the bundled elastic CLI binary into this target's bin dir
   const goos = goTargetMap[item.os]?.goos ?? item.os
   const goarch = goArchMap[item.arch] ?? item.arch
