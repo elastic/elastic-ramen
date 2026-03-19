@@ -29,6 +29,7 @@ import { Truncate } from "./truncation"
 
 import { ChartTool } from "./chart"
 import { ApplyPatchTool } from "./apply_patch"
+import { KibanaExecuteTool, KibanaSaveDashboardTool } from "./kibana-tool"
 import {
   KibanaListWorkflows,
   KibanaGetWorkflow,
@@ -161,6 +162,8 @@ export namespace ToolRegistry {
       KibanaUpdateAgent,
       KibanaDeleteAgent,
       KibanaListConnectors,
+      KibanaExecuteTool,
+      KibanaSaveDashboardTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),

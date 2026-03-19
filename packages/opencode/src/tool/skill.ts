@@ -5,6 +5,7 @@ import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { KibanaClient } from "@/elastic/client"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent)
@@ -54,6 +55,57 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         always: [params.name],
         metadata: {},
       })
+
+      // Handle Kibana-sourced skills
+      if (skill.location.startsWith("kibana:")) {
+        const skillId = skill.location.slice("kibana:".length)
+        const fullSkill = await KibanaClient.skills().get(skillId)
+
+        const contentParts: string[] = [
+          `<skill_content name="${skill.name}">`,
+          `# Skill: ${skill.name}`,
+          "",
+        ]
+
+        if (fullSkill.content) {
+          contentParts.push(fullSkill.content.trim(), "")
+        }
+        if (fullSkill.referenced_content?.length) {
+          for (const ref of fullSkill.referenced_content) {
+            contentParts.push(`## ${ref.name}`, "", ref.content.trim(), "")
+          }
+        }
+
+        // Combine registry and inline tools
+        const allTools = [...(fullSkill.registry_tools ?? []), ...(fullSkill.inline_tools ?? [])]
+        if (allTools.length > 0) {
+          contentParts.push("<skill_tools>")
+          for (const tool of allTools) {
+            contentParts.push(
+              `  <tool id="${tool.id}" type="${tool.type}">`,
+              `    <description>${tool.description}</description>`,
+              `    <schema>${JSON.stringify(tool.schema)}</schema>`,
+              `    <instructions>`,
+              `      To use this tool, call execute_kibana_tool with:`,
+              `      { "skill_id": "${skillId}", "tool_id": "${tool.id}", "tool_params": { ... } }`,
+              `    </instructions>`,
+              `  </tool>`,
+            )
+          }
+          contentParts.push("</skill_tools>")
+        }
+
+        contentParts.push("</skill_content>")
+
+        return {
+          title: `Loaded skill: ${skill.name}`,
+          output: contentParts.join("\n"),
+          metadata: {
+            name: skill.name,
+            dir: "",
+          },
+        }
+      }
 
       const embedded = skill.location.startsWith("embedded:")
       const dir = embedded ? "" : path.dirname(skill.location)

@@ -16,6 +16,8 @@ import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import type { Agent } from "@/agent/agent"
 import { PermissionNext } from "@/permission/next"
+import { ElasticAuth } from "@/elastic/auth"
+import { KibanaClient } from "@/elastic/client"
 
 // Injected at build time via Bun's define
 declare const ELASTIC_SKILLS_EMBEDDED: Record<string, string> | undefined
@@ -27,6 +29,7 @@ export namespace Skill {
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    tool_ids: z.array(z.string()).optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -208,6 +211,29 @@ export namespace Skill {
           await addSkill(match)
         }
       }
+    }
+
+    // Fetch skills from Kibana Agent Builder (via elastic_console internal routes)
+    try {
+      const auth = await ElasticAuth.check()
+      if (auth.configured && auth.context) {
+        const response = await KibanaClient.skills().list()
+        for (const skill of response.results ?? []) {
+          // Don't overwrite locally-defined skills
+          if (skills[skill.name]) continue
+          const hasTools = (skill.tool_ids?.length ?? 0) > 0 || skill.inline_tool_count > 0
+          skills[skill.name] = {
+            name: skill.name,
+            description: skill.description || "",
+            location: `kibana:${skill.id}`,
+            content: "", // fetched lazily on activation
+            tool_ids: hasTools ? (skill.tool_ids ?? []) : undefined,
+          }
+        }
+      }
+    } catch (error) {
+      // Gracefully handle when Kibana is unreachable or skills feature is disabled
+      log.warn("failed to fetch Kibana skills", { error })
     }
 
     return {

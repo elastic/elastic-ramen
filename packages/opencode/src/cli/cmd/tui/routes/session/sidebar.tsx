@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { useAlerts } from "../../context/alerts"
+import { useAttachments } from "../../context/attachments"
 import { TodoItem } from "../../component/todo-item"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
@@ -22,6 +23,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   const alertsCtx = useAlerts()
+  const attachmentsCtx = useAttachments()
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -29,6 +31,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     todo: true,
     lsp: true,
     alerts: true,
+    attachments: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -202,6 +205,43 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                               {new Date(alert.start!).toLocaleTimeString()}
                             </span>
                           </Show>
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={attachmentsCtx.attachments.length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => attachmentsCtx.attachments.length > 2 && setExpanded("attachments", !expanded.attachments)}
+                >
+                  <Show when={attachmentsCtx.attachments.length > 2}>
+                    <text fg={theme.text}>{expanded.attachments ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Attachments</b>
+                    <Show when={!expanded.attachments}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({attachmentsCtx.attachments.filter((a) => a.active).length} active)
+                      </span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={attachmentsCtx.attachments.length <= 2 || expanded.attachments}>
+                  <For each={attachmentsCtx.attachments}>
+                    {(att) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} style={{ fg: att.active ? theme.success : theme.textMuted }}>
+                          •
+                        </text>
+                        <text fg={theme.text} wrapMode="word">
+                          {att.type}: {att.description ?? att.id}{" "}
+                          <span style={{ fg: theme.textMuted }}>v{att.current_version}</span>
                         </text>
                       </box>
                     )}

@@ -51,6 +51,12 @@ export namespace KibanaClient {
     return { base: url.replace(/\/$/, ""), key }
   }
 
+  /** Return the configured Kibana base URL (e.g. "http://localhost:5601"). */
+  export async function baseURL(): Promise<string> {
+    const { base } = await resolve()
+    return base
+  }
+
   async function request<T = unknown>(endpoint: string, opts?: { method?: string; body?: unknown }): Promise<T> {
     const { base, key } = await resolve()
 
@@ -152,6 +158,106 @@ export namespace KibanaClient {
       del(id: string, force?: boolean) {
         const suffix = force ? `/${id}?force=true` : `/${id}`
         return request(api("/api/agent_builder/tools", suffix, space), { method: "DELETE" })
+      },
+    }
+  }
+
+  // Session-scoped attachments (elastic_console plugin)
+
+  export interface AttachmentSummary {
+    id: string
+    type: string
+    description?: string
+    active: boolean
+    current_version: number
+  }
+
+  export function sessions(space?: string) {
+    return {
+      create(skillId: string) {
+        return request<{ session_id: string }>(
+          api("/internal/elastic_console", "/sessions", space),
+          { method: "POST", body: { skill_id: skillId } },
+        )
+      },
+      executeToolInSession(
+        sessionId: string,
+        skillId: string,
+        toolId: string,
+        toolParams: Record<string, unknown>,
+      ) {
+        return request<{ results: unknown[]; attachments: AttachmentSummary[] }>(
+          api("/internal/elastic_console", `/sessions/${sessionId}/tools/_execute`, space),
+          { method: "POST", body: { skill_id: skillId, tool_id: toolId, tool_params: toolParams } },
+        )
+      },
+      getAttachments(sessionId: string) {
+        return request<{ attachments: AttachmentSummary[] }>(
+          api("/internal/elastic_console", `/sessions/${sessionId}/attachments`, space),
+        )
+      },
+      del(sessionId: string) {
+        return request(
+          api("/internal/elastic_console", `/sessions/${sessionId}`, space),
+          { method: "DELETE" },
+        )
+      },
+      saveDashboard(sessionId: string, attachmentId: string, title?: string) {
+        return request<{ dashboard_id: string; url: string }>(
+          api("/internal/elastic_console", `/sessions/${sessionId}/attachments/${attachmentId}/_save`, space),
+          { method: "POST", body: title ? { title } : {} },
+        )
+      },
+    }
+  }
+
+  // Skills (via elastic_console internal routes)
+
+  export interface SkillToolDef {
+    id: string
+    type: string
+    description: string
+    schema: Record<string, unknown>
+    configuration?: Record<string, unknown>
+  }
+
+  export interface SkillSummary {
+    id: string
+    name: string
+    description: string
+    readonly: boolean
+    plugin_id?: string
+    tool_ids?: string[]
+    inline_tool_count: number
+    referenced_content_count: number
+  }
+
+  export interface SkillDetail {
+    id: string
+    name: string
+    description: string
+    content: string
+    referenced_content?: Array<{ name: string; relativePath: string; content: string }>
+    referenced_content_count?: number
+    readonly: boolean
+    plugin_id?: string
+    registry_tools: SkillToolDef[]
+    inline_tools: SkillToolDef[]
+  }
+
+  export function skills(space?: string) {
+    return {
+      list() {
+        return request<{ results: SkillSummary[] }>(api("/internal/elastic_console", "/skills", space))
+      },
+      get(id: string) {
+        return request<SkillDetail>(api("/internal/elastic_console", `/skills/${id}`, space))
+      },
+      executeSkillTool(skillId: string, toolId: string, toolParams: Record<string, unknown>) {
+        return request<{ results: unknown[] }>(api("/internal/elastic_console", `/skills/${skillId}/tools/_execute`, space), {
+          method: "POST",
+          body: { tool_id: toolId, tool_params: toolParams },
+        })
       },
     }
   }

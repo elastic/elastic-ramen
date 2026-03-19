@@ -46,6 +46,8 @@ import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
 import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
+import { AttachmentsProvider, useAttachments } from "@tui/context/attachments"
+import { KibanaAttachments } from "@/elastic/attachments"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
 
@@ -166,7 +168,9 @@ export function tui(input: {
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
                                               <AlertsProvider>
-                                                <App />
+                                                <AttachmentsProvider>
+                                                  <App />
+                                                </AttachmentsProvider>
                                               </AlertsProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
@@ -354,6 +358,12 @@ function App() {
     })
   })
 
+  // Attachment updates from Kibana session tools
+  const attachmentsCtx = useAttachments()
+  sdk.event.on(KibanaAttachments.Event.Updated.type, (evt) => {
+    attachmentsCtx.set(evt.properties.attachments)
+  })
+
   // Alert polling for connected Kibana instance
   const alertsCtx = useAlerts()
   let alertPoller: ReturnType<typeof ElasticAlerts.poller> | undefined
@@ -447,6 +457,10 @@ function App() {
 
   onCleanup(() => {
     alertPoller?.stop()
+    // Clean up Kibana sessions for any active sessions (fire-and-forget)
+    if (route.data.type === "session") {
+      KibanaAttachments.cleanup(route.data.sessionID).catch(() => {})
+    }
   })
 
   // Check elastic auth on mount; show setup dialog if not configured
