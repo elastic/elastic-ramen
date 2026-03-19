@@ -360,7 +360,7 @@ function App() {
 
   // Attachment updates from Kibana session tools
   const attachmentsCtx = useAttachments()
-  sdk.event.on(KibanaAttachments.Event.Updated.type, (evt) => {
+  sdk.event.on(KibanaAttachments.Event.Updated.type as any, (evt: any) => {
     attachmentsCtx.set(evt.properties.attachments)
   })
 
