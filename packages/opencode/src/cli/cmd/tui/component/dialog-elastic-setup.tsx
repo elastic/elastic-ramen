@@ -49,10 +49,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   const [error, setError] = createSignal("")
   const [saving, setSaving] = createSignal(false)
   const [showManual, setShowManual] = createSignal(!props.kibanaBase)
-  const [activeField, setActiveField] = createSignal<"host" | "key">("host")
 
-  let hostInput: TextareaRenderable
-  let keyInput: TextareaRenderable
+  let jsonInput: TextareaRenderable
   let cb: ElasticCallback.Handle | undefined
 
   const link = () => {
@@ -98,31 +96,39 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   }
 
   function submitManual() {
-    const host = hostInput?.plainText?.trim() ?? ""
-    const key = keyInput?.plainText?.trim() ?? ""
-    if (!host) {
-      setError("Enter a Cloud ID or Elasticsearch URL")
+    const raw = jsonInput?.plainText?.trim() ?? ""
+    if (!raw) {
+      setError("Paste the JSON from the Kibana onboarding page")
+      return
+    }
+
+    let parsed: Record<string, any>
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      setError("Invalid JSON — paste the full JSON object from Kibana")
+      return
+    }
+
+    const esUrl = parsed.elasticsearchUrl || parsed.elasticsearch_url || parsed.es_url
+    const key = parsed.apiKey || parsed.api_key
+    const kibanaUrl = parsed.kibanaUrl || parsed.kibana_url
+
+    if (!esUrl && !parsed.cloud_id) {
+      setError("JSON is missing an Elasticsearch URL or Cloud ID")
       return
     }
     if (!key) {
-      setError("Enter an API key")
+      setError("JSON is missing an API key")
       return
     }
 
     const input: ElasticAuth.SaveInput = { api_key: key }
-    if (host.includes("://")) input.elasticsearch_url = host
-    else input.cloud_id = host
+    if (parsed.cloud_id) input.cloud_id = parsed.cloud_id
+    else input.elasticsearch_url = esUrl
 
-    // Derive Kibana URL and set up LLM gateway provider
-    let kibanaUrl: string | undefined
-    if (input.cloud_id) {
-      const decoded = ElasticAuth.decodeCloudId(input.cloud_id)
-      if (decoded?.kibana_url) {
-        input.kibana_url = decoded.kibana_url
-        kibanaUrl = decoded.kibana_url
-      }
-    }
-    if (kibanaUrl && key) {
+    if (kibanaUrl) {
+      input.kibana_url = kibanaUrl
       input.auth_mode = "kibana"
       input.provider = buildProvider(kibanaUrl, key)
       input.model = "kibana/default"
@@ -133,18 +139,6 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
   useKeyboard((evt) => {
     if (!showManual()) return
-    if (evt.name === "tab") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      if (activeField() === "host") {
-        setActiveField("key")
-        setTimeout(() => keyInput && !keyInput.isDestroyed && keyInput.focus(), 1)
-      } else {
-        setActiveField("host")
-        setTimeout(() => hostInput && !hostInput.isDestroyed && hostInput.focus(), 1)
-      }
-      return
-    }
     if (evt.name === "return" && (evt.ctrl || evt.meta)) {
       submitManual()
       evt.preventDefault()
@@ -173,7 +167,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         save(input)
       })
     } else {
-      setTimeout(() => hostInput && !hostInput.isDestroyed && hostInput.focus(), 1)
+      setTimeout(() => jsonInput && !jsonInput.isDestroyed && jsonInput.focus(), 1)
     }
   })
 
@@ -209,59 +203,36 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
             fg={theme.textMuted}
             onMouseUp={() => {
               setShowManual(true)
-              setTimeout(() => hostInput && !hostInput.isDestroyed && hostInput.focus(), 1)
+              setTimeout(() => jsonInput && !jsonInput.isDestroyed && jsonInput.focus(), 1)
             }}
           >
-            {"Or enter credentials manually ↓"}
+            {"Or paste credentials JSON ↓"}
           </text>
         </box>
       </Show>
 
       <Show when={showManual()}>
         <text fg={theme.textMuted}>
-          {"Enter your Elasticsearch credentials to connect."}
+          {"Paste the JSON from the Kibana onboarding page:"}
         </text>
 
-        <box gap={1}>
-          <box>
-            <text fg={theme.text}>
-              {"Cloud ID or Elasticsearch URL *"}
-            </text>
-          </box>
-          <textarea
-            height={1}
-            ref={(val: TextareaRenderable) => { hostInput = val }}
-            placeholder={"my-deployment:dXMtY2Vud..."}
-            textColor={theme.text}
-            focusedTextColor={theme.text}
-            cursorColor={theme.primary}
-          />
-        </box>
-
-        <box gap={1}>
-          <box>
-            <text fg={theme.text}>
-              {"API Key *"}
-            </text>
-          </box>
-          <textarea
-            height={1}
-            ref={(val: TextareaRenderable) => { keyInput = val }}
-            placeholder={"your-api-key"}
-            textColor={theme.text}
-            focusedTextColor={theme.text}
-            cursorColor={theme.primary}
-          />
-        </box>
+        <textarea
+          height={5}
+          ref={(val: TextareaRenderable) => { jsonInput = val }}
+          placeholder={'{"kibanaUrl": "...", "elasticsearchUrl": "...", "apiKey": "..."}'}
+          textColor={theme.text}
+          focusedTextColor={theme.text}
+          cursorColor={theme.primary}
+        />
 
         <Show when={error()}>
           <text fg={"#ff6b6b"}>{error()}</text>
         </Show>
 
-        <box paddingBottom={1} gap={1} flexDirection="row">
+        <box paddingBottom={1}>
           <Show when={!saving()} fallback={<text fg={theme.textMuted}>connecting...</text>}>
             <text fg={theme.text}>
-              tab <span style={{ fg: theme.textMuted }}>switch field</span>{"  "}ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+              ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
             </text>
           </Show>
         </box>
