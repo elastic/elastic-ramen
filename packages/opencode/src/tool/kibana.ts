@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { KibanaClient } from "@/elastic/client"
+import { WorkflowRuns } from "@/elastic/workflow-runs"
 
 function json(data: unknown) {
   return JSON.stringify(data, null, 2)
@@ -88,8 +89,20 @@ export const KibanaRunWorkflow = Tool.define("kibana_run_workflow", {
     id: z.string().describe("Workflow ID to execute"),
     inputs: z.record(z.string(), z.unknown()).optional().describe("Input parameters for the workflow"),
   }),
-  async execute(params) {
-    const result = await KibanaClient.workflows().run(params.id, params.inputs)
+  async execute(params, ctx) {
+    const result = (await KibanaClient.workflows().run(params.id, params.inputs)) as Record<string, unknown>
+
+    const executionId = (result.workflowExecutionId ?? result.id ?? result.executionId) as string | undefined
+    if (executionId) {
+      WorkflowRuns.track({
+        executionId,
+        workflowId: params.id,
+        sessionID: ctx.sessionID,
+        status: "running",
+        startedAt: Date.now(),
+      })
+    }
+
     return { title: `Run ${params.id}`, metadata: {}, output: json(result) }
   },
 })

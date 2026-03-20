@@ -47,6 +47,9 @@ import { Handover } from "@/elastic/handover"
 import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { AttachmentsProvider, useAttachments } from "@tui/context/attachments"
+import { WorkflowRunsProvider, useWorkflowRuns } from "@tui/context/workflow-runs"
+import { WorkflowRuns } from "@/elastic/workflow-runs"
+import { MessageID, PartID } from "@/session/schema"
 import { KibanaAttachments } from "@/elastic/attachments"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
@@ -169,7 +172,9 @@ export function tui(input: {
                                             <PromptRefProvider>
                                               <AlertsProvider>
                                                 <AttachmentsProvider>
-                                                  <App />
+                                                  <WorkflowRunsProvider>
+                                                    <App />
+                                                  </WorkflowRunsProvider>
                                                 </AttachmentsProvider>
                                               </AlertsProvider>
                                             </PromptRefProvider>
@@ -392,6 +397,78 @@ function App() {
       .start()
   }
 
+  // Workflow run polling
+  const workflowRunsCtx = useWorkflowRuns()
+  const completionQueue: WorkflowRuns.Run[] = []
+  let workflowPoller: ReturnType<typeof WorkflowRuns.poller> | undefined
+
+  function startWorkflowPoller() {
+    if (workflowPoller) return
+    workflowPoller = WorkflowRuns.poller()
+      .onUpdated((runs) => {
+        workflowRunsCtx.set(runs)
+      })
+      .onCompleted((run) => {
+        const statusText = run.status === "completed" ? "completed successfully" : `finished with status: ${run.status}`
+        const name = run.workflowName ?? run.workflowId
+        toast.show({
+          variant: run.status === "completed" ? "info" : "error",
+          title: "Workflow Run",
+          message: `${name} ${statusText}`,
+          duration: 8000,
+        })
+
+        // Auto-prompt: inject synthetic user message if session is idle
+        const sessionStatus = sync.data.session_status[run.sessionID]
+        if (sessionStatus?.type === "idle") {
+          injectWorkflowCompletion(run)
+        } else {
+          completionQueue.push(run)
+        }
+      })
+      .start()
+  }
+
+  function injectWorkflowCompletion(run: WorkflowRuns.Run) {
+    const name = run.workflowName ?? run.workflowId
+    const message = run.status === "completed"
+      ? `Workflow run "${name}" (execution: ${run.executionId}) completed successfully. Continue with your task.`
+      : `Workflow run "${name}" (execution: ${run.executionId}) finished with status: ${run.status}${run.error ? `. Error: ${run.error}` : ""}. Continue with your task.`
+
+    const messageID = MessageID.ascending()
+    sdk.client.session
+      .prompt({
+        sessionID: run.sessionID,
+        parts: [
+          {
+            id: PartID.ascending(),
+            type: "text",
+            text: message,
+            synthetic: true,
+          },
+        ],
+        messageID,
+      })
+      .catch(() => {})
+  }
+
+  // Drain queued workflow completions when sessions become idle
+  const workflowPrev = new Map<string, string>()
+  createEffect(() => {
+    const statuses = sync.data.session_status
+    for (const [sessionID, status] of Object.entries(statuses)) {
+      const last = workflowPrev.get(sessionID)
+      workflowPrev.set(sessionID, status.type)
+      if (last === "busy" && status.type === "idle") {
+        const toInject = completionQueue.filter((r) => r.sessionID === sessionID)
+        for (const run of toInject) {
+          completionQueue.splice(completionQueue.indexOf(run), 1)
+          injectWorkflowCompletion(run)
+        }
+      }
+    }
+  })
+
   const [esReady, setEsReady] = createSignal(false)
   function buildRounds(sessionID: string): ConversationRound[] {
     const msgs = sync.data.message[sessionID] ?? []
@@ -457,6 +534,7 @@ function App() {
 
   onCleanup(() => {
     alertPoller?.stop()
+    workflowPoller?.stop()
     // Clean up Kibana sessions for any active sessions (fire-and-forget)
     if (route.data.type === "session") {
       KibanaAttachments.cleanup(route.data.sessionID).catch(() => {})
@@ -497,6 +575,7 @@ function App() {
             }
             const creds = await ElasticAlerts.resolve()
             if (creds) startAlerts(creds.url, creds.key)
+            startWorkflowPoller()
             setEsReady(true)
           }}
         />
@@ -506,6 +585,7 @@ function App() {
     const url = status.context?.elasticsearch_url
     const key = status.context?.api_key
     if (url && key) startAlerts(url, key)
+    if (url && key) startWorkflowPoller()
     if (url && key) setEsReady(true)
   })
 

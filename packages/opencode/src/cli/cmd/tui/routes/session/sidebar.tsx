@@ -12,6 +12,7 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { useAlerts } from "../../context/alerts"
 import { useAttachments } from "../../context/attachments"
+import { useWorkflowRuns } from "../../context/workflow-runs"
 import { TodoItem } from "../../component/todo-item"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
@@ -24,6 +25,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const alertsCtx = useAlerts()
   const attachmentsCtx = useAttachments()
+  const workflowRunsCtx = useWorkflowRuns()
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -31,6 +33,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     todo: true,
     lsp: true,
     alerts: true,
+    workflows: true,
     attachments: true,
   })
 
@@ -208,6 +211,57 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                         </text>
                       </box>
                     )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={workflowRunsCtx.runs.length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => workflowRunsCtx.runs.length > 2 && setExpanded("workflows", !expanded.workflows)}
+                >
+                  <Show when={workflowRunsCtx.runs.length > 2}>
+                    <text fg={theme.text}>{expanded.workflows ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Workflows</b>
+                    <Show when={!expanded.workflows}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({workflowRunsCtx.runs.length} run{workflowRunsCtx.runs.length !== 1 ? "s" : ""})
+                      </span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={workflowRunsCtx.runs.length <= 2 || expanded.workflows}>
+                  <For each={workflowRunsCtx.runs}>
+                    {(run) => {
+                      const statusColor = () => {
+                        if (run.status === "completed") return theme.success
+                        if (run.status === "failed" || run.status === "cancelled" || run.status === "timed_out") return theme.error
+                        return theme.warning
+                      }
+                      const duration = () => {
+                        const end = run.finishedAt ?? Date.now()
+                        const secs = Math.round((end - run.startedAt) / 1000)
+                        return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m${secs % 60}s`
+                      }
+                      return (
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} style={{ fg: statusColor() }}>
+                            •
+                          </text>
+                          <text fg={theme.text} wrapMode="word">
+                            {run.workflowName ?? run.workflowId}{" "}
+                            <span style={{ fg: theme.textMuted }}>
+                              {run.status} {duration()}
+                            </span>
+                          </text>
+                        </box>
+                      )
+                    }}
                   </For>
                 </Show>
               </box>
