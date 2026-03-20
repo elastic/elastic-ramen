@@ -30,6 +30,7 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
+import { ForkCommand } from "./cli/cmd/fork"
 import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
@@ -143,7 +144,7 @@ let cli = yargs(hideBin(process.argv))
     // Check elastic auth for headless commands (TUI has its own setup dialog)
     const args = process.argv.slice(2)
     const cmd = args.find((a) => !a.startsWith("-"))
-    const headless = cmd === "run" || cmd === "serve"
+    const headless = cmd === "run" || cmd === "serve" || cmd === "fork"
     if (headless) {
       const status = await ElasticAuth.check()
       if (!status.configured) {
@@ -210,6 +211,7 @@ let cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(DbCommand)
+  .command(ForkCommand)
 
 if (Installation.isLocal()) {
   cli = cli.command(WorkspaceServeCommand)

@@ -222,6 +222,12 @@ export namespace KibanaClient {
       async update(id: string, body: { title?: string; conversation_rounds?: ConversationRound[] }): Promise<void> {
         await request(api("/internal/elastic_console/conversations", `/${encodeURIComponent(id)}`, space), { method: "PUT", body })
       },
+      async locate(id: string): Promise<{ fork_context: string; conversation_rounds?: ConversationRound[] }> {
+        return request(api("/api/elastic_console/conversations", `/${encodeURIComponent(id)}/locate`, space), { method: "POST", body: { location: "cli" } })
+      },
+      async handoff(id: string, body: { summary: string }): Promise<void> {
+        await request(api("/api/elastic_console/conversations", `/${encodeURIComponent(id)}/handoff`, space), { method: "POST", body })
+      },
     }
   }
 
