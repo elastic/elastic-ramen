@@ -44,7 +44,7 @@ import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
-import type { ConversationRound } from "@/elastic/client"
+import { KibanaClient, type ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { AttachmentsProvider, useAttachments } from "@tui/context/attachments"
 import { WorkflowRunsProvider, useWorkflowRuns } from "@tui/context/workflow-runs"
@@ -402,6 +402,13 @@ function App() {
   const completionQueue: WorkflowRuns.Run[] = []
   let workflowPoller: ReturnType<typeof WorkflowRuns.poller> | undefined
 
+  // Listen for workflow runs tracked in the worker thread and register them locally
+  sdk.event.on(WorkflowRuns.Event.Tracked.type as any, (evt: any) => {
+    const run = evt.properties.run as WorkflowRuns.Run
+    WorkflowRuns.track(run)
+    workflowRunsCtx.set(WorkflowRuns.forSession(run.sessionID))
+  })
+
   function startWorkflowPoller() {
     if (workflowPoller) return
     workflowPoller = WorkflowRuns.poller()
@@ -429,11 +436,31 @@ function App() {
       .start()
   }
 
-  function injectWorkflowCompletion(run: WorkflowRuns.Run) {
+  async function injectWorkflowCompletion(run: WorkflowRuns.Run) {
     const name = run.workflowName ?? run.workflowId
-    const message = run.status === "completed"
-      ? `Workflow run "${name}" (execution: ${run.executionId}) completed successfully. Continue with your task.`
-      : `Workflow run "${name}" (execution: ${run.executionId}) finished with status: ${run.status}${run.error ? `. Error: ${run.error}` : ""}. Continue with your task.`
+    let message: string
+
+    if (run.status === "completed") {
+      let stepSummary = ""
+      try {
+        const steps = (await KibanaClient.executions().getSteps(run.executionId, { includeOutput: true })) as {
+          data?: Array<{ id?: string; stepId?: string; status?: string; output?: unknown }>
+        }
+        if (steps.data && steps.data.length > 0) {
+          const lines = steps.data.map((s) => {
+            const label = s.stepId ?? s.id ?? "unknown"
+            const out = s.output !== undefined ? JSON.stringify(s.output) : "no output"
+            return `  - ${label} (${s.status ?? "unknown"}): ${out}`
+          })
+          stepSummary = `\n\nStep outputs:\n${lines.join("\n")}`
+        }
+      } catch {
+        // Step fetch failed — continue without step details
+      }
+      message = `Workflow run "${name}" (execution: ${run.executionId}) completed successfully.${stepSummary}\n\nContinue with your task.`
+    } else {
+      message = `Workflow run "${name}" (execution: ${run.executionId}) finished with status: ${run.status}${run.error ? `. Error: ${run.error}` : ""}. Continue with your task.`
+    }
 
     const messageID = MessageID.ascending()
     sdk.client.session

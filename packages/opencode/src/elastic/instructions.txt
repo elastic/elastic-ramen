@@ -18,6 +18,10 @@ These tools are always available and call the Kibana API directly:
 - `kibana_run_workflow` -- execute a workflow (returns execution ID)
 - `kibana_get_execution` -- check workflow execution status and results
 - `kibana_list_executions` -- list recent executions for a workflow
+- `kibana_get_execution_steps` -- list all step executions for a workflow run (with outputs)
+- `kibana_get_execution_step` -- get a single step execution by ID
+
+When you trigger a workflow with `kibana_run_workflow`, the system automatically monitors the execution and will notify you when it completes. You do NOT need to actively poll with `kibana_get_execution` — just continue with other work and the result will be delivered to you automatically. Use `kibana_get_execution` and `kibana_get_execution_steps` only when you need to inspect details of a past or completed execution.
 
 ### Agent Builder Tools
 - `kibana_list_tools` -- list all Agent Builder tools

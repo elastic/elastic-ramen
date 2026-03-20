@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import { KibanaClient } from "@/elastic/client"
 import { WorkflowRuns } from "@/elastic/workflow-runs"
+import { Bus } from "@/bus"
 
 function json(data: unknown) {
   return JSON.stringify(data, null, 2)
@@ -94,16 +95,19 @@ export const KibanaRunWorkflow = Tool.define("kibana_run_workflow", {
 
     const executionId = (result.workflowExecutionId ?? result.id ?? result.executionId) as string | undefined
     if (executionId) {
-      WorkflowRuns.track({
+      const run: WorkflowRuns.Run = {
         executionId,
         workflowId: params.id,
         sessionID: ctx.sessionID,
         status: "running",
         startedAt: Date.now(),
-      })
+      }
+      WorkflowRuns.track(run)
+      Bus.publish(WorkflowRuns.Event.Tracked, { run })
     }
 
-    return { title: `Run ${params.id}`, metadata: {}, output: json(result) }
+    const output = json(result) + "\n\nNote: The execution will be monitored automatically. You will receive a notification when it completes — no need to poll."
+    return { title: `Run ${params.id}`, metadata: {}, output }
   },
 })
 
@@ -111,7 +115,7 @@ export const KibanaRunWorkflow = Tool.define("kibana_run_workflow", {
 
 export const KibanaGetExecution = Tool.define("kibana_get_execution", {
   description:
-    "Get the status and details of a workflow execution by execution ID. Shows status (running, completed, failed), outputs, errors, and step details.",
+    "Get the status and details of a workflow execution by execution ID. Shows status (running, completed, failed), outputs, and errors. For step-level details and outputs, use kibana_get_execution_steps or kibana_get_execution_step.",
   parameters: z.object({
     id: z.string().describe("Execution ID returned from kibana_run_workflow"),
   }),
@@ -135,6 +139,39 @@ export const KibanaListExecutions = Tool.define("kibana_list_executions", {
       perPage: params.per_page,
     })
     return { title: `Executions for ${params.workflow_id}`, metadata: {}, output: json(result) }
+  },
+})
+
+export const KibanaGetExecutionSteps = Tool.define("kibana_get_execution_steps", {
+  description:
+    "List all step executions for a workflow run, including their outputs. Use to inspect what each step produced during a workflow execution.",
+  parameters: z.object({
+    execution_id: z.string().describe("Execution ID returned from kibana_run_workflow"),
+    step_id: z.string().optional().describe("Filter to a specific step ID within the workflow"),
+    page: z.number().optional().describe("Page number for pagination"),
+    size: z.number().optional().describe("Number of results per page"),
+  }),
+  async execute(params) {
+    const result = await KibanaClient.executions().getSteps(params.execution_id, {
+      includeOutput: true,
+      stepId: params.step_id,
+      page: params.page,
+      size: params.size,
+    })
+    return { title: `Steps for ${params.execution_id}`, metadata: {}, output: json(result) }
+  },
+})
+
+export const KibanaGetExecutionStep = Tool.define("kibana_get_execution_step", {
+  description:
+    "Get a single step execution by its step execution ID. Returns the full details and output for one specific step within a workflow run.",
+  parameters: z.object({
+    execution_id: z.string().describe("Execution ID of the workflow run"),
+    step_execution_id: z.string().describe("Step execution ID to retrieve"),
+  }),
+  async execute(params) {
+    const result = await KibanaClient.executions().getStep(params.execution_id, params.step_execution_id)
+    return { title: `Step ${params.step_execution_id}`, metadata: {}, output: json(result) }
   },
 })
 

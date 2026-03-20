@@ -136,6 +136,18 @@ export namespace KibanaClient {
         if (opts?.perPage) params.set("perPage", String(opts.perPage))
         return request(api("/api/workflowExecutions", `?${params}`, space))
       },
+      getSteps(executionId: string, opts?: { includeOutput?: boolean; stepId?: string; page?: number; size?: number }) {
+        const params = new URLSearchParams()
+        if (opts?.includeOutput) params.set("includeOutput", "true")
+        if (opts?.stepId) params.set("stepId", opts.stepId)
+        if (opts?.page !== undefined) params.set("page", String(opts.page))
+        if (opts?.size !== undefined) params.set("size", String(opts.size))
+        const qs = params.toString()
+        return request(api("/api/workflowExecutions", `/${executionId}/steps${qs ? `?${qs}` : ""}`, space))
+      },
+      getStep(executionId: string, stepExecutionId: string) {
+        return request(api("/api/workflowExecutions", `/${executionId}/steps/${stepExecutionId}`, space))
+      },
     }
   }
 

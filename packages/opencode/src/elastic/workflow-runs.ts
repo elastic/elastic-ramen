@@ -31,6 +31,12 @@ export namespace WorkflowRuns {
   })
 
   export const Event = {
+    Tracked: BusEvent.define(
+      "workflow.runs.tracked",
+      z.object({
+        run: runSchema,
+      }),
+    ),
     Updated: BusEvent.define(
       "workflow.runs.updated",
       z.object({
@@ -79,12 +85,14 @@ export namespace WorkflowRuns {
       for (const [executionId, run] of active) {
         try {
           const result = (await KibanaClient.executions().get(executionId)) as Record<string, unknown>
-          const status = (result.status as string) ?? run.status
+          // The API may nest the execution under a `data` wrapper
+          const exec = (typeof result.status === "string" ? result : (result.data as Record<string, unknown>) ?? result)
+          const status = (exec.status as string) ?? run.status
           run.status = status
 
           if (TERMINAL_STATUSES.has(status)) {
             run.finishedAt = Date.now()
-            if (result.error) run.error = String(result.error)
+            if (exec.error) run.error = String(exec.error)
             active.delete(executionId)
             finished.set(executionId, run)
             log.info("workflow run completed", { executionId, status })
@@ -95,8 +103,8 @@ export namespace WorkflowRuns {
         }
       }
 
-      // Collect all runs for update callback
-      const allRuns = [...active.values(), ...finished.values()]
+      // Produce fresh object copies so reactive stores detect changes
+      const allRuns = [...active.values(), ...finished.values()].map((r) => ({ ...r }))
       updateCb?.(allRuns)
     }
 
