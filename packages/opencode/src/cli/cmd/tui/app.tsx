@@ -48,6 +48,7 @@ import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
+import { DialogCloudSwitch } from "@tui/component/dialog-cloud-switch"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -456,6 +457,7 @@ function App() {
       dialog.replace(() => (
         <DialogElasticSetup
           kibanaBase={args.kibanaBase}
+          cloudApiKey={args.cloudApiKey}
           onComplete={async () => {
             dialog.clear()
 
@@ -572,6 +574,18 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogKibanaTakeover />)
+      },
+    },
+    {
+      title: "Switch Cloud project",
+      value: "cloud.switch",
+      category: "Cloud",
+      slash: {
+        name: "switch-project",
+        aliases: ["cloud"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogCloudSwitch />)
       },
     },
     {

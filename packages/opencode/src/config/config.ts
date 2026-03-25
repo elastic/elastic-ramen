@@ -1208,14 +1208,10 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   export const global = lazy(async () => {
-    let result: Info = pipe(
-      {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.jsonc"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
-    )
+    let result: Info = {}
+    for (const name of ["config.json", "elastic_console.json", "elastic_console.jsonc", "opencode.json", "opencode.jsonc"]) {
+      result = mergeDeep(result, await loadFile(path.join(Global.Path.config, name))) as Info
+    }
 
     const legacy = path.join(Global.Path.config, "config")
     if (existsSync(legacy)) {

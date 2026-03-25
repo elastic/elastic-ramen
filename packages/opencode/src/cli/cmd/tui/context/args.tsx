@@ -8,6 +8,7 @@ export interface Args {
   sessionID?: string
   fork?: boolean
   kibanaBase?: string
+  cloudApiKey?: string
 }
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({

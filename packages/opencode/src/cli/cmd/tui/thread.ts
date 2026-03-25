@@ -101,6 +101,10 @@ export const TuiThreadCommand = cmd({
       .option("kibana-base", {
         type: "string",
         describe: "Kibana base URL (experimental: enables Kibana callback onboarding flow)",
+      })
+      .option("cloud-api-key", {
+        type: "string",
+        describe: "Elastic Cloud API key for serverless project management",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -217,6 +221,7 @@ export const TuiThreadCommand = cmd({
             prompt,
             fork: args.fork,
             kibanaBase: args.kibanaBase,
+            cloudApiKey: args.cloudApiKey,
           },
         })
       } finally {

@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -12,6 +12,7 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { useAlerts } from "../../context/alerts"
 import { TodoItem } from "../../component/todo-item"
+import { ElasticAuth } from "@/elastic/auth"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -67,6 +68,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const directory = useDirectory()
   const kv = useKV()
 
+  const [projectName, setProjectName] = createSignal<string | undefined>()
+  onMount(async () => {
+    const status = await ElasticAuth.check()
+    if (status.configured && status.context?.project_name) {
+      setProjectName(status.context.project_name)
+    }
+  })
+
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
@@ -102,6 +111,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
             </box>
+            <Show when={projectName()}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Project</b>
+                </text>
+                <text fg={theme.textMuted}>{projectName()}</text>
+              </box>
+            </Show>
             <box>
               <text fg={theme.text}>
                 <b>Context</b>

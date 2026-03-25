@@ -1,12 +1,31 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
-import { createSignal, onCleanup, onMount, Show } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
+import { ElasticCloud } from "@/elastic/cloud"
 import { Process } from "@/util/process"
+import { spawnSync } from "child_process"
+
+const STRIP_FLAGS = ["--kibana-base", "--cloud-api-key", "--reset-auth"]
+
+function filterArgs(argv: string[]): string[] {
+  const result: string[] = []
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (STRIP_FLAGS.some((f) => arg === f || arg.startsWith(f + "="))) {
+      if (!arg.includes("=") && arg !== "--reset-auth" && i + 1 < argv.length && !argv[i + 1].startsWith("--")) {
+        i++
+      }
+      continue
+    }
+    result.push(arg)
+  }
+  return result
+}
 
 function buildProvider(kibanaUrl: string, apiKey: string) {
   const baseURL = kibanaUrl.replace(/\/+$/, "") + "/internal/elastic_console/v1"
@@ -43,12 +62,15 @@ function buildProvider(kibanaUrl: string, apiKey: string) {
   }
 }
 
-export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void }) {
+export function DialogElasticSetup(props: { kibanaBase?: string; cloudApiKey?: string; onComplete: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
   const [saving, setSaving] = createSignal(false)
-  const [showManual, setShowManual] = createSignal(!props.kibanaBase)
+  const [showManual, setShowManual] = createSignal(!props.kibanaBase && !props.cloudApiKey)
+  const [cloudProjects, setCloudProjects] = createSignal<ElasticCloud.Project[]>([])
+  const [cloudLoading, setCloudLoading] = createSignal(false)
+  const [selectedProject, setSelectedProject] = createSignal(0)
 
   let jsonInput: TextareaRenderable
   let cb: ElasticCallback.Handle | undefined
@@ -137,7 +159,69 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     save(input)
   }
 
+  const renderer = useRenderer()
+
+  async function selectCloudProject(project: ElasticCloud.Project) {
+    if (!props.cloudApiKey) return
+    setSaving(true)
+    setError("")
+
+    try {
+      const kibanaUrl = project.endpoints.kibana
+
+      // Check if we have cached credentials for this project
+      const contexts = await ElasticAuth.listContexts()
+      const cached = contexts[project.name]
+      if (cached?.api_key && cached?.elasticsearch_url) {
+        const res = await fetch(cached.elasticsearch_url, {
+          headers: { Authorization: `ApiKey ${cached.api_key}` },
+        }).catch(() => null)
+        if (res?.ok) {
+          await ElasticAuth.switchContext(project.name)
+          renderer.destroy()
+          const result = spawnSync(process.execPath, process.argv.slice(2), { stdio: "inherit" })
+          process.exit(result.status ?? 0)
+          return
+        }
+      }
+
+      // No cached credentials — restart with --kibana-base to use Kibana onboarding
+      await ElasticAuth.save({ cloud_api_key: props.cloudApiKey, project_name: project.name })
+      renderer.destroy()
+      const args = filterArgs(process.argv.slice(2))
+      args.push(`--kibana-base=${kibanaUrl}`)
+      const result = spawnSync(process.execPath, args, { stdio: "inherit" })
+      process.exit(result.status ?? 0)
+    } catch (e: any) {
+      setError("Failed to connect: " + (e?.message ?? String(e)))
+      setSaving(false)
+    }
+  }
+
   useKeyboard((evt) => {
+    // Cloud project picker navigation
+    if (props.cloudApiKey && cloudProjects().length > 0 && !showManual()) {
+      if (evt.name === "up" || evt.name === "k") {
+        setSelectedProject((i) => Math.max(0, i - 1))
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
+      if (evt.name === "down" || evt.name === "j") {
+        setSelectedProject((i) => Math.min(cloudProjects().length - 1, i + 1))
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
+      if (evt.name === "return") {
+        const project = cloudProjects()[selectedProject()]
+        if (project) selectCloudProject(project)
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
+    }
+
     if (!showManual()) return
     if (evt.name === "return" && (evt.ctrl || evt.meta)) {
       submitManual()
@@ -149,7 +233,21 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   onMount(() => {
     dialog.setSize("large")
 
-    if (props.kibanaBase) {
+    if (props.cloudApiKey) {
+      // Save the cloud API key immediately so tools can use it
+      ElasticAuth.save({ cloud_api_key: props.cloudApiKey }).catch(() => {})
+      setCloudLoading(true)
+      ElasticCloud.listProjects(props.cloudApiKey)
+        .then((projects) => {
+          setCloudProjects(projects)
+          setCloudLoading(false)
+        })
+        .catch((e) => {
+          setError("Failed to list projects: " + (e instanceof Error ? e.message : String(e)))
+          setCloudLoading(false)
+          setShowManual(true)
+        })
+    } else if (props.kibanaBase) {
       cb = ElasticCallback.start()
       cb.promise.then((payload) => {
         const parsed = payload as Record<string, any>
@@ -177,11 +275,44 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Elastic Console Setup{props.kibanaBase ? " (experimental: Kibana onboarding)" : ""}
+          Elastic Console Setup{props.cloudApiKey ? " (Cloud)" : props.kibanaBase ? " (experimental: Kibana onboarding)" : ""}
         </text>
       </box>
 
-      <Show when={props.kibanaBase && !showManual()}>
+      <Show when={props.cloudApiKey && !showManual()}>
+        <Show when={cloudLoading()}>
+          <text fg={theme.textMuted}>Loading projects...</text>
+        </Show>
+        <Show when={!cloudLoading() && cloudProjects().length > 0}>
+          <text fg={theme.textMuted}>Select a project (↑/↓ to navigate, Enter to connect):</text>
+          <box flexDirection="column" gap={0}>
+            <For each={cloudProjects()}>
+              {(project, index) => (
+                <text
+                  fg={index() === selectedProject() ? theme.primary : theme.text}
+                  onMouseUp={() => selectCloudProject(project)}
+                >
+                  {index() === selectedProject() ? "▸ " : "  "}
+                  {project.name}
+                  <span style={{ fg: theme.textMuted }}> ({project.region_id})</span>
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
+        <Show when={!cloudLoading() && cloudProjects().length === 0 && !error()}>
+          <text fg={theme.textMuted}>No serverless projects found.</text>
+          <text fg={theme.textMuted}>Cloud API key saved — use the cloud_create_project tool to create a project.</text>
+        </Show>
+        <Show when={error()}>
+          <text fg={"#ff6b6b"}>{error()}</text>
+        </Show>
+        <Show when={saving()}>
+          <text fg={theme.textMuted}>connecting...</text>
+        </Show>
+      </Show>
+
+      <Show when={!props.cloudApiKey && props.kibanaBase && !showManual()}>
         <text fg={theme.textMuted}>
           {"Open the Kibana onboarding page — credentials will be sent here automatically."}
         </text>

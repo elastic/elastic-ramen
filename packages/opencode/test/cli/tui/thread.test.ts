@@ -104,6 +104,8 @@ describe("tui thread", () => {
       cors: [],
       "kibana-base": undefined,
       kibanaBase: undefined,
+      "cloud-api-key": undefined,
+      cloudApiKey: undefined,
     }
     return TuiThreadCommand.handler(args)
   }

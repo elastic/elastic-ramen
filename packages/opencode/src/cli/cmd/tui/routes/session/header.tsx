@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createSignal, Match, Show, Switch, onMount } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
@@ -9,6 +9,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Flag } from "@/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
+import { ElasticAuth } from "@/elastic/auth"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -36,6 +37,26 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
     <Show when={props.workspace()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
         {props.workspace()}
+      </text>
+    </Show>
+  )
+}
+
+const ElasticProjectIndicator = () => {
+  const { theme } = useTheme()
+  const [projectName, setProjectName] = createSignal<string | undefined>()
+
+  onMount(async () => {
+    const status = await ElasticAuth.check()
+    if (status.configured && status.context) {
+      setProjectName(status.context.project_name ?? status.name)
+    }
+  })
+
+  return (
+    <Show when={projectName()}>
+      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+        {projectName()}
       </text>
     </Show>
   )
@@ -162,7 +183,10 @@ export function Header() {
               ) : (
                 <Title session={session} />
               )}
-              <ContextInfo context={context} cost={cost} />
+              <box flexDirection="row" gap={2}>
+                <ElasticProjectIndicator />
+                <ContextInfo context={context} cost={cost} />
+              </box>
             </box>
           </Match>
         </Switch>
