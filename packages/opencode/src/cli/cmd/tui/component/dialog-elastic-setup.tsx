@@ -3,6 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { Link } from "@tui/ui/link"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
@@ -187,7 +188,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         </text>
 
         <Show when={link()}>
-          <text fg={theme.primary}>{link()}</text>
+          <Link href={link()!} fg={theme.primary} wrapMode="none">{link()}</Link>
         </Show>
 
         <Show when={error()}>

@@ -6,6 +6,7 @@ export interface LinkProps {
   href: string
   children?: JSX.Element | string
   fg?: RGBA
+  wrapMode?: "none" | "char" | "word"
 }
 
 /**
@@ -18,6 +19,7 @@ export function Link(props: LinkProps) {
   return (
     <text
       fg={props.fg}
+      wrapMode={props.wrapMode}
       onMouseUp={() => {
         open(props.href).catch(() => {})
       }}
