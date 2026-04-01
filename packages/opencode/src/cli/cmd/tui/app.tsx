@@ -274,14 +274,14 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("Elastic Console")
+      renderer.setTerminalTitle("Elastic SRE Agent")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("Elastic Console")
+        renderer.setTerminalTitle("Elastic SRE Agent")
         return
       }
 
@@ -695,7 +695,7 @@ function App() {
     {
       title: "View status",
       keybind: "status_view",
-      value: "elastic-console.status",
+      value: "elastic-sre-agent.status",
       slash: {
         name: "status",
       },
@@ -740,7 +740,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://elastic-console.ai/docs").catch(() => {})
+        open("https://elastic.co/docs").catch(() => {})
         dialog.clear()
       },
       category: "System",
@@ -847,7 +847,7 @@ function App() {
         DialogAlert.show(
           dialog,
           "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Elastic Console Zen\nhttps://elastic-console.ai/zen",
+          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Elastic SRE Agent\nhttps://elastic.co",
         ).then(() => kv.set("openrouter_warning", true))
       })
     }
@@ -909,7 +909,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `Elastic Console v${evt.properties.version} is available. Run 'elastic-console upgrade' to update manually.`,
+      message: `Elastic SRE Agent v${evt.properties.version} is available. Run 'elastic-sre-agent upgrade' to update manually.`,
       duration: 10000,
     })
   })
@@ -964,7 +964,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/elastic/elastic-console/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/elastic/elastic-sre-agent/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -986,7 +986,7 @@ function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("elastic-console-version", Installation.VERSION)
+  issueURL.searchParams.set("elastic-sre-agent-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {

@@ -211,16 +211,16 @@ export namespace KibanaClient {
         const params = new URLSearchParams()
         if (opts?.agent_id) params.set("agent_id", opts.agent_id)
         const qs = params.toString()
-        return request(api("/internal/elastic_console/conversations", qs ? "?" + qs : "", space))
+        return request(api("/internal/sre_agent/conversations", qs ? "?" + qs : "", space))
       },
       async get(id: string): Promise<Conversation> {
-        return request(api("/internal/elastic_console/conversations", `/${encodeURIComponent(id)}`, space))
+        return request(api("/internal/sre_agent/conversations", `/${encodeURIComponent(id)}`, space))
       },
       async create(body: { agent_id: string; title: string; conversation_rounds: ConversationRound[]; user_name?: string; attachments?: unknown[] }): Promise<{ id: string }> {
-        return request(api("/internal/elastic_console/conversations", "", space), { method: "POST", body })
+        return request(api("/internal/sre_agent/conversations", "", space), { method: "POST", body })
       },
       async update(id: string, body: { title?: string; conversation_rounds?: ConversationRound[] }): Promise<void> {
-        await request(api("/internal/elastic_console/conversations", `/${encodeURIComponent(id)}`, space), { method: "PUT", body })
+        await request(api("/internal/sre_agent/conversations", `/${encodeURIComponent(id)}`, space), { method: "PUT", body })
       },
     }
   }

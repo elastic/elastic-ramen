@@ -16,7 +16,7 @@ export const ConfigRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "Get configuration",
-        description: "Retrieve the current Elastic Console configuration settings and preferences.",
+        description: "Retrieve the current Elastic SRE Agent configuration settings and preferences.",
         operationId: "config.get",
         responses: {
           200: {
@@ -37,7 +37,7 @@ export const ConfigRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "Update configuration",
-        description: "Update Elastic Console configuration settings and preferences.",
+        description: "Update Elastic SRE Agent configuration settings and preferences.",
         operationId: "config.update",
         responses: {
           200: {

@@ -1,4 +1,4 @@
-# Elastic Console
+# Elastic SRE Agent
 
 An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) — the open-source AI coding agent — extended with native Kibana/Elasticsearch integration for SRE and observability workflows.
 
@@ -11,7 +11,7 @@ An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) �
 Run the TUI with no flags:
 
 ```bash
-elastic-console
+elastic-sre-agent
 ```
 
 The onboarding dialog shows two fields:
@@ -26,13 +26,13 @@ When a Cloud ID is provided, the Kibana URL is derived automatically and the **L
 ### Option B: One-click Kibana setup (experimental)
 
 ```bash
-elastic-console --kibana-base=http://localhost:5601
+elastic-sre-agent --kibana-base=http://localhost:5601
 ```
 
 This starts a local callback server and shows a Kibana onboarding link. Open the link in your browser, click **Generate credentials**, and Kibana will automatically deliver:
 
 - Elasticsearch URL + API key (saved to `~/.config/elastic/config.yaml`)
-- **LLM Gateway provider** — routes model requests through Kibana's AI connectors via an OpenAI-compatible proxy at `/internal/elastic_console/v1`
+- **LLM Gateway provider** — routes model requests through Kibana's AI connectors via an OpenAI-compatible proxy at `/internal/sre_agent/v1`
 
 You can also click **"Or enter credentials manually"** to fall back to the two-field form.
 
@@ -41,7 +41,7 @@ You can also click **"Or enter credentials manually"** to fall back to the two-f
 The auth flow writes:
 
 1. **Elastic credentials** to `~/.config/elastic/config.yaml` (elasticsearch_url, kibana_url, api_key)
-2. **Provider + MCP + permissions** to `elastic_console.json` in the current working directory:
+2. **Provider + MCP + permissions** to `elastic_sre_agent.json` in the current working directory:
    - `provider.kibana` — Kibana LLM Gateway (OpenAI-compatible)
    - `mcp.eab` — Elastic Agent Builder MCP server (`elastic ab mcp proxy`)
    - `permission.eab_*: "allow"` — auto-allow MCP tools
@@ -62,15 +62,15 @@ contexts:
     api_key: "your-api-key"
 ```
 
-For headless commands (`elastic-console run`, `elastic-console serve`), the config file must exist before launch.
+For headless commands (`elastic-sre-agent run`, `elastic-sre-agent serve`), the config file must exist before launch.
 
 ### Resetting auth
 
 ```bash
-elastic-console --reset-auth
+elastic-sre-agent --reset-auth
 ```
 
-This removes stored credentials from `~/.config/elastic/config.yaml` and clears `provider`/`model` from `elastic_console.json`. The setup dialog will show on next launch.
+This removes stored credentials from `~/.config/elastic/config.yaml` and clears `provider`/`model` from `elastic_sre_agent.json`. The setup dialog will show on next launch.
 
 ### API key requirements
 
@@ -81,10 +81,10 @@ Create the key via the Elasticsearch Dev Tools console or API:
 ```
 POST /_security/api_key
 {
-  "name": "elastic-console",
+  "name": "elastic-sre-agent",
   "expiration": "30d",
   "role_descriptors": {
-    "elastic-console": {
+    "elastic-sre-agent": {
       "cluster": ["all"],
       "indices": [
         {
@@ -113,7 +113,7 @@ Use the `encoded` value from the response as your API key.
 
 The Kibana plugin at `x-pack/platform/plugins/shared/elastic_console/` exposes an OpenAI-compatible API that routes through Kibana-configured AI connectors. When using the auth flow (either manual with Cloud ID or one-click Kibana setup), this is configured automatically.
 
-The provider uses the internal Kibana API at `/internal/elastic_console/v1/chat/completions` with required headers:
+The provider uses the internal Kibana API at `/internal/sre_agent/v1/chat/completions` with required headers:
 
 - `Authorization: ApiKey <base64-encoded-key>`
 - `kbn-xsrf: true`
@@ -136,11 +136,11 @@ The provider uses the internal Kibana API at `/internal/elastic_console/v1/chat/
 
 ### Manual LLM Gateway setup
 
-If you didn't use the auth flow, you can manually add the provider to `elastic_console.json`:
+If you didn't use the auth flow, you can manually add the provider to `elastic_sre_agent.json`:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://elastic.co/config.json",
   "provider": {
     "kibana": {
       "name": "Kibana LLM Gateway",
@@ -161,7 +161,7 @@ If you didn't use the auth flow, you can manually add the provider to `elastic_c
         }
       },
       "options": {
-        "baseURL": "https://my-kibana:5601/internal/elastic_console/v1",
+        "baseURL": "https://my-kibana:5601/internal/sre_agent/v1",
         "apiKey": "ignored",
         "headers": {
           "Authorization": "ApiKey <your-base64-encoded-api-key>",
@@ -184,7 +184,7 @@ The `apiKey` field is required by the AI SDK but ignored — actual auth is via 
 
 The `eab` MCP server provides additional Elasticsearch capabilities (ES|QL queries, index operations, documentation search) through the `elastic ab mcp proxy` command. It is configured automatically during the auth flow.
 
-Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permission.eab_*: "allow"` in `elastic_console.json`.
+Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permission.eab_*: "allow"` in `elastic_sre_agent.json`.
 
 ### Elastic CLI
 
@@ -206,7 +206,7 @@ Use `--format json` for machine-readable output. Use `elastic <command> --help` 
 
 ## Conversation Sync
 
-Sessions in elastic-console are automatically synced to Kibana as conversations. When a session transitions from busy to idle, the conversation rounds (user messages, assistant responses, tool calls) are pushed to the Kibana conversations API at `/internal/elastic_console/conversations`.
+Sessions in elastic-sre-agent are automatically synced to Kibana as conversations. When a session transitions from busy to idle, the conversation rounds (user messages, assistant responses, tool calls) are pushed to the Kibana conversations API at `/internal/sre_agent/conversations`.
 
 ### Kibana Conversation Takeover
 
@@ -218,8 +218,8 @@ Use the `/kibana-conversations` command (or `/kibana-takeover`) to continue a co
 
 ### Branding & CLI
 
-- Renamed CLI from `opencode` to `elastic-console`
-- Config file: `elastic_console.json` (searched first, falls back to `opencode.json`)
+- Renamed CLI from `opencode` to `elastic-sre-agent`
+- Config file: `elastic_sre_agent.json` (searched first, falls back to `elastic_console.json` and `opencode.json`)
 - Custom ASCII logo using Elastic brand colors
 
 ### Elastic Authentication
@@ -227,7 +227,7 @@ Use the `/kibana-conversations` command (or `/kibana-takeover`) to continue a co
 - Two-mode onboarding: manual Cloud ID + API Key (default) or Kibana callback (experimental, with `--kibana-base`)
 - Credentials stored in `~/.config/elastic/config.yaml`
 - `--reset-auth` CLI flag to clear stored credentials
-- Auth flow writes provider, MCP, and permissions to `elastic_console.json`
+- Auth flow writes provider, MCP, and permissions to `elastic_sre_agent.json`
 
 ### Native Kibana Tools
 

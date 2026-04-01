@@ -55,7 +55,7 @@ process.on("SIGHUP", () => process.exit())
 
 let cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
-  .scriptName("elastic-console")
+  .scriptName("elastic-sre-agent")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
@@ -93,7 +93,7 @@ let cli = yargs(hideBin(process.argv))
       process.env.PATH = elasticBinDir + ":" + (process.env.PATH ?? "")
     }
 
-    Log.Default.info("elastic-console", {
+    Log.Default.info("elastic-sre-agent", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
@@ -151,7 +151,7 @@ let cli = yargs(hideBin(process.argv))
         process.stderr.write(
           EOL +
             "\x1b[38;5;37m" +
-            "Elastic Console requires authentication to your Elasticsearch deployment." +
+            "Elastic SRE Agent requires authentication to your Elasticsearch deployment." +
             "\x1b[0m" +
             EOL +
             EOL +
@@ -159,7 +159,7 @@ let cli = yargs(hideBin(process.argv))
             missing +
             EOL +
             EOL +
-            "Run the TUI (elastic-console) to set up via the onboarding dialog," +
+            "Run the TUI (elastic-sre-agent) to set up via the onboarding dialog," +
             EOL +
             "or write ~/.config/elastic/config.yaml:" +
             EOL +

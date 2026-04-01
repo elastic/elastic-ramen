@@ -441,7 +441,7 @@ export namespace MCP {
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
-            name: "elastic-console",
+            name: "elastic-sre-agent",
             version: Installation.VERSION,
           })
           await withTimeout(client.connect(transport), connectTimeout)
@@ -483,7 +483,7 @@ export namespace MCP {
               // Show toast for needs_auth
               Bus.publish(TuiEvent.ToastShow, {
                 title: "MCP Authentication Required",
-                message: `Server "${key}" requires authentication. Run: elastic-console mcp auth ${key}`,
+                message: `Server "${key}" requires authentication. Run: elastic-sre-agent mcp auth ${key}`,
                 variant: "warning",
                 duration: 8000,
               }).catch((e) => log.debug("failed to show toast", { error: e }))
@@ -538,7 +538,7 @@ export namespace MCP {
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
         const client = new Client({
-          name: "elastic-console",
+          name: "elastic-sre-agent",
           version: Installation.VERSION,
         })
         await withTimeout(client.connect(transport), connectTimeout)
@@ -895,7 +895,7 @@ export namespace MCP {
     // Try to connect - this will trigger the OAuth flow
     try {
       const client = new Client({
-        name: "elastic-console",
+        name: "elastic-sre-agent",
         version: Installation.VERSION,
       })
       await client.connect(transport)

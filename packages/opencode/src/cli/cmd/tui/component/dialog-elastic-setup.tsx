@@ -10,7 +10,7 @@ import { ElasticCallback } from "@/elastic/callback"
 import { Process } from "@/util/process"
 
 function buildProvider(kibanaUrl: string, apiKey: string) {
-  const baseURL = kibanaUrl.replace(/\/+$/, "") + "/internal/elastic_console/v1"
+  const baseURL = kibanaUrl.replace(/\/+$/, "") + "/internal/sre_agent/v1"
   return {
     kibana: {
       name: "Kibana LLM Gateway",
@@ -57,7 +57,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   const link = () => {
     const base = props.kibanaBase?.replace(/\/+$/, "")
     if (!base) return undefined
-    return base + "/app/elasticConsole"
+    return base + "/app/sreAgent"
   }
 
   async function save(input: ElasticAuth.SaveInput) {
@@ -178,7 +178,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Elastic Console Setup{props.kibanaBase ? " (experimental: Kibana onboarding)" : ""}
+          Elastic SRE Agent Setup{props.kibanaBase ? " (experimental: Kibana onboarding)" : ""}
         </text>
       </box>
 

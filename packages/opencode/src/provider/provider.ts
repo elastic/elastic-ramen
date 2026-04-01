@@ -416,8 +416,8 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+            "HTTP-Referer": "https://elastic.co/",
+            "X-Title": "elastic-sre-agent",
           },
         },
       }
@@ -427,7 +427,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "http-referer": "https://opencode.ai/",
+            "http-referer": "https://elastic.co/",
             "x-title": "opencode",
           },
         },
@@ -517,8 +517,8 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+            "HTTP-Referer": "https://elastic.co/",
+            "X-Title": "elastic-sre-agent",
           },
         },
       }
@@ -663,8 +663,8 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+            "HTTP-Referer": "https://elastic.co/",
+            "X-Title": "elastic-sre-agent",
           },
         },
       }

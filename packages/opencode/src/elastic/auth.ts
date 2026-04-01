@@ -151,8 +151,8 @@ export namespace ElasticAuth {
 
   async function configJson(): Promise<string | undefined> {
     const cwd = process.cwd()
-    // Prefer elastic_console.json, fall back to opencode.json
-    for (const name of ["elastic_console.json", "elastic_console.jsonc", "opencode.json", "opencode.jsonc"]) {
+    // Prefer elastic_sre_agent.json, fall back to elastic_console.json and opencode.json
+    for (const name of ["elastic_sre_agent.json", "elastic_sre_agent.jsonc", "elastic_console.json", "elastic_console.jsonc", "opencode.json", "opencode.jsonc"]) {
       const fp = path.join(cwd, name)
       if (await Filesystem.exists(fp)) return fp
     }
@@ -192,8 +192,8 @@ export namespace ElasticAuth {
 
     if (input.provider) {
       let cfg = await configJson()
-      if (!cfg) cfg = path.join(process.cwd(), "elastic_console.json")
-      const json = await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://opencode.ai/config.json" }))
+      if (!cfg) cfg = path.join(process.cwd(), "elastic_sre_agent.json")
+      const json = await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))
       json.provider = input.provider
       if (input.model) json.model = input.model
 
@@ -216,7 +216,7 @@ export namespace ElasticAuth {
 
       // Also clear provider/model overrides from .opencode/opencode.jsonc so they don't
       // take precedence over the project-level config we just wrote
-      for (const name of ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
+      for (const name of ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
         const override = path.join(process.cwd(), ".opencode", name)
         if (await Filesystem.exists(override)) {
           const overrideJson = await Filesystem.readJson(override).catch(() => undefined)

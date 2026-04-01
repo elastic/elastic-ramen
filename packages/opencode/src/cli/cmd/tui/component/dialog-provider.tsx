@@ -15,13 +15,14 @@ import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
   openai: 2,
   "github-copilot": 3,
   anthropic: 4,
   google: 5,
 }
+
+// Cloud-only providers that are disabled in the Elastic distribution
+const DISABLED_PROVIDERS = new Set(["opencode", "opencode-go"])
 
 export function createDialogProviderOptions() {
   const sync = useSync()
@@ -29,16 +30,14 @@ export function createDialogProviderOptions() {
   const sdk = useSDK()
   const options = createMemo(() => {
     return pipe(
-      sync.data.provider_next.all,
+      sync.data.provider_next.all.filter((p) => !DISABLED_PROVIDERS.has(p.id)),
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
         title: provider.name,
         value: provider.id,
         description: {
-          opencode: "(Recommended)",
           anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
@@ -220,22 +219,22 @@ function ApiMethod(props: ApiMethodProps) {
           opencode: (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                Elastic Console Zen gives you access to all the best coding models at the cheapest prices with a single API
+                Elastic SRE Agent Zen gives you access to all the best coding models at the cheapest prices with a single API
                 key.
               </text>
               <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://elastic-console.ai/zen</span> to get a key
+                Go to <span style={{ fg: theme.primary }}>https://elastic.co/zen</span> to get a key
               </text>
             </box>
           ),
           "opencode-go": (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                Elastic Console Go is a $10 per month subscription that provides reliable access to popular open coding models
+                Elastic SRE Agent Go is a $10 per month subscription that provides reliable access to popular open coding models
                 with generous usage limits.
               </text>
               <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://elastic-console.ai/zen</span> and enable Elastic Console Go
+                Go to <span style={{ fg: theme.primary }}>https://elastic.co/zen</span> and enable Elastic SRE Agent Go
               </text>
             </box>
           ),

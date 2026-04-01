@@ -76,7 +76,7 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
-    // Config loading order (low -> high precedence): https://elastic-console.ai/docs/config#precedence-order
+    // Config loading order (low -> high precedence): https://elastic.co/docs/config#precedence-order
     // 1) Remote .well-known/opencode (org defaults)
     // 2) Global config (~/.config/opencode/opencode.json{,c})
     // 3) Custom config (OPENCODE_CONFIG)
@@ -97,7 +97,7 @@ export namespace Config {
         const wellknown = (await response.json()) as any
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://elastic-console.ai/config.json"
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://elastic.co/config.json"
         result = mergeConfigConcatArrays(
           result,
           await load(JSON.stringify(remoteConfig), {
@@ -140,7 +140,7 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
+        for (const file of ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
@@ -206,7 +206,7 @@ export namespace Config {
     // which would fail on system directories requiring elevated permissions
     // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedDir)) {
-      for (const file of ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
+      for (const file of ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
         result = mergeConfigConcatArrays(result, await loadFile(path.join(managedDir, file)))
       }
     }
@@ -939,7 +939,7 @@ export namespace Config {
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: elastic-console.local)"),
+      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: elastic-sre-agent.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
     .strict()
@@ -1017,11 +1017,11 @@ export namespace Config {
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       logLevel: Log.Level.optional().describe("Log level"),
-      server: Server.optional().describe("Server configuration for elastic-console serve and web commands"),
+      server: Server.optional().describe("Server configuration for elastic-sre-agent serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
-        .describe("Command configuration, see https://elastic-console.ai/docs/commands"),
+        .describe("Command configuration, see https://elastic.co/docs/commands"),
       skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({
@@ -1032,9 +1032,10 @@ export namespace Config {
       snapshot: z.boolean().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
+        .default("disabled")
         .optional()
         .describe(
-          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing (default: disabled)",
         ),
       autoshare: z
         .boolean()
@@ -1088,7 +1089,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://elastic-console.ai/docs/agents"),
+        .describe("Agent configuration, see https://elastic.co/docs/agents"),
       provider: z
         .record(z.string(), Provider)
         .optional()
@@ -1211,6 +1212,8 @@ export namespace Config {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_sre_agent.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_sre_agent.jsonc"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.jsonc"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
@@ -1227,7 +1230,7 @@ export namespace Config {
         .then(async (mod) => {
           const { provider, model, ...rest } = mod.default
           if (provider && model) result.model = `${provider}/${model}`
-          result["$schema"] = "https://elastic-console.ai/config.json"
+          result["$schema"] = "https://elastic.co/config.json"
           result = mergeDeep(result, rest)
           await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
           await fs.unlink(legacy)
@@ -1265,15 +1268,15 @@ export namespace Config {
       delete copy.theme
       delete copy.keybinds
       delete copy.tui
-      log.warn("tui keys in elastic-console config are deprecated; move them to tui.json", { path: source })
+      log.warn("tui keys in elastic-sre-agent config are deprecated; move them to tui.json", { path: source })
       return copy
     })()
 
     const parsed = Info.safeParse(normalized)
     if (parsed.success) {
       if (!parsed.data.$schema && isFile) {
-        parsed.data.$schema = "https://elastic-console.ai/config.json"
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://elastic-console.ai/config.json",')
+        parsed.data.$schema = "https://elastic.co/config.json"
+        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://elastic.co/config.json",')
         await Filesystem.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data
@@ -1329,14 +1332,14 @@ export namespace Config {
   }
 
   function globalConfigFile() {
-    const candidates = ["elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
       if (existsSync(file)) return file
     }
-    // Default to elastic_console.json for new files
-    return path.join(Global.Path.config, "elastic_console.json")
+    // Default to elastic_sre_agent.json for new files
+    return path.join(Global.Path.config, "elastic_sre_agent.json")
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {
