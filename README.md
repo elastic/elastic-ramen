@@ -1,40 +1,32 @@
-# RAMEN
+# Elastic RAMEN
+
+**R**untime **A**nalysis & **M**onitoring **E**ngi**n**e
 
 An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) — the open-source AI coding agent — extended with native Kibana/Elasticsearch integration for SRE and observability workflows.
+
+> **EXPERIMENTAL** — This tool is highly experimental. No guarantees are offered. Use at your own risk.
 
 ---
 
 ## Getting Started
 
-### Option A: Manual setup (default)
+### Quick start
 
-Run the TUI with no flags:
-
-```bash
-ramen
-```
-
-The onboarding dialog shows two fields:
-
-- **Cloud ID or Elasticsearch URL** — enter a Cloud ID (`my-deployment:dXMtY2Vud...`) or a full URL (`https://my-cluster.es.cloud:443`)
-- **API Key** — an Elasticsearch API key
-
-Press `Tab` to switch between fields and `Ctrl+Enter` to connect.
-
-When a Cloud ID is provided, the Kibana URL is derived automatically and the **LLM Gateway provider** is configured — so you can start chatting immediately without a separate LLM API key.
-
-### Option B: One-click Kibana setup (experimental)
+Run the CLI:
 
 ```bash
-ramen --kibana-base=http://localhost:5601
+elastic-ramen
 ```
 
-This starts a local callback server and shows a Kibana onboarding link. Open the link in your browser, click **Generate credentials**, and Kibana will automatically deliver:
+On first launch (or when no Kibana connection is configured), RAMEN will prompt you to enter your Kibana URL. This starts the Kibana callback auth flow — open the link in your browser, click **Generate credentials**, and Kibana will automatically deliver your credentials.
 
-- Elasticsearch URL + API key (saved to `~/.config/elastic/config.yaml`)
-- **LLM Gateway provider** — routes model requests through Kibana's AI connectors via an OpenAI-compatible proxy at `/internal/elastic_ramen/v1`
+Alternatively, pass the Kibana URL directly:
 
-You can also click **"Or enter credentials manually"** to fall back to the two-field form.
+```bash
+elastic-ramen --kibana-base=http://localhost:5601
+```
+
+You can also use `/connect` inside the TUI at any time to (re)configure the Kibana connection.
 
 ### What happens during auth
 
@@ -46,7 +38,7 @@ The auth flow writes:
    - `mcp.eab` — Elastic Agent Builder MCP server (`elastic ab mcp proxy`)
    - `permission.eab_*: "allow"` — auto-allow MCP tools
 
-After saving, the server-side instance is disposed and the TUI re-bootstraps to pick up the new config immediately.
+After saving, the TUI re-bootstraps to pick up the new config immediately.
 
 ### Manual config
 
@@ -62,12 +54,12 @@ contexts:
     api_key: "your-api-key"
 ```
 
-For headless commands (`ramen run`, `ramen serve`), the config file must exist before launch.
+For headless commands (`elastic-ramen run`, `elastic-ramen serve`), the config file must exist before launch.
 
 ### Resetting auth
 
 ```bash
-ramen --reset-auth
+elastic-ramen --reset-auth
 ```
 
 This removes stored credentials from `~/.config/elastic/config.yaml` and clears `provider`/`model` from `elastic_ramen.json`. The setup dialog will show on next launch.
@@ -81,10 +73,10 @@ Create the key via the Elasticsearch Dev Tools console or API:
 ```
 POST /_security/api_key
 {
-  "name": "ramen",
+  "name": "elastic-ramen",
   "expiration": "30d",
   "role_descriptors": {
-    "ramen": {
+    "elastic-ramen": {
       "cluster": ["all"],
       "indices": [
         {
@@ -111,7 +103,7 @@ Use the `encoded` value from the response as your API key.
 
 ## LLM Gateway
 
-The Kibana plugin at `x-pack/platform/plugins/shared/elastic_console/` exposes an OpenAI-compatible API that routes through Kibana-configured AI connectors. When using the auth flow (either manual with Cloud ID or one-click Kibana setup), this is configured automatically.
+RAMEN uses the Kibana LLM Gateway as its model provider. The Kibana plugin exposes an OpenAI-compatible API that routes through Kibana-configured AI connectors. This is configured automatically during the auth flow.
 
 The provider uses the internal Kibana API at `/internal/elastic_ramen/v1/chat/completions` with required headers:
 
@@ -140,7 +132,6 @@ If you didn't use the auth flow, you can manually add the provider to `elastic_r
 
 ```json
 {
-  "$schema": "https://elastic.co/config.json",
   "provider": {
     "kibana": {
       "name": "Kibana LLM Gateway",
@@ -180,6 +171,17 @@ The `apiKey` field is required by the AI SDK but ignored — actual auth is via 
 
 ---
 
+## Agents
+
+RAMEN ships with two built-in agents:
+
+- **Investigate** (default) — The primary agent for investigating issues, running tools, and making changes based on configured permissions.
+- **Plan** — Research and planning mode. Disallows edit tools. Use for scoping work before executing.
+
+Press `Tab` to cycle between agents, or use `@agent-name` in prompts.
+
+---
+
 ## MCP Server (Elastic Agent Builder)
 
 The `eab` MCP server provides additional Elasticsearch capabilities (ES|QL queries, index operations, documentation search) through the `elastic ab mcp proxy` command. It is configured automatically during the auth flow.
@@ -206,7 +208,9 @@ Use `--format json` for machine-readable output. Use `elastic <command> --help` 
 
 ## Conversation Sync
 
-Sessions in ramen are automatically synced to Kibana as conversations. When a session transitions from busy to idle, the conversation rounds (user messages, assistant responses, tool calls) are pushed to the Kibana conversations API at `/internal/elastic_ramen/conversations`.
+Sessions are automatically synced to Kibana as conversations. When a session transitions from busy to idle, the conversation rounds (user messages, assistant responses, tool calls) are pushed to the Kibana conversations API at `/internal/elastic_ramen/conversations`.
+
+> **Note:** If conversation storage hasn't been initialized in Kibana yet, RAMEN will show a one-time info message. Start a conversation in the Agent Builder UI first to initialize storage.
 
 ### Kibana Conversation Takeover
 
@@ -214,22 +218,7 @@ Use the `/kibana-conversations` command (or `/kibana-takeover`) to continue a co
 
 ---
 
-## What's changed from OpenCode
-
-### Branding & CLI
-
-- Renamed CLI from `opencode` to `ramen`
-- Config file: `elastic_ramen.json` (searched first, falls back to `opencode.json`)
-- Custom ASCII logo using Elastic brand colors
-
-### Elastic Authentication
-
-- Two-mode onboarding: manual Cloud ID + API Key (default) or Kibana callback (experimental, with `--kibana-base`)
-- Credentials stored in `~/.config/elastic/config.yaml`
-- `--reset-auth` CLI flag to clear stored credentials
-- Auth flow writes provider, MCP, and permissions to `elastic_ramen.json`
-
-### Native Kibana Tools
+## Native Kibana Tools
 
 20 built-in tools for interacting with Kibana APIs directly (no MCP server required):
 
@@ -238,15 +227,9 @@ Use the `/kibana-conversations` command (or `/kibana-takeover`) to continue a co
 - **Agent Builder Agents**: `kibana_list_agents`, `kibana_get_agent`, `kibana_create_agent`, `kibana_update_agent`, `kibana_delete_agent`
 - **Connectors**: `kibana_list_connectors`
 
-### Chart Tool
+---
 
-Terminal-based chart rendering (`chart` tool) for visualizing ES|QL query results with Unicode bar charts.
-
-### Elastic Alerts
-
-Live active-alert polling from Elasticsearch (`.alerts-*` indices), surfaced in the TUI sidebar.
-
-### Built-in Elastic Skills
+## Built-in Elastic Skills
 
 Three domain-specific skills bundled under `src/elastic/skills/`:
 
@@ -254,9 +237,15 @@ Three domain-specific skills bundled under `src/elastic/skills/`:
 - **observability-rca** — Root cause analysis workflow for incidents
 - **slo-management** — SLO creation and management guidance
 
-### System Prompt
+---
 
-Custom SRE-focused system instructions injected into sessions, covering the RCA workflow, available Kibana tools, ES|QL query patterns, and the `elastic` CLI.
+## Chart Tool
+
+Terminal-based chart rendering (`chart` tool) for visualizing ES|QL query results with Unicode bar charts.
+
+## Elastic Alerts
+
+Live active-alert polling from Elasticsearch (`.alerts-*` indices), surfaced in the TUI sidebar.
 
 ---
 
