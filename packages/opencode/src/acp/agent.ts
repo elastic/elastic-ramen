@@ -530,7 +530,7 @@ export namespace ACP {
           "terminal-auth": {
             command: "opencode",
             args: ["auth", "login"],
-            label: "Elastic SRE Agent Login",
+            label: "RAMEN Login",
           },
         }
       }
@@ -555,7 +555,7 @@ export namespace ACP {
         },
         authMethods: [authMethod],
         agentInfo: {
-          name: "Elastic SRE Agent",
+          name: "RAMEN",
           version: Installation.VERSION,
         },
       }
@@ -1563,20 +1563,6 @@ export namespace ACP {
 
     if (specified && !providers.length) return specified
 
-    const opencodeProvider = providers.find((p) => p.id === "opencode")
-    if (opencodeProvider) {
-      if (opencodeProvider.models["big-pickle"]) {
-        return { providerID: "opencode", modelID: "big-pickle" }
-      }
-      const [best] = Provider.sort(Object.values(opencodeProvider.models))
-      if (best) {
-        return {
-          providerID: best.providerID,
-          modelID: best.id,
-        }
-      }
-    }
-
     const models = providers.flatMap((p) => Object.values(p.models))
     const [best] = Provider.sort(models)
     if (best) {
@@ -1588,7 +1574,8 @@ export namespace ACP {
 
     if (specified) return specified
 
-    return { providerID: "opencode", modelID: "big-pickle" }
+    // Default to Kibana LLM Gateway
+    return { providerID: "kibana", modelID: "default" }
   }
 
   function parseUri(

@@ -82,12 +82,9 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
-      duration: 3000,
+      message: "No model available. Run /connect to set up your Kibana connection.",
+      duration: 5000,
     })
-    if (sync.data.provider.length === 0) {
-      dialog.replace(() => <DialogProviderConnect />)
-    }
   }
 
   const textareaKeybindings = useTextareaKeybindings()

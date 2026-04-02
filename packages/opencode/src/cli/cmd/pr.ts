@@ -87,10 +87,10 @@ export const PrCommand = cmd({
               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
               if (sessionMatch) {
                 const sessionUrl = sessionMatch[0]
-                UI.println(`Found elastic-sre-agent session: ${sessionUrl}`)
+                UI.println(`Found ramen session: ${sessionUrl}`)
                 UI.println(`Importing session...`)
 
-                const importResult = await Process.text(["elastic-sre-agent", "import", sessionUrl], {
+                const importResult = await Process.text(["ramen", "import", sessionUrl], {
                   nothrow: true,
                 })
                 if (importResult.code === 0) {
@@ -109,13 +109,13 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting elastic-sre-agent...")
+        UI.println("Starting ramen...")
         UI.println()
 
-        // Launch elastic-sre-agent TUI with session ID if available
+        // Launch ramen TUI with session ID if available
         const { spawn } = await import("child_process")
         const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = spawn("elastic-sre-agent", opencodeArgs, {
+        const opencodeProcess = spawn("ramen", opencodeArgs, {
           stdio: "inherit",
           cwd: process.cwd(),
         })
@@ -123,7 +123,7 @@ export const PrCommand = cmd({
         await new Promise<void>((resolve, reject) => {
           opencodeProcess.on("exit", (code) => {
             if (code === 0) resolve()
-            else reject(new Error(`elastic-sre-agent exited with code ${code}`))
+            else reject(new Error(`ramen exited with code ${code}`))
           })
           opencodeProcess.on("error", reject)
         })

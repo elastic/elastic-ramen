@@ -236,7 +236,7 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/elastic-console`,
+      outfile: `dist/${name}/bin/elastic-ramen`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -273,9 +273,9 @@ for (const item of targets) {
 if (Script.release) {
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz elastic-console*`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${key}.tar.gz elastic-ramen*`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip elastic-console*`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${key}.zip elastic-ramen*`.cwd(`dist/${key}/bin`)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`

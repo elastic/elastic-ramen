@@ -12,7 +12,7 @@ export namespace MDNS {
     if (bonjour) unpublish()
 
     try {
-      const host = domain ?? "elastic-sre-agent.local"
+      const host = domain ?? "ramen.local"
       const name = `opencode-${port}`
       bonjour = new Bonjour()
       const service = bonjour.publish({

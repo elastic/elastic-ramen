@@ -274,14 +274,14 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("Elastic SRE Agent")
+      renderer.setTerminalTitle("RAMEN")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("Elastic SRE Agent")
+        renderer.setTerminalTitle("RAMEN")
         return
       }
 
@@ -427,6 +427,7 @@ function App() {
     return result
   }
 
+  let shownStorageHint = false
   const prev = new Map<string, string>()
   createEffect(() => {
     if (!esReady()) return
@@ -439,7 +440,16 @@ function App() {
         if (!session) continue
         const rounds = buildRounds(sessionID)
         Handover.sync(sessionID, session.title, rounds).catch((err) => {
-          toast.show({ variant: "error", message: `Kibana conversation sync failed: ${err instanceof Error ? err.message : String(err)}`, duration: 5000 })
+          const msg = err instanceof Error ? err.message : String(err)
+          // 503 "not yet initialized" is expected when Agent Builder hasn't been used yet
+          if (msg.includes("503") && msg.includes("not yet initialized")) {
+            if (!shownStorageHint) {
+              shownStorageHint = true
+              toast.show({ variant: "info", message: "Conversation sync unavailable — start a conversation in the Agent Builder UI first to initialize storage.", duration: 8000 })
+            }
+            return
+          }
+          toast.show({ variant: "error", message: `Kibana conversation sync failed: ${msg}`, duration: 5000 })
         })
       }
     }
@@ -495,13 +505,37 @@ function App() {
     if (url && key) setEsReady(true)
   })
 
+  // When no provider is configured, auto-trigger the setup flow
   createEffect(
     on(
       () => sync.status === "complete" && sync.data.provider.length === 0,
       (isEmpty, wasEmpty) => {
-        // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return
-        dialog.replace(() => <DialogProviderList />)
+        dialog.replace(() => (
+          <DialogElasticSetup
+            kibanaBase={args.kibanaBase}
+            onComplete={async () => {
+              dialog.clear()
+              await sdk.client.instance.dispose().catch(() => {})
+              await sync.bootstrap()
+              try {
+                toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
+                await sdk.client.mcp.connect({ name: "eab" })
+                const fresh = await sdk.client.mcp.status()
+                if (fresh.data) {
+                  sync.set("mcp", fresh.data)
+                  const mcpStatus = fresh.data["eab"]
+                  if (mcpStatus?.status === "connected") {
+                    toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
+                  }
+                }
+              } catch {}
+              const creds = await ElasticAlerts.resolve()
+              if (creds) startAlerts(creds.url, creds.key)
+              setEsReady(true)
+            }}
+          />
+        ))
       },
     ),
   )
@@ -681,21 +715,46 @@ function App() {
       },
     },
     {
-      title: "Connect provider",
-      value: "provider.connect",
+      title: "Connect to Kibana",
+      value: "kibana.connect",
       suggested: !connected(),
       slash: {
         name: "connect",
+        aliases: ["connect-kibana", "kibana"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
+        dialog.replace(() => (
+          <DialogElasticSetup
+            kibanaBase={args.kibanaBase}
+            onComplete={async () => {
+              dialog.clear()
+              await sdk.client.instance.dispose().catch(() => {})
+              await sync.bootstrap()
+              try {
+                toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
+                await sdk.client.mcp.connect({ name: "eab" })
+                const fresh = await sdk.client.mcp.status()
+                if (fresh.data) {
+                  sync.set("mcp", fresh.data)
+                  const mcpStatus = fresh.data["eab"]
+                  if (mcpStatus?.status === "connected") {
+                    toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
+                  }
+                }
+              } catch {}
+              const creds = await ElasticAlerts.resolve()
+              if (creds) startAlerts(creds.url, creds.key)
+              setEsReady(true)
+            }}
+          />
+        ))
       },
       category: "Provider",
     },
     {
       title: "View status",
       keybind: "status_view",
-      value: "elastic-sre-agent.status",
+      value: "ramen.status",
       slash: {
         name: "status",
       },
@@ -847,7 +906,7 @@ function App() {
         DialogAlert.show(
           dialog,
           "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Elastic SRE Agent\nhttps://elastic.co",
+          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out RAMEN\nhttps://elastic.co",
         ).then(() => kv.set("openrouter_warning", true))
       })
     }
@@ -909,7 +968,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `Elastic SRE Agent v${evt.properties.version} is available. Run 'elastic-sre-agent upgrade' to update manually.`,
+      message: `RAMEN v${evt.properties.version} is available. Run 'ramen upgrade' to update manually.`,
       duration: 10000,
     })
   })
@@ -964,7 +1023,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/elastic/elastic-sre-agent/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/elastic/ramen/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -986,7 +1045,7 @@ function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("elastic-sre-agent-version", Installation.VERSION)
+  issueURL.searchParams.set("ramen-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {

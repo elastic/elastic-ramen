@@ -253,7 +253,7 @@ export const ProvidersLoginCommand = cmd({
   builder: (yargs) =>
     yargs
       .positional("url", {
-        describe: "elastic-sre-agent auth provider",
+        describe: "ramen auth provider",
         type: "string",
       })
       .option("provider", {

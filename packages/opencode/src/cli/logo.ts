@@ -9,6 +9,13 @@ export const letters: [string, string, string][] = [
   ["█▀▀▀", "█   ", "▀▀▀▀"], // C
 ]
 
+// Ramen bowl art displayed next to the logo (all lines padded to equal width)
+export const bowl: [string, string, string] = [
+  "  \\  /   ",
+  "  ▐≋≋≋≋≋▌",
+  "   ▀▄▄▄▀ ",
+]
+
 // Official Elastic brand colors from EUI (euiTheme.colors)
 export const colors = [
   "#0B64DD", // E - primary
@@ -19,6 +26,8 @@ export const colors = [
   "#ED6723", // I - risk
   "#8144CC", // C - assistance
 ]
+
+export const bowlColor = "#ED6723" // risk (orange for warm ramen)
 
 export function hex(color: string): [number, number, number] {
   const n = parseInt(color.slice(1), 16)

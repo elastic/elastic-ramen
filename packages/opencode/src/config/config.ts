@@ -140,7 +140,7 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
+        for (const file of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
@@ -206,7 +206,7 @@ export namespace Config {
     // which would fail on system directories requiring elevated permissions
     // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedDir)) {
-      for (const file of ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json"]) {
+      for (const file of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
         result = mergeConfigConcatArrays(result, await loadFile(path.join(managedDir, file)))
       }
     }
@@ -939,7 +939,7 @@ export namespace Config {
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: elastic-sre-agent.local)"),
+      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: ramen.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
     .strict()
@@ -1017,7 +1017,7 @@ export namespace Config {
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       logLevel: Log.Level.optional().describe("Log level"),
-      server: Server.optional().describe("Server configuration for elastic-sre-agent serve and web commands"),
+      server: Server.optional().describe("Server configuration for ramen serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
@@ -1060,7 +1060,7 @@ export namespace Config {
         .string()
         .optional()
         .describe(
-          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'investigate' if not set or if the specified agent is invalid.",
         ),
       username: z
         .string()
@@ -1212,12 +1212,8 @@ export namespace Config {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_sre_agent.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_sre_agent.jsonc"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_console.jsonc"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_ramen.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "elastic_ramen.jsonc"))),
     )
 
     const legacy = path.join(Global.Path.config, "config")
@@ -1268,7 +1264,7 @@ export namespace Config {
       delete copy.theme
       delete copy.keybinds
       delete copy.tui
-      log.warn("tui keys in elastic-sre-agent config are deprecated; move them to tui.json", { path: source })
+      log.warn("tui keys in ramen config are deprecated; move them to tui.json", { path: source })
       return copy
     })()
 
@@ -1332,14 +1328,14 @@ export namespace Config {
   }
 
   function globalConfigFile() {
-    const candidates = ["elastic_sre_agent.jsonc", "elastic_sre_agent.json", "elastic_console.jsonc", "elastic_console.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = ["elastic_ramen.jsonc", "elastic_ramen.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
       if (existsSync(file)) return file
     }
-    // Default to elastic_sre_agent.json for new files
-    return path.join(Global.Path.config, "elastic_sre_agent.json")
+    // Default to elastic_ramen.json for new files
+    return path.join(Global.Path.config, "elastic_ramen.json")
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {

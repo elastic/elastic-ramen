@@ -70,7 +70,7 @@ export namespace Handover {
       log.info("updating elasticsearch conversation", { sessionID, conversationID: existing })
       const api = conversations()
       await api.update(existing, {
-        title: `Elastic SRE Agent: ${title}`,
+        title: `RAMEN: ${title}`,
         conversation_rounds: conversationRounds,
       })
       return
@@ -79,7 +79,7 @@ export namespace Handover {
     const api = conversations()
     const res = await api.create({
       agent_id: "elastic-ai-agent",
-      title: `Elastic SRE Agent: ${title}`,
+      title: `RAMEN: ${title}`,
       conversation_rounds: conversationRounds,
     })
     link(sessionID, res.id)

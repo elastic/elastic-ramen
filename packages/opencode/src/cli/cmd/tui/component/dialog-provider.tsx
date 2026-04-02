@@ -219,7 +219,7 @@ function ApiMethod(props: ApiMethodProps) {
           opencode: (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                Elastic SRE Agent Zen gives you access to all the best coding models at the cheapest prices with a single API
+                RAMEN Zen gives you access to all the best coding models at the cheapest prices with a single API
                 key.
               </text>
               <text fg={theme.text}>
@@ -230,11 +230,11 @@ function ApiMethod(props: ApiMethodProps) {
           "opencode-go": (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                Elastic SRE Agent Go is a $10 per month subscription that provides reliable access to popular open coding models
+                RAMEN Go is a $10 per month subscription that provides reliable access to popular open coding models
                 with generous usage limits.
               </text>
               <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://elastic.co/zen</span> and enable Elastic SRE Agent Go
+                Go to <span style={{ fg: theme.primary }}>https://elastic.co/zen</span> and enable RAMEN Go
               </text>
             </box>
           ),

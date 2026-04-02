@@ -21,7 +21,7 @@ export const GlobalRoutes = lazy(() =>
       "/health",
       describeRoute({
         summary: "Get health",
-        description: "Get health information about the Elastic SRE Agent server.",
+        description: "Get health information about the RAMEN server.",
         operationId: "global.health",
         responses: {
           200: {
@@ -42,7 +42,7 @@ export const GlobalRoutes = lazy(() =>
       "/event",
       describeRoute({
         summary: "Get global events",
-        description: "Subscribe to global events from the Elastic SRE Agent system using server-sent events.",
+        description: "Subscribe to global events from the RAMEN system using server-sent events.",
         operationId: "global.event",
         responses: {
           200: {
@@ -111,7 +111,7 @@ export const GlobalRoutes = lazy(() =>
       "/config",
       describeRoute({
         summary: "Get global configuration",
-        description: "Retrieve the current global Elastic SRE Agent configuration settings and preferences.",
+        description: "Retrieve the current global RAMEN configuration settings and preferences.",
         operationId: "global.config.get",
         responses: {
           200: {
@@ -132,7 +132,7 @@ export const GlobalRoutes = lazy(() =>
       "/config",
       describeRoute({
         summary: "Update global configuration",
-        description: "Update global Elastic SRE Agent configuration settings and preferences.",
+        description: "Update global RAMEN configuration settings and preferences.",
         operationId: "global.config.update",
         responses: {
           200: {
@@ -157,7 +157,7 @@ export const GlobalRoutes = lazy(() =>
       "/dispose",
       describeRoute({
         summary: "Dispose instance",
-        description: "Clean up and dispose all Elastic SRE Agent instances, releasing all resources.",
+        description: "Clean up and dispose all RAMEN instances, releasing all resources.",
         operationId: "global.dispose",
         responses: {
           200: {

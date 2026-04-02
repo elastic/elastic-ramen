@@ -20,7 +20,7 @@ export namespace ElasticBin {
 
     // Compiled mode: extract from embedded base64
     if (typeof ELASTIC_CLI_B64 === "string" && ELASTIC_CLI_B64.length > 0) {
-      const cacheDir = p.join(os.homedir(), ".cache", "elastic-sre-agent")
+      const cacheDir = p.join(os.homedir(), ".cache", "ramen")
       fs.mkdirSync(cacheDir, { recursive: true })
       const dest = p.join(cacheDir, "elastic" + ext)
       if (!fs.existsSync(dest)) {

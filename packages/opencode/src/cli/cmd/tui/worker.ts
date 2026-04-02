@@ -152,6 +152,6 @@ Rpc.listen(rpc)
 function getAuthorizationHeader(): string | undefined {
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return undefined
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "elastic-sre-agent"
+  const username = Flag.OPENCODE_SERVER_USERNAME ?? "ramen"
   return `Basic ${btoa(`${username}:${password}`)}`
 }

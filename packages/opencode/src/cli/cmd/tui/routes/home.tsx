@@ -15,6 +15,7 @@ import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
+import { useConnected } from "../component/dialog-model"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -35,6 +36,7 @@ export function Home() {
     return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
   })
 
+  const connected = useConnected()
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
@@ -112,6 +114,16 @@ export function Home() {
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
           <Logo />
+        </box>
+        <box flexShrink={0} alignItems="center" paddingTop={1}>
+          <text fg={theme.textMuted}>RAMEN — Runtime Analysis & Monitoring Engine</text>
+          <text fg={"#ff6b6b"}>⚠ EXPERIMENTAL — No guarantees. Use at your own risk.</text>
+          <Show when={!connected()}>
+            <box paddingTop={1} alignItems="center">
+              <text fg={theme.warning}>No Kibana connection configured.</text>
+              <text fg={theme.text}>Type <span style={{ fg: theme.primary }}>/connect</span> to set up your Kibana LLM Gateway.</text>
+            </box>
+          </Show>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>

@@ -192,7 +192,7 @@ export const ExperimentalRoutes = lazy(() =>
       describeRoute({
         summary: "List sessions",
         description:
-          "Get a list of all Elastic SRE Agent sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+          "Get a list of all RAMEN sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
         operationId: "experimental.session.list",
         responses: {
           200: {

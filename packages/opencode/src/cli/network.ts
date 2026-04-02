@@ -20,7 +20,7 @@ const options = {
   "mdns-domain": {
     type: "string" as const,
     describe: "custom domain name for mDNS service (default: opencode.local)",
-    default: "elastic-sre-agent.local",
+    default: "ramen.local",
   },
   cors: {
     type: "string" as const,

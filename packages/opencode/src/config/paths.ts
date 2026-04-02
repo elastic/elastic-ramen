@@ -8,9 +8,9 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
-  /** Map of canonical config names to their preferred (elastic_sre_agent) and legacy (elastic_console, opencode) filenames. */
+  /** Map of canonical config names to their preferred (elastic_ramen) filenames. */
   const CONFIG_NAMES: Record<string, string[]> = {
-    opencode: ["elastic_sre_agent", "elastic_console", "opencode"],
+    opencode: ["elastic_ramen"],
     tui: ["tui"],
   }
 

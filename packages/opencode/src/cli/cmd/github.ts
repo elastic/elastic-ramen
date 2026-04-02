@@ -135,9 +135,9 @@ type IssueQueryResponse = {
   }
 }
 
-const AGENT_USERNAME = "elastic-sre-agent-agent[bot]"
+const AGENT_USERNAME = "ramen-agent[bot]"
 const AGENT_REACTION = "eyes"
-const WORKFLOW_FILE = ".github/workflows/elastic-sre-agent.yml"
+const WORKFLOW_FILE = ".github/workflows/ramen.yml"
 
 // Event categories for routing
 // USER_EVENTS: triggered by user actions, have actor/issueId, support reactions/comments
@@ -326,7 +326,7 @@ export const GithubInstallCommand = cmd({
             if (installation) return s.stop("GitHub app already installed")
 
             // Open browser
-            const url = "https://github.com/apps/elastic-sre-agent-agent"
+            const url = "https://github.com/apps/ramen-agent"
             const command =
               process.platform === "darwin"
                 ? `open "${url}"`
@@ -387,12 +387,12 @@ on:
     types: [created]
 
 jobs:
-  elastic-sre-agent:
+  ramen:
     if: |
       contains(github.event.comment.body, ' /ec') ||
       startsWith(github.event.comment.body, '/ec') ||
-      contains(github.event.comment.body, ' /elastic-sre-agent') ||
-      startsWith(github.event.comment.body, '/elastic-sre-agent')
+      contains(github.event.comment.body, ' /ramen') ||
+      startsWith(github.event.comment.body, '/ramen')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -405,8 +405,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run elastic-sre-agent
-        uses: elastic/elastic-sre-agent/github@latest${envStr}
+      - name: Run ramen
+        uses: elastic/ramen/github@latest${envStr}
         with:
           model: ${provider}/${model}`,
             )
@@ -562,7 +562,7 @@ export const GithubRunCommand = cmd({
           await Session.share(session.id)
           return session.id.slice(-8)
         })()
-        console.log("elastic-sre-agent session", session.id)
+        console.log("ramen session", session.id)
 
         // Handle event types:
         // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
@@ -784,7 +784,7 @@ export const GithubRunCommand = cmd({
         }
 
         const reviewContext = getReviewCommentContext()
-        const mentions = (process.env["MENTIONS"] || "/elastic-sre-agent,/ec")
+        const mentions = (process.env["MENTIONS"] || "/ramen,/ec")
           .split(",")
           .map((m) => m.trim().toLowerCase())
           .filter(Boolean)
@@ -1027,7 +1027,7 @@ export const GithubRunCommand = cmd({
 
       async function getOidcToken() {
         try {
-          return await core.getIDToken("elastic-sre-agent-github-action")
+          return await core.getIDToken("ramen-github-action")
         } catch (error) {
           console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
@@ -1403,9 +1403,9 @@ export const GithubRunCommand = cmd({
           const titleAlt = encodeURIComponent(session.title.substring(0, 50))
           const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-          return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/elastic-sre-agent-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+          return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/ramen-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
         })()
-        const shareUrl = shareId ? `[elastic-sre-agent session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+        const shareUrl = shareId ? `[ramen session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
         return `\n\n${image}${shareUrl}[github run](${runUrl})`
       }
 

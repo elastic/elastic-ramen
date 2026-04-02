@@ -39,7 +39,7 @@ export namespace ElasticCallback {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Elastic SRE Agent - Connected</title>
+  <title>RAMEN - Connected</title>
   <style>
     body {
       margin: 0;
@@ -86,7 +86,7 @@ export namespace ElasticCallback {
 </head>
 <body>
   <div class="card">
-    <div class="badge">Elastic SRE Agent</div>
+    <div class="badge">RAMEN</div>
     <h1>Connected</h1>
     <p>Credentials received. You can close this tab.</p>
   </div>
