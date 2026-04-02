@@ -146,8 +146,9 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
-// Build the elastic CLI for each target platform
+// Build the elastic CLI for each target platform (skip if directory doesn't exist)
 const elasticCliDir = process.env.ELASTIC_CLI_DIR || path.resolve(dir, "../../../cli")
+const buildElasticCli = fs.existsSync(elasticCliDir)
 const goTargetMap: Record<string, { goos: string; goarch: string }> = {
   darwin: { goos: "darwin", goarch: "" },
   linux: { goos: "linux", goarch: "" },
@@ -158,20 +159,24 @@ const goArchMap: Record<string, string> = {
   x64: "amd64",
 }
 
-const seen = new Set<string>()
-for (const item of targets) {
-  const goos = goTargetMap[item.os]?.goos ?? item.os
-  const goarch = goArchMap[item.arch] ?? item.arch
-  const key = `${goos}-${goarch}`
-  if (seen.has(key)) continue
-  seen.add(key)
-  const ext = goos === "windows" ? ".exe" : ""
-  const out = path.resolve(dir, `dist/elastic-cli/${key}/elastic${ext}`)
-  await $`mkdir -p ${path.dirname(out)}`
-  console.log(`building elastic CLI for ${key}`)
-  await $`CGO_ENABLED=0 GOOS=${goos} GOARCH=${goarch} go build -trimpath -ldflags="-s -w" -o ${out} ./cmd/elastic`.cwd(
-    elasticCliDir,
-  )
+if (buildElasticCli) {
+  const seen = new Set<string>()
+  for (const item of targets) {
+    const goos = goTargetMap[item.os]?.goos ?? item.os
+    const goarch = goArchMap[item.arch] ?? item.arch
+    const key = `${goos}-${goarch}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const ext = goos === "windows" ? ".exe" : ""
+    const out = path.resolve(dir, `dist/elastic-cli/${key}/elastic${ext}`)
+    await $`mkdir -p ${path.dirname(out)}`
+    console.log(`building elastic CLI for ${key}`)
+    await $`CGO_ENABLED=0 GOOS=${goos} GOARCH=${goarch} go build -trimpath -ldflags="-s -w" -o ${out} ./cmd/elastic`.cwd(
+      elasticCliDir,
+    )
+  }
+} else {
+  console.log(`Skipping elastic CLI build (directory not found: ${elasticCliDir})`)
 }
 
 // Read all SKILL.md files to embed as a define constant
