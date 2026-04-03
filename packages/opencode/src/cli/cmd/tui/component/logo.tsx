@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: added ramen bowl ASCII art to the left of the ELASTIC logo
 import { TextAttributes } from "@opentui/core"
 import { For, type JSX } from "solid-js"
 import { letters, colors, bowl, bowlColor } from "@/cli/logo"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: updated config file lookup to use elastic_ramen naming, updated doc/schema URLs to elastic.co
 import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"

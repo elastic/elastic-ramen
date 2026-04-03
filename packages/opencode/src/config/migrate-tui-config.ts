@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: updated TUI schema URL from opencode.ai to elastic.co
 import path from "path"
 import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { unique } from "remeda"

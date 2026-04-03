@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: updated OAuth client_name from Elastic Console to RAMEN
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientMetadata,

@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: updated no-model warning message to reference /connect command for Kibana setup, removed automatic provider dialog trigger
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: added ramen bowl ASCII art and bowl color export alongside existing ELASTIC letter logo
 // Each entry is [row0, row1, row2] for one letter of ELASTIC
 export const letters: [string, string, string][] = [
   ["█▀▀▀", "█▀▀ ", "▀▀▀▀"], // E

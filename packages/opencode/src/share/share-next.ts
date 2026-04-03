@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: disabled public sharing unless enterprise URL is configured, throwing an explicit error instead of falling back to opncd.ai
 import { Bus } from "@/bus"
 import { Account } from "@/account"
 import { Config } from "@/config/config"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: updated default mDNS hostname from elastic-console.local to ramen.local
 import { Log } from "@/util/log"
 import { Bonjour } from "bonjour-service"
 

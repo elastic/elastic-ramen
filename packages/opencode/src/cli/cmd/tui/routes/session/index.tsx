@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: updated agent switch from build to investigate on plan_exit, rebranded CLI resume command from elastic-console to ramen
 import {
   batch,
   createContext,

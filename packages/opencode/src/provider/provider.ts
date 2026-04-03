@@ -1,3 +1,6 @@
+// Copyright (c) 2026-present, Elastic NV
+// This file is derived from opencode (https://github.com/anomalyco/opencode)
+// and has been modified by Elastic NV. Changes: disabled opencode provider autoload, updated HTTP referrer headers to elastic.co, routed LLM access through Kibana LLM Gateway only
 import z from "zod"
 import os from "os"
 import fuzzysort from "fuzzysort"
