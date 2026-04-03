@@ -156,10 +156,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       setError("Enter a valid URL starting with http:// or https://")
       return
     }
-    // Strip path — only keep protocol + hostname + port (origin)
     let url: string
     try {
-      url = new URL(raw).origin
+      const parsed = new URL(raw)
+      // Keep the full URL including base path (e.g. http://host:5601/oiy)
+      // but strip any trailing slash
+      url = raw.replace(/\/+$/, "")
+      // Basic sanity check
+      if (!parsed.hostname) throw new Error("no hostname")
     } catch {
       setError("Invalid URL")
       return
@@ -178,11 +182,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       const es = parsed.es_url || parsed.elasticsearch_url
       const key = parsed.api_key
       const kb = parsed.kibana_url
+      // Prefer the --kibana-base / user-entered URL over what the callback reports,
+      // since the callback may return the internal port without the base path.
+      const effectiveKb = base || kb
       const input: ElasticAuth.SaveInput = { api_key: key, elasticsearch_url: es, auth_mode: "kibana" }
-      if (kb) input.kibana_url = kb
+      if (effectiveKb) input.kibana_url = effectiveKb
       // Always construct provider ourselves to ensure correct baseURL and headers
-      if (kb && key) {
-        input.provider = buildProvider(kb, key)
+      if (effectiveKb && key) {
+        input.provider = buildProvider(effectiveKb, key)
       }
       if (parsed.model && typeof parsed.model === "string") input.model = parsed.model
       else if (input.provider) input.model = "kibana/default"
