@@ -26,7 +26,7 @@ const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
 //
-const cached = path.join(scriptDir, ".opencode")
+const cached = path.join(scriptDir, ".elastic-ramen")
 if (fs.existsSync(cached)) {
   run(cached)
 }
@@ -50,7 +50,7 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
+const base = "elastic-ramen-" + platform + "-" + arch
 const binary = platform === "windows" ? "opencode.exe" : "opencode"
 
 function supportsAvx2() {
@@ -169,7 +169,7 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
+    "It seems that your package manager failed to install the right version of the elastic-ramen CLI for your platform. You can try manually installing " +
       names.map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )

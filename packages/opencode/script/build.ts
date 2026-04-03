@@ -213,9 +213,15 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
+// Derive a filesystem-safe base name from the (potentially scoped) package name.
+// e.g. "@elastic/ramen" → "elastic-ramen"
+const pkgBaseName = pkg.name.startsWith("@")
+  ? pkg.name.slice(1).replace("/", "-")
+  : pkg.name
+
 for (const item of targets) {
   const name = [
-    pkg.name,
+    pkgBaseName,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
     item.arch,
@@ -277,10 +283,14 @@ for (const item of targets) {
 
   await $`rm -rf ./dist/${name}/bin/tui`
 
+  // npm package name: scoped if the main package is scoped (e.g. @elastic/ramen-darwin-arm64)
+  const scope = pkg.name.startsWith("@") ? pkg.name.split("/")[0] + "/" : ""
+  const npmName = scope + name
+
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: npmName,
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
@@ -289,7 +299,7 @@ for (const item of targets) {
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[npmName] = Script.version
 }
 
 if (Script.release) {
