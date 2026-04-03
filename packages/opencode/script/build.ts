@@ -276,11 +276,18 @@ for (const item of targets) {
 }
 
 if (Script.release) {
+  // Copy legal files into each platform bin dir so they are included in the archive
+  const repoRoot = path.resolve(dir, "../..")
+  const legalFiles = ["NOTICE", "LICENSE"].map((f) => path.join(repoRoot, f)).filter((f) => fs.existsSync(f))
+
   for (const key of Object.keys(binaries)) {
+    for (const lf of legalFiles) {
+      fs.copyFileSync(lf, path.join(dir, `dist/${key}/bin`, path.basename(lf)))
+    }
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz elastic-ramen*`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${key}.tar.gz elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip elastic-ramen*`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${key}.zip elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
