@@ -14,6 +14,7 @@ process.chdir(dir)
 
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
+import { generateDistNotice } from "./generate-notice"
 
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
 // Fetch and generate models.dev snapshot
@@ -146,6 +147,22 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
+// Generate full distribution NOTICE (static header + all dep license texts)
+const repoRoot = path.resolve(dir, "../..")
+const { notice: distNotice, deps: depList } = await generateDistNotice(
+  path.join(repoRoot, "NOTICE"),
+  dir,
+)
+console.log(`Generated distribution NOTICE (${depList.length} deps)`)
+
+// Write dependency manifest for compliance tracking
+await $`mkdir -p dist`
+await Bun.write(
+  path.join(dir, "dist/dependency-licenses.json"),
+  JSON.stringify(depList, null, 2),
+)
+console.log("Written dist/dependency-licenses.json")
+
 // Build the elastic CLI for each target platform (skip if directory doesn't exist)
 const elasticCliDir = process.env.ELASTIC_CLI_DIR || path.resolve(dir, "../../../cli")
 const buildElasticCli = fs.existsSync(elasticCliDir)
@@ -276,13 +293,15 @@ for (const item of targets) {
 }
 
 if (Script.release) {
-  // Copy legal files into each platform bin dir so they are included in the archive
-  const repoRoot = path.resolve(dir, "../..")
-  const legalFiles = ["NOTICE", "LICENSE"].map((f) => path.join(repoRoot, f)).filter((f) => fs.existsSync(f))
+  // Write legal files into each platform bin dir so they are included in the archive.
+  // NOTICE is the fully-generated version (static header + all dep license texts).
+  const licensePath = path.join(repoRoot, "LICENSE")
 
   for (const key of Object.keys(binaries)) {
-    for (const lf of legalFiles) {
-      fs.copyFileSync(lf, path.join(dir, `dist/${key}/bin`, path.basename(lf)))
+    const binDir = path.join(dir, `dist/${key}/bin`)
+    await Bun.write(path.join(binDir, "NOTICE"), distNotice)
+    if (fs.existsSync(licensePath)) {
+      fs.copyFileSync(licensePath, path.join(binDir, "LICENSE"))
     }
     if (key.includes("linux")) {
       await $`tar -czf ../../${key}.tar.gz elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
