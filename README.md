@@ -8,6 +8,19 @@ An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) â€
 
 ---
 
+## Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/elastic/elastic-ramen/dev/install | bash
+```
+
+Or download a pre-built binary from [GitHub Releases](https://github.com/elastic/elastic-ramen/releases).
+
+After installation, run:
+```bash
+elastic-ramen --kibana-base=https://<your-kibana-url>
+```
+
 ## Getting Started
 
 ### Quick start
@@ -260,3 +273,13 @@ cd packages/opencode && bun run build
 ## Upstream
 
 Based on [OpenCode](https://github.com/anomalyco/opencode). See the upstream repo for general configuration, agent docs, and provider setup.
+
+---
+
+## License
+
+MIT License â€” Copyright (c) 2026-present, Elastic NV
+
+This project is based on [opencode](https://github.com/anomalyco/opencode) by anomalyco, used under the MIT License.
+
+See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.
