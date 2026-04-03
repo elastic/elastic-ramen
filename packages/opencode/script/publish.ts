@@ -1,8 +1,7 @@
+#!/usr/bin/env bun
 // Copyright (c) 2026-present, Elastic NV
 // Publishes @elastic/ramen and its platform-specific packages to npm.
 // Run after build.ts has populated dist/.
-
-#!/usr/bin/env bun
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
