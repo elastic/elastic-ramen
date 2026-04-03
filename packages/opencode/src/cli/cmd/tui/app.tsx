@@ -462,10 +462,10 @@ function App() {
     alertPoller?.stop()
   })
 
-  // Check elastic auth on mount; show setup dialog if not configured
+  // Check elastic auth on mount; show setup dialog if not configured or if --kibana-base was passed
   onMount(async () => {
     const status = await ElasticAuth.check()
-    if (!status.configured) {
+    if (!status.configured || args.kibanaBase) {
       dialog.replace(() => (
         <DialogElasticSetup
           kibanaBase={args.kibanaBase}

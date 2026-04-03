@@ -34,8 +34,7 @@ export namespace ElasticAuth {
   function dir() {
     const xdg = process.env.XDG_CONFIG_HOME
     if (xdg) return path.join(xdg, "elastic")
-    // Match Go's os.UserConfigDir() which the elastic CLI uses
-    if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "elastic")
+    // The elastic Go CLI uses XDG convention (~/.config/elastic) on all platforms
     if (process.platform === "win32") return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "elastic")
     return path.join(os.homedir(), ".config", "elastic")
   }
