@@ -1,3 +1,4 @@
+// Copyright (c) 2026-present, Elastic NV
 import { ElasticAuth } from "./auth"
 
 export interface ConversationRound {

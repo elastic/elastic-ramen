@@ -1,3 +1,4 @@
+// Copyright (c) 2026-present, Elastic NV
 export namespace ElasticCallback {
   const PORT = 14642
 

@@ -1,3 +1,4 @@
+// Copyright (c) 2026-present, Elastic NV
 import { KibanaClient, type ConversationRound, type Conversation } from "./client"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"

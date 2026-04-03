@@ -1,3 +1,4 @@
+// Copyright (c) 2026-present, Elastic NV
 import p from "path"
 import fs from "fs"
 import os from "os"

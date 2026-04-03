@@ -1,3 +1,4 @@
+// Copyright (c) 2026-present, Elastic NV
 import path from "path"
 import os from "os"
 import { Filesystem } from "@/util/filesystem"

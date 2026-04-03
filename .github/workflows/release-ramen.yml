@@ -1,3 +1,4 @@
+# Copyright (c) Elastic, Inc. Licensed under the MIT License.
 name: Release Elastic RAMEN
 
 on:
