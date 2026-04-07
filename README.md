@@ -1,4 +1,4 @@
-# Elastic RAMEN
+# Elastic RAMEN 🍜
 
 **R**untime **A**nalysis & **M**onitoring **E**ngi**n**e
 
