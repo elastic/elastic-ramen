@@ -1,37 +1,62 @@
 #!/usr/bin/env bun
+// Copyright (c) 2026-present, Elastic NV
+// Publishes @elastic/ramen and its platform-specific packages to npm.
+// Run after build.ts has populated dist/.
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
+import path from "path"
+import fs from "fs"
 
-const dir = fileURLToPath(new URL("..", import.meta.url))
+const dir = path.dirname(fileURLToPath(import.meta.url + "/.."))
 process.chdir(dir)
 
+// Collect all platform packages written by build.ts
 const binaries: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
-  const pkg = await Bun.file(`./dist/${filepath}`).json()
-  binaries[pkg.name] = pkg.version
+  const p = await Bun.file(`./dist/${filepath}`).json()
+  if (p.name && p.version && p.os) {
+    binaries[p.name] = p.version
+  }
 }
-console.log("binaries", binaries)
+console.log("platform packages:", binaries)
+
 const version = Object.values(binaries)[0]
+if (!version) {
+  console.error("No platform packages found in dist/ — run build.ts first")
+  process.exit(1)
+}
 
-await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
-await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
-await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
+// Build the wrapper package that users install: @elastic/ramen
+// It uses optionalDependencies to pull the right platform binary,
+// and postinstall.mjs to symlink it into bin/.
+const wrapperDir = `./dist/${pkg.name.replace(/^@[^/]+\//, "")}`
+await $`mkdir -p ${wrapperDir}/bin`
+await $`cp -r ./bin/. ${wrapperDir}/bin/`
+await $`cp ./script/postinstall.mjs ${wrapperDir}/postinstall.mjs`
 
-await Bun.file(`./dist/${pkg.name}/package.json`).write(
+const licenseSource = path.resolve(dir, "../../LICENSE")
+if (fs.existsSync(licenseSource)) {
+  fs.copyFileSync(licenseSource, `${wrapperDir}/LICENSE`)
+}
+
+const noticeSource = path.resolve(dir, "../../NOTICE")
+if (fs.existsSync(noticeSource)) {
+  fs.copyFileSync(noticeSource, `${wrapperDir}/NOTICE`)
+}
+
+await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
-      bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
-      },
+      name: pkg.name,
+      version,
+      bin: pkg.bin,
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
-      version: version,
       license: pkg.license,
+      publishConfig: pkg.publishConfig,
       optionalDependencies: binaries,
     },
     null,
@@ -39,143 +64,20 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 
-const tasks = Object.entries(binaries).map(async ([name]) => {
+// Publish each platform package
+const platformTasks = Object.keys(binaries).map(async (name) => {
+  const dirName = name.replace(/^@[^/]+\//, "")
+  const pkgDir = `./dist/${dirName}`
   if (process.platform !== "win32") {
-    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
+    await $`chmod -R 755 .`.cwd(pkgDir)
   }
-  await $`bun pm pack`.cwd(`./dist/${name}`)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
+  await $`bun pm pack`.cwd(pkgDir)
+  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(pkgDir)
 })
-await Promise.all(tasks)
-await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
+await Promise.all(platformTasks)
 
-const image = "ghcr.io/anomalyco/opencode"
-const platforms = "linux/amd64,linux/arm64"
-const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
-const tagFlags = tags.flatMap((t) => ["-t", t])
-await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
+// Publish the wrapper package
+const wrapperDirName = pkg.name.replace(/^@[^/]+\//, "")
+await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
 
-// registries
-if (!Script.preview) {
-  // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-
-  const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
-
-  // arch
-  const binaryPkgbuild = [
-    "# Maintainer: dax",
-    "# Maintainer: adam",
-    "",
-    "pkgname='opencode-bin'",
-    `pkgver=${pkgver}`,
-    `_subver=${_subver}`,
-    "options=('!debug' '!strip')",
-    "pkgrel=1",
-    "pkgdesc='The AI coding agent built for the terminal.'",
-    "url='https://github.com/anomalyco/opencode'",
-    "arch=('aarch64' 'x86_64')",
-    "license=('MIT')",
-    "provides=('opencode')",
-    "conflicts=('opencode')",
-    "depends=('ripgrep')",
-    "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.tar.gz")`,
-    `sha256sums_aarch64=('${arm64Sha}')`,
-
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.tar.gz")`,
-    `sha256sums_x86_64=('${x64Sha}')`,
-    "",
-    "package() {",
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
-    "}",
-    "",
-  ].join("\n")
-
-  for (const [pkg, pkgbuild] of [["opencode-bin", binaryPkgbuild]]) {
-    for (let i = 0; i < 30; i++) {
-      try {
-        await $`rm -rf ./dist/aur-${pkg}`
-        await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
-        await $`cd ./dist/aur-${pkg} && git checkout master`
-        await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
-        await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
-        await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
-        await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${Script.version}"`
-        await $`cd ./dist/aur-${pkg} && git push`
-        break
-      } catch (e) {
-        continue
-      }
-    }
-  }
-
-  // Homebrew formula
-  const homebrewFormula = [
-    "# typed: false",
-    "# frozen_string_literal: true",
-    "",
-    "# This file was generated by GoReleaser. DO NOT EDIT.",
-    "class Opencode < Formula",
-    `  desc "The AI coding agent built for the terminal."`,
-    `  homepage "https://github.com/anomalyco/opencode"`,
-    `  version "${Script.version.split("-")[0]}"`,
-    "",
-    `  depends_on "ripgrep"`,
-    "",
-    "  on_macos do",
-    "    if Hardware::CPU.intel?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-darwin-x64.zip"`,
-    `      sha256 "${macX64Sha}"`,
-    "",
-    "      def install",
-    '        bin.install "opencode"',
-    "      end",
-    "    end",
-    "    if Hardware::CPU.arm?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-darwin-arm64.zip"`,
-    `      sha256 "${macArm64Sha}"`,
-    "",
-    "      def install",
-    '        bin.install "opencode"',
-    "      end",
-    "    end",
-    "  end",
-    "",
-    "  on_linux do",
-    "    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
-    `      sha256 "${x64Sha}"`,
-    "      def install",
-    '        bin.install "opencode"',
-    "      end",
-    "    end",
-    "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
-    `      sha256 "${arm64Sha}"`,
-    "      def install",
-    '        bin.install "opencode"',
-    "      end",
-    "    end",
-    "  end",
-    "end",
-    "",
-    "",
-  ].join("\n")
-
-  const token = process.env.GITHUB_TOKEN
-  if (!token) {
-    console.error("GITHUB_TOKEN is required to update homebrew tap")
-    process.exit(1)
-  }
-  const tap = `https://x-access-token:${token}@github.com/anomalyco/homebrew-tap.git`
-  await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone ${tap} ./dist/homebrew-tap`
-  await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
-  await $`cd ./dist/homebrew-tap && git add opencode.rb`
-  await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
-  await $`cd ./dist/homebrew-tap && git push`
-}
+console.log(`Published ${pkg.name}@${version} (channel: ${Script.channel})`)

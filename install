@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026-present, Elastic NV
+# This file is derived from opencode (https://github.com/anomalyco/opencode)
+# and has been modified by Elastic NV. Changes: rebranded to elastic-ramen, updated GitHub repo URLs, install directory, binary name, and usage instructions
 set -euo pipefail
 APP=elastic-ramen
 

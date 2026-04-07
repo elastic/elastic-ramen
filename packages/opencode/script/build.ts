@@ -14,6 +14,7 @@ process.chdir(dir)
 
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
+import { generateDistNotice } from "./generate-notice"
 
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
 // Fetch and generate models.dev snapshot
@@ -146,6 +147,22 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
+// Generate full distribution NOTICE (static header + all dep license texts)
+const repoRoot = path.resolve(dir, "../..")
+const { notice: distNotice, deps: depList } = await generateDistNotice(
+  path.join(repoRoot, "NOTICE"),
+  dir,
+)
+console.log(`Generated distribution NOTICE (${depList.length} deps)`)
+
+// Write dependency manifest for compliance tracking
+await $`mkdir -p dist`
+await Bun.write(
+  path.join(dir, "dist/dependency-licenses.json"),
+  JSON.stringify(depList, null, 2),
+)
+console.log("Written dist/dependency-licenses.json")
+
 // Build the elastic CLI for each target platform (skip if directory doesn't exist)
 const elasticCliDir = process.env.ELASTIC_CLI_DIR || path.resolve(dir, "../../../cli")
 const buildElasticCli = fs.existsSync(elasticCliDir)
@@ -196,9 +213,15 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
+// Derive a filesystem-safe base name from the (potentially scoped) package name.
+// e.g. "@elastic/ramen" → "elastic-ramen"
+const pkgBaseName = pkg.name.startsWith("@")
+  ? pkg.name.slice(1).replace("/", "-")
+  : pkg.name
+
 for (const item of targets) {
   const name = [
-    pkg.name,
+    pkgBaseName,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
     item.arch,
@@ -240,7 +263,7 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
+      target: name.replace(pkgBaseName, "bun") as any,
       outfile: `dist/${name}/bin/elastic-ramen`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
@@ -260,10 +283,14 @@ for (const item of targets) {
 
   await $`rm -rf ./dist/${name}/bin/tui`
 
+  // npm package name: scoped if the main package is scoped (e.g. @elastic/ramen-darwin-arm64)
+  const scope = pkg.name.startsWith("@") ? pkg.name.split("/")[0] + "/" : ""
+  const npmName = scope + name
+
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: npmName,
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
@@ -272,15 +299,24 @@ for (const item of targets) {
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[npmName] = Script.version
 }
 
 if (Script.release) {
+  // Write legal files into each platform bin dir so they are included in the archive.
+  // NOTICE is the fully-generated version (static header + all dep license texts).
+  const licensePath = path.join(repoRoot, "LICENSE")
+
   for (const key of Object.keys(binaries)) {
+    const binDir = path.join(dir, `dist/${key}/bin`)
+    await Bun.write(path.join(binDir, "NOTICE"), distNotice)
+    if (fs.existsSync(licensePath)) {
+      fs.copyFileSync(licensePath, path.join(binDir, "LICENSE"))
+    }
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz elastic-ramen*`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${key}.tar.gz elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip elastic-ramen*`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${key}.zip elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`

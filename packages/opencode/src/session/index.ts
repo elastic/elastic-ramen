@@ -349,32 +349,12 @@ export namespace Session {
     return fromRow(row)
   })
 
-  export const share = fn(SessionID.zod, async (id) => {
-    const cfg = await Config.get()
-    if (cfg.share === "disabled") {
-      throw new Error("Sharing is disabled in configuration")
-    }
-    const { ShareNext } = await import("@/share/share-next")
-    const share = await ShareNext.create(id)
-    Database.use((db) => {
-      const row = db.update(SessionTable).set({ share_url: share.url }).where(eq(SessionTable.id, id)).returning().get()
-      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
-      const info = fromRow(row)
-      Database.effect(() => Bus.publish(Event.Updated, { info }))
-    })
-    return share
+  export const share = fn(SessionID.zod, async (_id) => {
+    throw new Error("Session sharing is not supported in Elastic RAMEN")
   })
 
-  export const unshare = fn(SessionID.zod, async (id) => {
-    // Use ShareNext to remove the share (same as share function uses ShareNext to create)
-    const { ShareNext } = await import("@/share/share-next")
-    await ShareNext.remove(id)
-    Database.use((db) => {
-      const row = db.update(SessionTable).set({ share_url: null }).where(eq(SessionTable.id, id)).returning().get()
-      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
-      const info = fromRow(row)
-      Database.effect(() => Bus.publish(Event.Updated, { info }))
-    })
+  export const unshare = fn(SessionID.zod, async (_id) => {
+    // no-op: sharing not supported
   })
 
   export const setTitle = fn(
