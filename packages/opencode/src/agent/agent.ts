@@ -57,7 +57,6 @@ export namespace Agent {
     const skillDirs = await Skill.dirs()
     const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
     const defaults = PermissionNext.fromConfig({
-      "*": "allow",
       doom_loop: "ask",
       external_directory: {
         "*": "ask",
@@ -66,6 +65,11 @@ export namespace Agent {
       question: "deny",
       plan_enter: "deny",
       plan_exit: "deny",
+      // Read-only discovery and LSP navigation — no prompt. Shell, edits, network, MCP, etc. default to ask.
+      grep: "allow",
+      glob: "allow",
+      list: "allow",
+      lsp: "allow",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",

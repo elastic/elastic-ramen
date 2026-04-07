@@ -45,13 +45,12 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
   }
   if (options?.config) {
-    await Bun.write(
-      path.join(dirpath, "opencode.json"),
-      JSON.stringify({
-        $schema: "https://opencode.ai/config.json",
-        ...options.config,
-      }),
-    )
+    const body = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      ...options.config,
+    })
+    await Bun.write(path.join(dirpath, "opencode.json"), body)
+    await Bun.write(path.join(dirpath, "elastic_ramen.json"), body)
   }
   const realpath = sanitizePath(await fs.realpath(dirpath))
   const extra = await options?.init?.(realpath)
