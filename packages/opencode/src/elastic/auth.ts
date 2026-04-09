@@ -31,16 +31,22 @@ export namespace ElasticAuth {
     model?: string
   }
 
+  /** Same directory as the elastic Go CLI: filepath.Join(os.UserConfigDir(), "elastic") */
   function dir() {
+    if (process.platform === "win32")
+      return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "elastic")
+    if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "elastic")
     const xdg = process.env.XDG_CONFIG_HOME
     if (xdg) return path.join(xdg, "elastic")
-    // The elastic Go CLI uses XDG convention (~/.config/elastic) on all platforms
-    if (process.platform === "win32") return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "elastic")
     return path.join(os.homedir(), ".config", "elastic")
   }
 
   function filepath() {
     return path.join(dir(), "config.yaml")
+  }
+
+  export function configPath(): string {
+    return filepath()
   }
 
   /** Decode a Cloud ID into ES and Kibana URLs. Format: `name:base64(host$es_uuid$kibana_uuid)` */

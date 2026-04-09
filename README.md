@@ -45,7 +45,7 @@ You can also use `/connect` inside the TUI at any time to (re)configure the Kiba
 
 The auth flow writes:
 
-1. **Elastic credentials** to `~/.config/elastic/config.yaml` (elasticsearch_url, kibana_url, api_key)
+1. **Elastic credentials** in the elastic CLI config file (same path the Go CLI uses: macOS `~/Library/Application Support/elastic/config.yaml`, Linux `~/.config/elastic/config.yaml` or `$XDG_CONFIG_HOME/elastic/config.yaml`, Windows `%AppData%\elastic\config.yaml`) with `elasticsearch_url`, `kibana_url`, `api_key`
 2. **Provider + MCP + permissions** to `elastic_ramen.json` in the current working directory:
    - `provider.kibana` — Kibana LLM Gateway (OpenAI-compatible)
    - `mcp.eab` — Elastic Agent Builder MCP server (`elastic ab mcp proxy`)
@@ -58,7 +58,7 @@ After saving, the TUI re-bootstraps to pick up the new config immediately.
 You can skip the dialog entirely by writing the config files yourself:
 
 ```yaml
-# ~/.config/elastic/config.yaml
+# e.g. ~/.config/elastic/config.yaml on Linux; ~/Library/Application Support/elastic/config.yaml on macOS
 current-context: default
 contexts:
   default:
@@ -75,7 +75,7 @@ For headless commands (`elastic-ramen run`, `elastic-ramen serve`), the config f
 elastic-ramen --reset-auth
 ```
 
-This removes stored credentials from `~/.config/elastic/config.yaml` and clears `provider`/`model` from `elastic_ramen.json`. The setup dialog will show on next launch.
+This removes stored credentials from the elastic config file (platform-specific user config dir + `/elastic/config.yaml`) and clears `provider`/`model` from `elastic_ramen.json`. The setup dialog will show on next launch.
 
 ### API key requirements
 
@@ -203,7 +203,7 @@ Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permiss
 
 ### Elastic CLI
 
-The `elastic` CLI binary is embedded in the build and available on PATH at runtime. It uses the same credentials from `~/.config/elastic/config.yaml`. Key commands:
+The `elastic` CLI binary is embedded in the build and available on PATH at runtime. It uses the same credentials file as RAMEN (`UserConfigDir/elastic/config.yaml` — see paths above). Key commands:
 
 - `elastic es query "<ESQL>"` — run an ES|QL query
 - `elastic es raw <method> <path> [-d '<body>']` — raw Elasticsearch HTTP requests

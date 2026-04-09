@@ -164,7 +164,7 @@ let cli = yargs(hideBin(process.argv))
             EOL +
             "Run the TUI (ramen) to set up via the onboarding dialog," +
             EOL +
-            "or write ~/.config/elastic/config.yaml:" +
+            `or write ${ElasticAuth.configPath()}:` +
             EOL +
             EOL +
             "  current-context: default" +
