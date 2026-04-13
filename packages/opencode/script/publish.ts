@@ -72,12 +72,12 @@ const platformTasks = Object.keys(binaries).map(async (name) => {
     await $`chmod -R 755 .`.cwd(pkgDir)
   }
   await $`bun pm pack`.cwd(pkgDir)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(pkgDir)
+  await $`npm publish *.tgz --access public --provenance --tag ${Script.channel}`.cwd(pkgDir)
 })
 await Promise.all(platformTasks)
 
 // Publish the wrapper package
 const wrapperDirName = pkg.name.replace(/^@[^/]+\//, "")
-await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
+await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --provenance --tag ${Script.channel}`
 
 console.log(`Published ${pkg.name}@${version} (channel: ${Script.channel})`)

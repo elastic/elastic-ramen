@@ -7,21 +7,26 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-bun
 
       - name: Setup Node (for npm publish)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
 
       - name: Build CLI binaries
         env:
@@ -35,7 +40,6 @@ jobs:
       - name: Publish to npm
         working-directory: packages/opencode
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           OPENCODE_VERSION: ${{ github.event.release.tag_name }}
           OPENCODE_RELEASE: "1"
         run: bun run script/publish.ts
