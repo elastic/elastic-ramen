@@ -4,6 +4,8 @@
 
 An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) — the open-source AI coding agent — extended with native Kibana/Elasticsearch integration for SRE and observability workflows.
 
+![Elastic RAMEN](./images/ramen.png)
+
 > **EXPERIMENTAL** — This tool is highly experimental. No guarantees are offered. Use at your own risk.
 
 ---
