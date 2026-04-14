@@ -32,6 +32,14 @@ export namespace ElasticBin {
       return cached
     }
 
+    // Check if a previously-built version left a cached binary
+    const cacheDir = p.join(os.homedir(), ".cache", "ramen")
+    const cachedBin = p.join(cacheDir, "elastic" + ext)
+    if (fs.existsSync(cachedBin)) {
+      cached = cachedBin
+      return cached
+    }
+
     // Fallback: assume it's on PATH
     cached = "elastic" + ext
     return cached
