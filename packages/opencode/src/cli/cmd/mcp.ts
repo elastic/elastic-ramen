@@ -383,7 +383,7 @@ export const McpLogoutCommand = cmd({
   },
 })
 
-async function resolveConfigPath(baseDir: string, global = false) {
+export async function resolveConfigPath(baseDir: string, global = false) {
   // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
   const candidates = [
     path.join(baseDir, "elastic_ramen.json"), path.join(baseDir, "elastic_ramen.jsonc"),
@@ -405,7 +405,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   return path.join(baseDir, "elastic_ramen.json")
 }
 
-async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: string) {
+export async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: string) {
   let text = "{}"
   if (await Filesystem.exists(configPath)) {
     text = await Filesystem.readText(configPath)
