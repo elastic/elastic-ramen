@@ -39,7 +39,7 @@ jobs:
       - uses: elastic/oblt-actions/git/setup@v1
 
       - name: Run unit tests
-        run: bun turbo test
+        run: bun turbo run opencode#test
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
