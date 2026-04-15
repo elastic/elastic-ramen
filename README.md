@@ -1,6 +1,6 @@
 # Elastic RAMEN 🍜
 
-**R**oot-cause **A**nalysis & **M**onitoring **En**ngine
+**R**oot-cause **A**nalysis & **M**onitoring **En**gine
 
 An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) — the open-source AI coding agent — extended with native Kibana/Elasticsearch integration for SRE and observability workflows.
 
