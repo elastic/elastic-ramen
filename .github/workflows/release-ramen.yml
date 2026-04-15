@@ -42,7 +42,7 @@ jobs:
           path: cli
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Token Policy: 
+      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
       - uses: elastic/oblt-actions/github/create-token@v1
         id: fetch-token
 
