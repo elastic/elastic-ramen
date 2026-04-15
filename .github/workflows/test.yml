@@ -22,26 +22,21 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Configure git identity
-        run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
+      - uses: elastic/oblt-actions/git/setup@v1
 
       - name: Run unit tests
         run: bun turbo test
@@ -54,10 +49,10 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
             playwright: bunx playwright install --with-deps
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
             playwright: bunx playwright install
     runs-on: ${{ matrix.settings.host }}
     env:
@@ -67,9 +62,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -86,7 +79,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
           if-no-files-found: ignore

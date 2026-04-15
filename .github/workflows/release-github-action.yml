@@ -10,20 +10,21 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - uses: elastic/oblt-actions/git/setup@v1
 
       - run: git fetch --force --tags
 
       - name: Release
-        run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-          ./github/script/release
+        run: ./github/script/release
