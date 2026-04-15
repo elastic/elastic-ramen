@@ -14,13 +14,24 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Use an ephemeral GitHub App token so release operations have scoped write access.
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OBS_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.OBS_AUTOMATION_APP_PEM }}
+          owner: elastic
+          repositories: elastic-ramen
+          permission-contents: write
 
       - uses: ./.github/actions/setup-bun
 
@@ -37,12 +48,11 @@ jobs:
           repository: elastic/elastic-cli
           ref: ${{ inputs.elastic-cli-ref }}
           path: cli
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub release
         id: create-release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh release create "v${{ inputs.version }}" \
             --draft \
@@ -56,14 +66,14 @@ jobs:
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_RELEASE: ${{ steps.create-release.outputs.release }}
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ELASTIC_CLI_DIR: ${{ inputs.elastic-cli-ref && 'cli' || '' }}
         working-directory: packages/opencode
         run: bun run build
 
       - name: Upload release artifacts
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         working-directory: packages/opencode
         run: |
           for f in dist/*.tar.gz dist/*.zip; do
@@ -72,5 +82,5 @@ jobs:
 
       - name: Publish release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh release edit "v${{ inputs.version }}" --draft=false
