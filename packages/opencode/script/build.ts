@@ -313,10 +313,17 @@ if (Script.release) {
     if (fs.existsSync(licensePath)) {
       fs.copyFileSync(licensePath, path.join(binDir, "LICENSE"))
     }
+    const bin =
+      ["elastic-ramen", "elastic-ramen.exe"].find((file) => fs.existsSync(path.join(binDir, file))) ??
+      (key.includes("windows") ? "elastic-ramen.exe" : "elastic-ramen")
+    const files = [bin, "NOTICE"]
+    if (fs.existsSync(path.join(binDir, "LICENSE"))) {
+      files.push("LICENSE")
+    }
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${key}.tar.gz ${files}`.cwd(binDir)
     } else {
-      await $`zip -r ../../${key}.zip elastic-ramen* NOTICE LICENSE`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${key}.zip ${files}`.cwd(binDir)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
