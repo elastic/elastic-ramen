@@ -308,7 +308,8 @@ if (Script.release) {
   const licensePath = path.join(repoRoot, "LICENSE")
 
   for (const key of Object.keys(binaries)) {
-    const binDir = path.join(dir, `dist/${key}/bin`)
+    const dirName = key.replace(/^@[^/]+\//, "")
+    const binDir = path.join(dir, `dist/${dirName}/bin`)
     await Bun.write(path.join(binDir, "NOTICE"), distNotice)
     if (fs.existsSync(licensePath)) {
       fs.copyFileSync(licensePath, path.join(binDir, "LICENSE"))
@@ -321,9 +322,9 @@ if (Script.release) {
       files.push("LICENSE")
     }
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz ${files}`.cwd(binDir)
+      await $`tar -czf ../../${dirName}.tar.gz ${files}`.cwd(binDir)
     } else {
-      await $`zip -r ../../${key}.zip ${files}`.cwd(binDir)
+      await $`zip -r ../../${dirName}.zip ${files}`.cwd(binDir)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
