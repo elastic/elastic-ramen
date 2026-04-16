@@ -72,7 +72,7 @@ const platformTasks = Object.keys(binaries).map(async (name) => {
     await $`chmod -R 755 .`.cwd(pkgDir)
   }
   await $`bun pm pack`.cwd(pkgDir)
-  await $`npm publish *.tgz --access public --provenance --tag ${Script.channel}`.cwd(pkgDir)
+  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(pkgDir)
 })
 await Promise.all(platformTasks)
 
