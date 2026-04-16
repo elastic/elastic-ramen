@@ -78,6 +78,6 @@ await Promise.all(platformTasks)
 
 // Publish the wrapper package
 const wrapperDirName = pkg.name.replace(/^@[^/]+\//, "")
-await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --provenance --tag ${Script.channel}`
+await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
 
 console.log(`Published ${pkg.name}@${version} (channel: ${Script.channel})`)
