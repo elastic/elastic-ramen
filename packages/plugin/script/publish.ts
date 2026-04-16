@@ -18,5 +18,10 @@ for (const [key, value] of Object.entries(pkg.exports)) {
   }
 }
 await Bun.write("package.json", JSON.stringify(pkg, null, 2))
-await $`bun pm pack && npm publish *.tgz --tag ${Script.channel} --access public`
+const result = await $`npm view ${pkg.name}@${pkg.version} version`.nothrow().quiet()
+if (result.exitCode === 0 && result.stdout.toString().trim() !== "") {
+  console.log(`Skipping ${pkg.name}@${pkg.version} (already published)`)
+} else {
+  await $`bun pm pack && npm publish *.tgz --tag ${Script.channel} --access public`
+}
 await Bun.write("package.json", JSON.stringify(original, null, 2))

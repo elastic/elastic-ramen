@@ -64,8 +64,17 @@ await Bun.file(`${wrapperDir}/package.json`).write(
   ),
 )
 
+async function published(name: string, version: string) {
+  const result = await $`npm view ${name}@${version} version`.nothrow().quiet()
+  return result.exitCode === 0 && result.stdout.toString().trim() !== ""
+}
+
 // Publish each platform package
-const platformTasks = Object.keys(binaries).map(async (name) => {
+const platformTasks = Object.entries(binaries).map(async ([name, ver]) => {
+  if (await published(name, ver)) {
+    console.log(`Skipping ${name}@${ver} (already published)`)
+    return
+  }
   const dirName = name.replace(/^@[^/]+\//, "")
   const pkgDir = `./dist/${dirName}`
   if (process.platform !== "win32") {
@@ -78,6 +87,10 @@ await Promise.all(platformTasks)
 
 // Publish the wrapper package
 const wrapperDirName = pkg.name.replace(/^@[^/]+\//, "")
-await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
+if (await published(pkg.name, version)) {
+  console.log(`Skipping ${pkg.name}@${version} (already published)`)
+} else {
+  await $`cd ./dist/${wrapperDirName} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
+}
 
 console.log(`Published ${pkg.name}@${version} (channel: ${Script.channel})`)
