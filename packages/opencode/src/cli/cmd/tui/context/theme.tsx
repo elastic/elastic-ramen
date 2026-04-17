@@ -5,6 +5,7 @@ import { createSimpleContext } from "./helper"
 import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
+import borealis from "./theme/borealis.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
 import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
@@ -141,6 +142,7 @@ type ThemeJson = {
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
   ayu,
+  borealis,
   catppuccin,
   ["catppuccin-frappe"]: catppuccinFrappe,
   ["catppuccin-macchiato"]: catppuccinMacchiato,
@@ -285,7 +287,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (config.theme ?? kv.get("theme", "opencode")) as string,
+      active: (config.theme ?? kv.get("theme", "borealis")) as string,
       ready: false,
     })
 
