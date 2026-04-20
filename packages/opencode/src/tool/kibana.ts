@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
-import { KibanaClient } from "@/elastic/client"
+import { KibanaClient, ElasticClient } from "@/elastic/client"
+import type { EsqlResponse, ESFlamegraphData } from "@/elastic/client"
 
 function json(data: unknown) {
   return JSON.stringify(data, null, 2)
@@ -289,5 +290,302 @@ export const KibanaListConnectors = Tool.define("kibana_list_connectors", {
   async execute() {
     const result = await KibanaClient.connectors().list()
     return { title: "List connectors", metadata: {}, output: json(result) }
+  },
+})
+
+// ── Profiling ──────────────────────────────────────────────────────────
+
+function validateFilterString(input: string, fieldName: string): void {
+  if (!input || input !== input.trim()) {
+    throw new Error(`Invalid ${fieldName}: empty or contains whitespace`)
+  }
+  if (input !== input.replaceAll(/[^a-zA-Z0-9\-_.:]/g, "")) {
+    throw new Error(`Invalid ${fieldName}: contains invalid characters`)
+  }
+}
+
+interface Frame {
+  function_name?: string
+  function_offset?: number
+  source_file_name?: string
+  line_number?: number
+  count_inclusive?: number
+  count_exclusive?: number
+}
+
+interface Stacktrace {
+  count?: number
+  service_name?: string
+  host_name?: string
+  frames: Frame[]
+}
+
+interface Stacktraces {
+  stacktraces: Stacktrace[]
+}
+
+export const KibanaProfilingStacktraces = Tool.define("kibana_profiling_stacktraces", {
+  description:
+    "Retrieve symbolized stacktraces from Elastic Universal Profiling. Returns recent CPU/memory profile stacktraces with function names, source files, and line numbers. Filter by time window and optionally by process name or executable.",
+  parameters: z.object({
+    last: z.string().describe("Time window for profiles (e.g., '7 days', '2 hours', '30 minutes')"),
+    limit: z.number().int().positive().optional().describe("Maximum number of stacktraces to return (default: unlimited)"),
+    comm: z.string().optional().describe("Filter by process/thread name (mutually exclusive with exec)"),
+    exec: z.string().optional().describe("Filter by executable name (mutually exclusive with comm)"),
+  }),
+  async execute(params) {
+    if (params.comm && params.exec) {
+      throw new Error("'comm' and 'exec' are mutually exclusive")
+    }
+
+    if (params.comm) validateFilterString(params.comm, "comm")
+    if (params.exec) validateFilterString(params.exec, "exec")
+
+    let eventFilter = ""
+    if (params.comm) {
+      eventFilter = `| WHERE process.thread.name == "${params.comm}"`
+    } else if (params.exec) {
+      eventFilter = `| WHERE process.executable.name == "${params.exec}"`
+    }
+    eventFilter += ` AND @timestamp >= NOW() - ${params.last}`
+
+    const limitClause = params.limit ? `| LIMIT ${params.limit}` : ""
+
+    // Query 1: Get stacktrace IDs and metadata from events
+    const eventsQuery = `FROM profiling-events-all ${eventFilter} ${limitClause}`
+    const eventsData = await ElasticClient.esqlQuery(eventsQuery)
+
+    // Extract stacktrace IDs and metadata
+    const stackIds = new Map<string, { count: number; service: string; host: string }>()
+    const stackIdCol = eventsData.columns.findIndex((c) => c.name === "Stacktrace.id")
+    const countCol = eventsData.columns.findIndex((c) => c.name === "Stacktrace.count")
+    const serviceCol = eventsData.columns.findIndex((c) => c.name === "service.name")
+    const hostCol = eventsData.columns.findIndex((c) => c.name === "host.name")
+
+    if (stackIdCol === -1) throw new Error("Missing Stacktrace.id column in events response")
+
+    eventsData.values.forEach((row) => {
+      const id = String(row[stackIdCol])
+      stackIds.set(id, {
+        count: countCol !== -1 ? (row[countCol] as number) : 0,
+        service: serviceCol !== -1 ? String(row[serviceCol] ?? "") : "",
+        host: hostCol !== -1 ? String(row[hostCol] ?? "") : "",
+      })
+    })
+
+    if (stackIds.size === 0) {
+      return { title: "Get stacktraces", metadata: {}, output: json({ stacktraces: [] }) }
+    }
+
+    // Query 2: Get frame IDs for each stacktrace
+    const inClause = Array.from(stackIds.keys())
+      .map((id) => `"${id}"`)
+      .join(", ")
+    const tracesQuery = `FROM profiling-stacktraces METADATA _id | WHERE _id IN (${inClause})`
+    const tracesData = await ElasticClient.esqlQuery(tracesQuery)
+
+    const frameIds = new Map<string, string[]>()
+    const traceIdCol = tracesData.columns.findIndex((c) => c.name === "_id")
+    const frameIdsCol = tracesData.columns.findIndex((c) => c.name === "Stacktrace.frame.ids")
+
+    if (frameIdsCol === -1) throw new Error("Missing Stacktrace.frame.ids column in stacktraces response")
+
+    tracesData.values.forEach((row) => {
+      const traceId = String(row[traceIdCol])
+      const frameStr = String(row[frameIdsCol] ?? "")
+
+      // Split into 32-char chunks and replace _ with -
+      const frames: string[] = []
+      for (let i = 0; i < frameStr.length; i += 32) {
+        frames.push(frameStr.substring(i, i + 32).replace(/_/g, "-"))
+      }
+      frameIds.set(traceId, frames)
+    })
+
+    // Query 3: Get symbol info for each frame
+    const allFrameIds = Array.from(frameIds.values()).flat()
+    const uniqueFrameIds = Array.from(new Set(allFrameIds))
+    const frameInClause = uniqueFrameIds.map((id) => `"${id}"`).join(", ")
+
+    const framesQuery = `FROM profiling-stackframes METADATA _id | WHERE _id IN (${frameInClause})`
+    const framesData = await ElasticClient.esqlQuery(framesQuery)
+
+    const frameSymbols = new Map<
+      string,
+      { file: string; function: string; offset: number; line: number }
+    >()
+    const frameIdFrameCol = framesData.columns.findIndex((c) => c.name === "_id")
+    const fileCol = framesData.columns.findIndex((c) => c.name === "Stackframe.file.name")
+    const funcCol = framesData.columns.findIndex((c) => c.name === "Stackframe.function.name")
+    const offsetCol = framesData.columns.findIndex((c) => c.name === "Stackframe.function.offset")
+    const lineCol = framesData.columns.findIndex((c) => c.name === "Stackframe.line.number")
+
+    framesData.values.forEach((row) => {
+      frameSymbols.set(String(row[frameIdFrameCol]), {
+        file: fileCol !== -1 ? String(row[fileCol] ?? "") : "",
+        function: funcCol !== -1 ? String(row[funcCol] ?? "") : "",
+        offset: offsetCol !== -1 ? (row[offsetCol] as number) : 0,
+        line: lineCol !== -1 ? (row[lineCol] as number) : 0,
+      })
+    })
+
+    // Merge all into result
+    const result: Stacktraces = { stacktraces: [] }
+    stackIds.forEach((meta, stackId) => {
+      const frames: Frame[] = (frameIds.get(stackId) ?? []).map((frameId) => {
+        const symbol = frameSymbols.get(frameId) ?? {
+          file: "",
+          function: "",
+          offset: 0,
+          line: 0,
+        }
+        return {
+          function_name: symbol.function,
+          function_offset: symbol.offset,
+          source_file_name: symbol.file,
+          line_number: symbol.line,
+        }
+      })
+
+      result.stacktraces.push({
+        count: meta.count,
+        service_name: meta.service,
+        host_name: meta.host,
+        frames,
+      })
+    })
+
+    return { title: "Get stacktraces", metadata: {}, output: json(result) }
+  },
+})
+
+export const KibanaProfilingFlamegraph = Tool.define("kibana_profiling_flamegraph", {
+  description:
+    "Get a flamegraph from Elastic Universal Profiling. Returns call-path visualization as nested stacktraces, useful for identifying hot code paths. Requires time range and sample size.",
+  parameters: z.object({
+    sample_size: z.number().int().positive().describe("Number of samples to include in the flamegraph (1-100000)"),
+    timestamp_gte: z.string().describe("Start time in ISO format (e.g., '2026-04-20T10:00:00')"),
+    timestamp_lt: z.string().describe("End time in ISO format (e.g., '2026-04-20T11:00:00')"),
+    exec: z.string().optional().describe("Filter by executable name"),
+  }),
+  async execute(params) {
+    if (params.exec) validateFilterString(params.exec, "exec")
+
+    const body: any = {
+      sample_size: params.sample_size,
+      query: {
+        bool: {
+          filter: [
+            {
+              range: {
+                "@timestamp": {
+                  gte: params.timestamp_gte,
+                  lt: params.timestamp_lt,
+                  format: "yyyy-MM-dd'T'HH:mm:ss",
+                },
+              },
+            },
+          ],
+        },
+      },
+    }
+
+    if (params.exec) {
+      body.query.bool.filter.unshift({
+        term: { "process.executable.name": params.exec },
+      })
+    }
+
+    const data = await ElasticClient.profilingFlamegraph(body)
+
+    // Transform ESFlamegraphData tree to stacktraces via DFS
+    const result = transformFlamegraphToStacktraces(data)
+
+    return { title: "Get flamegraph", metadata: {}, output: json(result) }
+  },
+})
+
+function transformFlamegraphToStacktraces(data: ESFlamegraphData): Stacktraces {
+  if (data.Size === 0) {
+    return { stacktraces: [] }
+  }
+
+  if (data.Edges.length !== data.Size) {
+    throw new Error("Invalid flamegraph data: size mismatch")
+  }
+
+  const stacktraces: Stacktrace[] = []
+
+  function traverseEdge(idx: number, currentPath: Frame[]): void {
+    currentPath.push({
+      function_name: data.FunctionName[idx],
+      function_offset: data.FunctionOffset[idx],
+      source_file_name: data.SourceFilename[idx],
+      line_number: data.SourceLine[idx],
+      count_inclusive: data.CountInclusive[idx],
+      count_exclusive: data.CountExclusive[idx],
+    })
+
+    if (data.Edges[idx].length === 0) {
+      // Leaf node: save the path as a stacktrace
+      stacktraces.push({
+        frames: [...currentPath],
+      })
+    } else {
+      // Internal node: recurse to children
+      for (const childIdx of data.Edges[idx]) {
+        traverseEdge(childIdx, currentPath)
+      }
+    }
+
+    currentPath.pop()
+  }
+
+  if (data.Size > 0) {
+    traverseEdge(0, [])
+  }
+
+  return { stacktraces }
+}
+
+export const KibanaProfilingTopFunctions = Tool.define("kibana_profiling_top_functions", {
+  description:
+    "Get the most-sampled functions from Elastic Universal Profiling. Returns the hottest functions in a time window, sorted by sample count.",
+  parameters: z.object({
+    limit: z.number().int().positive().describe("Maximum number of functions to return (1-10000)"),
+    timestamp_gte: z.string().describe("Start time in ISO format (e.g., '2026-04-20T10:00:00')"),
+    timestamp_lt: z.string().describe("End time in ISO format (e.g., '2026-04-20T11:00:00')"),
+    exec: z.string().optional().describe("Filter by executable name"),
+  }),
+  async execute(params) {
+    if (params.exec) validateFilterString(params.exec, "exec")
+
+    const body: any = {
+      limit: params.limit,
+      query: {
+        bool: {
+          filter: [
+            {
+              range: {
+                "@timestamp": {
+                  gte: params.timestamp_gte,
+                  lt: params.timestamp_lt,
+                  format: "yyyy-MM-dd'T'HH:mm:ss",
+                },
+              },
+            },
+          ],
+        },
+      },
+    }
+
+    if (params.exec) {
+      body.query.bool.filter.unshift({
+        term: { "process.executable.name": params.exec },
+      })
+    }
+
+    const result = await ElasticClient.profilingTopFunctions(body)
+    return { title: "Get top functions", metadata: {}, output: json(result) }
   },
 })

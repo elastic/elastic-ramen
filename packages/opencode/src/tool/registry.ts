@@ -50,6 +50,9 @@ import {
   KibanaUpdateAgent,
   KibanaDeleteAgent,
   KibanaListConnectors,
+  KibanaProfilingStacktraces,
+  KibanaProfilingFlamegraph,
+  KibanaProfilingTopFunctions,
 } from "./kibana"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
@@ -161,6 +164,9 @@ export namespace ToolRegistry {
       KibanaUpdateAgent,
       KibanaDeleteAgent,
       KibanaListConnectors,
+      KibanaProfilingStacktraces,
+      KibanaProfilingFlamegraph,
+      KibanaProfilingTopFunctions,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),

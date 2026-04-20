@@ -228,3 +228,60 @@ export namespace KibanaClient {
 
 }
 
+// ES|QL response shape
+export interface EsqlResponse {
+  columns: Array<{ name: string; type: string }>
+  values: unknown[][]
+}
+
+// Profiling-specific response shapes
+export interface ESFlamegraphData {
+  Edges: number[][]
+  FunctionName: string[]
+  FunctionOffset: number[]
+  SourceLine: number[]
+  CountInclusive: number[]
+  CountExclusive: number[]
+  AddressOrLine: number[]
+  SourceFilename: string[]
+  Size: number
+}
+
+export namespace ElasticClient {
+  async function resolve() {
+    const auth = await ElasticAuth.check()
+    if (!auth.configured || !auth.context) throw new Error("Elastic auth not configured")
+    const url = auth.context.elasticsearch_url
+    const key = auth.context.api_key
+    if (!url) throw new Error("elasticsearch_url not configured")
+    if (!key) throw new Error("api_key not configured")
+    return { base: url.replace(/\/$/, ""), key }
+  }
+
+  async function request<T = unknown>(path: string, body: unknown): Promise<T> {
+    const { base, key } = await resolve()
+    const res = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `ApiKey ${key}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      throw new Error(`Elasticsearch ${res.status}: ${text}`)
+    }
+    return res.json() as Promise<T>
+  }
+
+  export function esqlQuery(query: string) {
+    return request<EsqlResponse>("/_query", { query })
+  }
+
+  export function profilingFlamegraph(body: unknown) {
+    return request<ESFlamegraphData>("/_profiling/flamegraph", body)
+  }
+
+  export function profilingTopFunctions(body: unknown) {
+    return request<unknown>("/_profiling/topn/functions", body)
+  }
+}
+
