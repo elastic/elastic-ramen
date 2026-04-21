@@ -213,10 +213,12 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
-// Derive a filesystem-safe base name from the (potentially scoped) package name.
-// e.g. "@elastic/ramen" → "elastic-ramen"
+// Derive a base name from the package name, stripping the scope.
+// e.g. "@elastic/ramen" → "ramen". The scope is re-added later when
+// forming the full npm name, so keeping the scope here would double it up
+// (yielding @elastic/elastic-ramen-<platform>).
 const pkgBaseName = pkg.name.startsWith("@")
-  ? pkg.name.slice(1).replace("/", "-")
+  ? pkg.name.split("/")[1]
   : pkg.name
 
 for (const item of targets) {

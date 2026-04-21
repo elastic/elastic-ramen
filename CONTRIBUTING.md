@@ -64,7 +64,7 @@ To compile a standalone executable:
 Then run it with:
 
 ```bash
-./packages/opencode/dist/elastic-ramen-<platform>/bin/elastic-ramen
+./packages/opencode/dist/ramen-<platform>/bin/elastic-ramen
 ```
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
