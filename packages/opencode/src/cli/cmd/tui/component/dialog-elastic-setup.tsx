@@ -238,8 +238,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         <box flexDirection="row" gap={0}>
           <text fg={theme.textMuted}>Requires </text>
           <text fg={theme.text}>elasticRamen:enabled</text>
-          <text fg={theme.textMuted}> in Kibana </text>
-          <Link href={settingsLink() ?? "#"} fg={theme.primary}><b>Advanced Settings</b></Link>
+          <text fg={theme.textMuted}> in Kibana Advanced Settings</text>
         </box>
         <text fg={theme.textMuted}>
           {"Enter your Kibana URL to connect:"}
