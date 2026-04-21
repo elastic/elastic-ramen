@@ -95,7 +95,8 @@ export const TuiThreadCommand = cmd({
       })
       .option("prompt", {
         type: "string",
-        describe: "prompt to use",
+        alias: ["p"],
+        describe: "run a single prompt in headless mode and exit",
       })
       .option("agent", {
         type: "string",
@@ -106,6 +107,27 @@ export const TuiThreadCommand = cmd({
         describe: "Kibana base URL (experimental: enables Kibana callback onboarding flow)",
       }),
   handler: async (args) => {
+    // When -p/--prompt is given, run headless instead of launching the TUI
+    if (args.prompt) {
+      const { RunCommand } = await import("@/cli/cmd/run")
+      const runArgs: Record<string, unknown> = {
+        _: [],
+        $0: args.$0,
+        message: [args.prompt],
+        model: args.model,
+        agent: args.agent,
+        continue: args.continue,
+        session: args.session,
+        fork: args.fork,
+        format: "default",
+        thinking: false,
+      }
+      if (args.project) {
+        runArgs.dir = args.project
+      }
+      return RunCommand.handler(runArgs as any)
+    }
+
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
