@@ -274,7 +274,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         </text>
 
         <Show when={link()}>
-          <Link href={link()!} fg={theme.primary} wrapMode="none">{link()}</Link>
+          <Link href={link()!} fg={theme.primary} wrapMode="char">{link()}</Link>
         </Show>
 
         <Show when={error()}>
