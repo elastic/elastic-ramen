@@ -61,10 +61,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   let urlInput: TextareaRenderable
   let cb: ElasticCallback.Handle | undefined
 
+  const base = () => (props.kibanaBase || kibanaUrl())?.replace(/\/+$/, "")
   const link = () => {
-    const base = (props.kibanaBase || kibanaUrl())?.replace(/\/+$/, "")
-    if (!base) return undefined
-    return base + "/app/elasticRamen"
+    if (!base()) return undefined
+    return base() + "/app/elasticRamen"
+  }
+  const settingsLink = () => {
+    if (!base()) return undefined
+    return base() + "/app/management/kibana/settings?query=ramen"
   }
 
   async function save(input: ElasticAuth.SaveInput) {
@@ -269,12 +273,18 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
       {/* Step 2: Waiting for Kibana callback */}
       <Show when={mode() === "kibana-callback"}>
+        <box flexDirection="row" gap={0}>
+          <text fg={theme.textMuted}>Requires </text>
+          <text fg={theme.text}>elasticRamen:enabled</text>
+          <text fg={theme.textMuted}> in Kibana </text>
+          <Link href={settingsLink() ?? "#"} fg={theme.primary}><b>Advanced Settings</b></Link>
+        </box>
         <text fg={theme.textMuted}>
           {"Open the Kibana onboarding page — credentials will be sent here automatically."}
         </text>
 
         <Show when={link()}>
-          <Link href={link()!} fg={theme.primary} wrapMode="none">{link()}</Link>
+          <Link href={link()!} fg={theme.primary} wrapMode="char"><b>Open onboarding page</b></Link>
         </Show>
 
         <Show when={error()}>
