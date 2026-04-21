@@ -38,10 +38,7 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Configure git identity
-        run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
+      - uses: elastic/oblt-actions/git/setup@v1
 
       - name: Run unit tests
         run: bun turbo test
