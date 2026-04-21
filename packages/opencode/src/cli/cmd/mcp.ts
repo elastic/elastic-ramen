@@ -384,14 +384,17 @@ export const McpLogoutCommand = cmd({
 })
 
 export async function resolveConfigPath(baseDir: string, global = false) {
+  // Non-git projects use "/" as worktree sentinel — fall back to cwd to avoid
+  // writing to the filesystem root (EROFS).
+  const dir = baseDir === "/" ? process.cwd() : baseDir
   // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
   const candidates = [
-    path.join(baseDir, "elastic_ramen.json"), path.join(baseDir, "elastic_ramen.jsonc"),
+    path.join(dir, "elastic_ramen.json"), path.join(dir, "elastic_ramen.jsonc"),
   ]
 
   if (!global) {
     candidates.push(
-      path.join(baseDir, ".opencode", "elastic_ramen.json"), path.join(baseDir, ".opencode", "elastic_ramen.jsonc"),
+      path.join(dir, ".opencode", "elastic_ramen.json"), path.join(dir, ".opencode", "elastic_ramen.jsonc"),
     )
   }
 
@@ -402,7 +405,7 @@ export async function resolveConfigPath(baseDir: string, global = false) {
   }
 
   // Default to elastic_ramen.json if none exist
-  return path.join(baseDir, "elastic_ramen.json")
+  return path.join(dir, "elastic_ramen.json")
 }
 
 export async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: string) {
