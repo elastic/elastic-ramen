@@ -8,6 +8,12 @@ An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) â€
 
 ---
 
+## Prerequisites
+
+You need an Elastic Observability Serverless project.
+In Kibana, open **Stack Management**, then **Advanced Settings**, or go directly to `https://<your-kibana-url>/app/management/kibana/settings?query=ramen`.
+Enable **`elasticRamen:enabled`**, then install the CLI:
+
 ## Installation
 
 ```bash
