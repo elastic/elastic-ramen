@@ -235,11 +235,6 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
       {/* Step 1: Ask for Kibana URL if not passed via --kibana-base */}
       <Show when={mode() === "kibana-url"}>
-        <box flexDirection="row" gap={0}>
-          <text fg={theme.textMuted}>Requires </text>
-          <text fg={theme.text}>elasticRamen:enabled</text>
-          <text fg={theme.textMuted}> in Kibana Advanced Settings</text>
-        </box>
         <text fg={theme.textMuted}>
           {"Enter your Kibana URL to connect:"}
         </text>
