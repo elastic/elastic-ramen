@@ -90,7 +90,7 @@ describe("tui thread", () => {
       _: [],
       $0: "opencode",
       project,
-      prompt: "hi",
+      prompt: undefined,
       model: undefined,
       agent: undefined,
       session: undefined,
