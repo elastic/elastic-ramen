@@ -61,10 +61,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   let urlInput: TextareaRenderable
   let cb: ElasticCallback.Handle | undefined
 
+  const base = () => (props.kibanaBase || kibanaUrl())?.replace(/\/+$/, "")
   const link = () => {
-    const base = (props.kibanaBase || kibanaUrl())?.replace(/\/+$/, "")
-    if (!base) return undefined
-    return base + "/app/elasticRamen"
+    if (!base()) return undefined
+    return base() + "/app/elasticRamen"
+  }
+  const settingsLink = () => {
+    if (!base()) return undefined
+    return base() + "/app/management/kibana/settings?query=ramen"
   }
 
   async function save(input: ElasticAuth.SaveInput) {
@@ -231,6 +235,12 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
       {/* Step 1: Ask for Kibana URL if not passed via --kibana-base */}
       <Show when={mode() === "kibana-url"}>
+        <box flexDirection="row" gap={0}>
+          <text fg={theme.textMuted}>Requires </text>
+          <text fg={theme.text}>elasticRamen:enabled</text>
+          <text fg={theme.textMuted}> in Kibana </text>
+          <Link href={settingsLink() ?? "#"} fg={theme.primary}>Advanced Settings</Link>
+        </box>
         <text fg={theme.textMuted}>
           {"Enter your Kibana URL to connect:"}
         </text>
@@ -269,12 +279,18 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
       {/* Step 2: Waiting for Kibana callback */}
       <Show when={mode() === "kibana-callback"}>
+        <box flexDirection="row" gap={0}>
+          <text fg={theme.textMuted}>Requires </text>
+          <text fg={theme.text}>elasticRamen:enabled</text>
+          <text fg={theme.textMuted}> in Kibana </text>
+          <Link href={settingsLink() ?? "#"} fg={theme.primary}>Advanced Settings</Link>
+        </box>
         <text fg={theme.textMuted}>
           {"Open the Kibana onboarding page — credentials will be sent here automatically."}
         </text>
 
         <Show when={link()}>
-          <Link href={link()!} fg={theme.primary} wrapMode="char">{link()}</Link>
+          <Link href={link()!} fg={theme.primary} wrapMode="char">Open onboarding page</Link>
         </Show>
 
         <Show when={error()}>
