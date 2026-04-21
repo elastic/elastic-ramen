@@ -239,7 +239,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <text fg={theme.textMuted}>Requires </text>
           <text fg={theme.text}>elasticRamen:enabled</text>
           <text fg={theme.textMuted}> in Kibana </text>
-          <Link href={settingsLink() ?? "#"} fg={theme.primary}>Advanced Settings</Link>
+          <Link href={settingsLink() ?? "#"} fg={theme.primary}><b>Advanced Settings</b></Link>
         </box>
         <text fg={theme.textMuted}>
           {"Enter your Kibana URL to connect:"}
@@ -283,14 +283,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <text fg={theme.textMuted}>Requires </text>
           <text fg={theme.text}>elasticRamen:enabled</text>
           <text fg={theme.textMuted}> in Kibana </text>
-          <Link href={settingsLink() ?? "#"} fg={theme.primary}>Advanced Settings</Link>
+          <Link href={settingsLink() ?? "#"} fg={theme.primary}><b>Advanced Settings</b></Link>
         </box>
         <text fg={theme.textMuted}>
           {"Open the Kibana onboarding page — credentials will be sent here automatically."}
         </text>
 
         <Show when={link()}>
-          <Link href={link()!} fg={theme.primary} wrapMode="char">Open onboarding page</Link>
+          <Link href={link()!} fg={theme.primary} wrapMode="char"><b>Open onboarding page</b></Link>
         </Show>
 
         <Show when={error()}>
