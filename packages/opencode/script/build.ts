@@ -166,6 +166,12 @@ console.log("Written dist/dependency-licenses.json")
 // Build the elastic CLI for each target platform (skip if directory doesn't exist)
 const elasticCliDir = process.env.ELASTIC_CLI_DIR || path.resolve(dir, "../../../cli")
 const buildElasticCli = fs.existsSync(elasticCliDir)
+if (!buildElasticCli && Script.release) {
+  throw new Error(
+    `Release build requires the elastic CLI source at ${elasticCliDir}. ` +
+      `Set ELASTIC_CLI_DIR to an absolute path or ensure the directory exists.`,
+  )
+}
 const goTargetMap: Record<string, { goos: string; goarch: string }> = {
   darwin: { goos: "darwin", goarch: "" },
   linux: { goos: "linux", goarch: "" },

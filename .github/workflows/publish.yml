@@ -53,7 +53,7 @@ jobs:
           OPENCODE_RELEASE: "1"
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
-          ELASTIC_CLI_DIR: cli
+          ELASTIC_CLI_DIR: ${{ github.workspace }}/cli
         working-directory: packages/opencode
         run: bun run build
 
