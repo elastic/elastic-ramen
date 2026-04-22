@@ -12,11 +12,20 @@ An Elastic-specific fork of [OpenCode](https://github.com/anomalyco/opencode) �
 
 ## Prerequisites
 
-You need an Elastic Observability Serverless project.
-In Kibana, open **Stack Management**, then **Advanced Settings**, or go directly to `https://<your-kibana-url>/app/management/kibana/settings?query=ramen`.
-Enable **`elasticRamen:enabled`**, then install the CLI:
+You need an Elastic Observability Serverless project. In Kibana, open **Stack Management** → **Advanced Settings**, or go directly to `https://<your-kibana-url>/app/management/kibana/settings?query=ramen`, and enable **`elasticRamen:enabled`**.
 
 ## Installation
+
+Install globally with the package manager of your choice:
+
+```bash
+npm  i   -g @elastic/ramen
+pnpm add -g @elastic/ramen
+yarn global add @elastic/ramen
+bun  add -g @elastic/ramen
+```
+
+Or use the install script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/elastic/elastic-ramen/dev/install | bash
@@ -25,6 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/elastic/elastic-ramen/dev/install |
 Or download a pre-built binary from [GitHub Releases](https://github.com/elastic/elastic-ramen/releases).
 
 After installation, run:
+
 ```bash
 elastic-ramen --kibana-base=https://<your-kibana-url>
 ```
@@ -48,6 +58,14 @@ elastic-ramen --kibana-base=http://localhost:5601
 ```
 
 You can also use `/connect` inside the TUI at any time to (re)configure the Kibana connection.
+
+For one-shot, headless usage (no TUI), pass `-p` / `--prompt`:
+
+```bash
+elastic-ramen -p "list my services"
+```
+
+The CLI runs the prompt through the `run` command and exits.
 
 ### What happens during auth
 
@@ -84,6 +102,17 @@ elastic-ramen --reset-auth
 ```
 
 This removes stored credentials from the elastic config file (platform-specific user config dir + `/elastic/config.yaml`) and clears `provider`/`model` from `elastic_ramen.json`. The setup dialog will show on next launch.
+
+### Importing config from other AI tools
+
+If you already have MCP servers, rules, or skills configured in another AI harness, import them into `elastic_ramen.json`:
+
+```bash
+elastic-ramen import-from claude          # Claude Code
+elastic-ramen import-from cursor          # Cursor
+```
+
+Imports MCP servers (converted to RAMEN format), instruction file paths, and skill directory paths. Re-runnable — already-imported items are skipped.
 
 ### API key requirements
 
