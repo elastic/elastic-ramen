@@ -46,6 +46,11 @@ if (fs.existsSync(noticeSource)) {
   fs.copyFileSync(noticeSource, `${wrapperDir}/NOTICE`)
 }
 
+const readmeSource = path.resolve(dir, "../../README.md")
+if (fs.existsSync(readmeSource)) {
+  fs.copyFileSync(readmeSource, `${wrapperDir}/README.md`)
+}
+
 await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
     {

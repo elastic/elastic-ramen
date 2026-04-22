@@ -35,6 +35,11 @@ process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
 
+// Declare embedded-skill mechanism as "set but empty" so the skill loader
+// skips the filesystem fallback (otherwise bundled skills in src/elastic/skills
+// leak into tests that assert an isolated skill count).
+;(globalThis as { ELASTIC_SKILLS_EMBEDDED?: Record<string, string> }).ELASTIC_SKILLS_EMBEDDED = {}
+
 // Set test home directory to isolate tests from user's actual home directory
 // This prevents tests from picking up real user configs/skills from ~/.claude/skills
 const testHome = path.join(dir, "home")
