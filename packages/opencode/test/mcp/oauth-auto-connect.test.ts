@@ -105,7 +105,7 @@ test("first connect to OAuth server shows needs_auth instead of failed", async (
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
-        `${dir}/opencode.json`,
+        `${dir}/elastic_ramen.json`,
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
