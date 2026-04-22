@@ -75,3 +75,20 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
         run: gh release edit "v${{ inputs.version }}" --draft=false
+
+      - name: Setup Node (for npm publish)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
+      - name: Publish to npm
+        working-directory: packages/opencode
+        env:
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_RELEASE: ${{ steps.create-release.outputs.release }}
+          NPM_CONFIG_PROVENANCE: "true"
+        run: bun run script/publish.ts
