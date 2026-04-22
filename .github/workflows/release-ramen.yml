@@ -8,10 +8,6 @@ on:
         description: "Version to release (e.g. 0.1.0)"
         required: true
         type: string
-      elastic-cli-ref:
-        description: "Git ref for elastic CLI repo (branch/tag/sha). Leave empty to skip embedding the elastic CLI."
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -27,24 +23,22 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
+      - uses: elastic/oblt-actions/github/create-token@v1
+        id: fetch-token
+
       - name: Setup Go
-        if: inputs.elastic-cli-ref
         uses: actions/setup-go@v5
         with:
           go-version: "1.23"
 
       - name: Checkout elastic CLI
-        if: inputs.elastic-cli-ref
         uses: actions/checkout@v4
         with:
-          repository: elastic/elastic-cli
-          ref: ${{ inputs.elastic-cli-ref }}
+          repository: elastic/cli
+          ref: b056a344e6b9b27e09bb2b6270be2e6b8c5bf2fc
           path: cli
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
-      - uses: elastic/oblt-actions/github/create-token@v1
-        id: fetch-token
+          token: ${{ steps.fetch-token.outputs.token }}
 
       - name: Create GitHub release
         id: create-release
@@ -64,7 +58,7 @@ jobs:
           OPENCODE_RELEASE: ${{ steps.create-release.outputs.release }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
-          ELASTIC_CLI_DIR: ${{ inputs.elastic-cli-ref && 'cli' || '' }}
+          ELASTIC_CLI_DIR: cli
         working-directory: packages/opencode
         run: bun run build
 
