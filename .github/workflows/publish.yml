@@ -42,4 +42,5 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ github.event.release.tag_name }}
           OPENCODE_RELEASE: "1"
+          NPM_CONFIG_PROVENANCE: "true"
         run: bun run script/publish.ts
