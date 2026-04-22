@@ -45,6 +45,8 @@ jobs:
       # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
       - uses: elastic/oblt-actions/github/create-token@v1
         id: fetch-token
+        with:
+          token-policy: token-policy-909fc0514fde
 
       - name: Create GitHub release
         id: create-release
