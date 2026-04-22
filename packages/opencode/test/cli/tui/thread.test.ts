@@ -7,6 +7,7 @@ const stop = new Error("stop")
 const seen = {
   tui: [] as string[],
   inst: [] as string[],
+  run: [] as Record<string, unknown>[],
 }
 
 mock.module("../../../src/cli/cmd/tui/app", () => ({
@@ -83,8 +84,17 @@ mock.module("@/project/instance", () => ({
   },
 }))
 
+mock.module("@/cli/cmd/run", () => ({
+  RunCommand: {
+    handler: async (args: Record<string, unknown>) => {
+      seen.run.push(args)
+      throw stop
+    },
+  },
+}))
+
 describe("tui thread", () => {
-  async function call(project?: string) {
+  async function call(project?: string, overrides?: Record<string, unknown>) {
     const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
     const args: Parameters<NonNullable<typeof TuiThreadCommand.handler>>[0] = {
       _: [],
@@ -104,6 +114,7 @@ describe("tui thread", () => {
       cors: [],
       "kibana-base": undefined,
       kibanaBase: undefined,
+      ...overrides,
     }
     return TuiThreadCommand.handler(args)
   }
@@ -149,11 +160,47 @@ describe("tui thread", () => {
     }
   }
 
+  async function headless(project: string | undefined, overrides: Record<string, unknown>) {
+    seen.tui.length = 0
+    seen.inst.length = 0
+    seen.run.length = 0
+    await expect(call(project, overrides)).rejects.toBe(stop)
+    expect(seen.tui).toHaveLength(0)
+    expect(seen.inst).toHaveLength(0)
+    expect(seen.run).toHaveLength(1)
+    return seen.run[0]!
+  }
+
   test("uses the real cwd when PWD points at a symlink", async () => {
     await check()
   })
 
   test("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
+  })
+
+  test("--prompt routes to headless RunCommand with default format/thinking and no dir", async () => {
+    const args = await headless(undefined, { prompt: "hello" })
+    expect(args.message).toEqual(["hello"])
+    expect(args.format).toBe("default")
+    expect(args.thinking).toBe(false)
+    expect("dir" in args).toBe(false)
+  })
+
+  test("--prompt forwards model/agent/continue/session/fork/project to RunCommand", async () => {
+    const args = await headless("./relative", {
+      prompt: "hi",
+      model: "anthropic/claude-3-5-sonnet",
+      agent: "build",
+      continue: true,
+      session: "abc",
+      fork: true,
+    })
+    expect(args.model).toBe("anthropic/claude-3-5-sonnet")
+    expect(args.agent).toBe("build")
+    expect(args.continue).toBe(true)
+    expect(args.session).toBe("abc")
+    expect(args.fork).toBe(true)
+    expect(args.dir).toBe("./relative")
   })
 })

@@ -49,7 +49,6 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
       $schema: "https://opencode.ai/config.json",
       ...options.config,
     })
-    await Bun.write(path.join(dirpath, "opencode.json"), body)
     await Bun.write(path.join(dirpath, "elastic_ramen.json"), body)
   }
   const realpath = sanitizePath(await fs.realpath(dirpath))
