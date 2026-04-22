@@ -27,6 +27,10 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
+      - uses: elastic/oblt-actions/github/create-token@v1
+        id: fetch-token
+
       - name: Setup Go
         if: inputs.elastic-cli-ref
         uses: actions/setup-go@v5
@@ -37,14 +41,10 @@ jobs:
         if: inputs.elastic-cli-ref
         uses: actions/checkout@v4
         with:
-          repository: elastic/elastic-cli
+          repository: elastic/cli
           ref: ${{ inputs.elastic-cli-ref }}
           path: cli
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
-      - uses: elastic/oblt-actions/github/create-token@v1
-        id: fetch-token
+          token: ${{ steps.fetch-token.outputs.token }}
 
       - name: Create GitHub release
         id: create-release
@@ -81,3 +81,19 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
         run: gh release edit "v${{ inputs.version }}" --draft=false
+
+      - name: Setup Node (for npm publish)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
+      - name: Publish to npm
+        working-directory: packages/opencode
+        env:
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_RELEASE: "1"
+        run: bun run script/publish.ts
