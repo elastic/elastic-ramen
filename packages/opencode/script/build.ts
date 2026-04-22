@@ -296,6 +296,8 @@ for (const item of targets) {
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
+        repository: pkg.repository,
+        license: pkg.license,
       },
       null,
       2,
