@@ -445,10 +445,17 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
-echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
-echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
-echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
+# ELASTIC logo — keep in sync with packages/opencode/src/cli/logo.ts
+c_e='\033[38;2;11;100;221m'    # #0B64DD
+c_l='\033[38;2;188;30;112m'    # #BC1E70
+c_a='\033[38;2;0;139;135m'     # #008B87
+c_s='\033[38;2;250;203;61m'    # #FACB3D
+c_t='\033[38;2;0;138;94m'      # #008A5E
+c_i='\033[38;2;237;103;35m'    # #ED6723
+c_c='\033[38;2;129;68;204m'    # #8144CC
+echo -e "${c_e}█▀▀▀${NC} ${c_l}█   ${NC} ${c_a}█▀▀█${NC} ${c_s}█▀▀▀${NC} ${c_t}▀█▀${NC} ${c_i}▀▀▀${NC} ${c_c}█▀▀▀${NC}"
+echo -e "${c_e}█▀▀ ${NC} ${c_l}█   ${NC} ${c_a}█▀▀█${NC} ${c_s}▀▀▀█${NC} ${c_t} █ ${NC} ${c_i} █ ${NC} ${c_c}█   ${NC}"
+echo -e "${c_e}▀▀▀▀${NC} ${c_l}▀▀▀▀${NC} ${c_a}▀  ▀${NC} ${c_s}▀▀▀▀${NC} ${c_t} ▀ ${NC} ${c_i}▀▀▀${NC} ${c_c}▀▀▀▀${NC}"
 echo -e ""
 echo -e ""
 echo -e "${MUTED}Elastic RAMEN installed successfully!${NC}"
