@@ -168,7 +168,7 @@ else
       target="$target-musl"
     fi
 
-    filename="$APP-$target$archive_ext"
+    filename="ramen-$target$archive_ext"
 
 
     if [ "$os" = "linux" ]; then
