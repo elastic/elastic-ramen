@@ -244,10 +244,6 @@ export namespace Config {
 
     if (!result.username) result.username = os.userInfo().username
 
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
 
     // Apply flag overrides for compaction settings
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
@@ -1262,6 +1258,11 @@ export namespace Config {
     const normalized = (() => {
       if (!data || typeof data !== "object" || Array.isArray(data)) return data
       const copy = { ...(data as Record<string, unknown>) }
+      // Migrate legacy `autoshare: true` to `share: "auto"` on the raw data so
+      // the zod `share` default does not mask the user's intent post-parse.
+      if (copy.autoshare === true && copy.share === undefined) {
+        copy.share = "auto"
+      }
       const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
       if (!hadLegacy) return copy
       delete copy.theme

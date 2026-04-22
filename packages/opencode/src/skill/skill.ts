@@ -125,8 +125,10 @@ export namespace Skill {
       }
     }
 
-    // Load embedded Elastic skills (compiled mode) or scan filesystem (dev mode)
-    if (typeof ELASTIC_SKILLS_EMBEDDED !== "undefined" && ELASTIC_SKILLS_EMBEDDED && Object.keys(ELASTIC_SKILLS_EMBEDDED).length > 0) {
+    // Load embedded Elastic skills (compiled mode) or scan filesystem (dev mode).
+    // If ELASTIC_SKILLS_EMBEDDED is defined (even as an empty object), treat it as
+    // authoritative and skip the filesystem fallback.
+    if (typeof ELASTIC_SKILLS_EMBEDDED !== "undefined" && ELASTIC_SKILLS_EMBEDDED) {
       for (const [name, content] of Object.entries(ELASTIC_SKILLS_EMBEDDED)) {
         const md = await ConfigMarkdown.parseContent(content).catch((err) => {
           log.error("failed to parse embedded skill", { skill: name, err })
