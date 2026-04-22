@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
@@ -146,7 +146,12 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    const rel = relative(parent, child)
+    // On Windows, when `parent` and `child` live on different drives, `relative`
+    // returns the target as an absolute path (e.g. `D:\etc\passwd`) because no
+    // relative path can express crossing drives. Treat that as "not contained".
+    if (isAbsolute(rel)) return false
+    return !rel.startsWith("..")
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
