@@ -51,7 +51,7 @@ if (!arch) {
   arch = os.arch()
 }
 const base = "elastic-ramen-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const binary = platform === "windows" ? "elastic-ramen.exe" : "elastic-ramen"
 
 function supportsAvx2() {
   if (arch !== "x64") return false
