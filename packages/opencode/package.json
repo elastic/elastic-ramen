@@ -1,9 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.2.24",
+  "version": "0.0.0",
   "name": "@elastic/ramen",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elastic/elastic-ramen.git",
+    "directory": "packages/opencode"
+  },
   "publishConfig": {
     "access": "public"
   },
