@@ -332,81 +332,97 @@ export namespace File {
     ),
   }
 
-  const state = Instance.state(async () => {
-    type Entry = { files: string[]; dirs: string[] }
-    let cache: Entry = { files: [], dirs: [] }
-    let fetching = false
+  const state = Instance.state(
+    async () => {
+      type Entry = { files: string[]; dirs: string[] }
+      let cache: Entry = { files: [], dirs: [] }
+      let fetching = false
+      const ac = new AbortController()
+      let inFlight: Promise<void> = Promise.resolve()
 
-    const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
+      const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
 
-    const fn = async (result: Entry) => {
-      // Disable scanning if in root of file system
-      if (Instance.directory === path.parse(Instance.directory).root) return
-      fetching = true
+      const fn = async (result: Entry) => {
+        if (ac.signal.aborted) return
+        // Disable scanning if in root of file system
+        if (Instance.directory === path.parse(Instance.directory).root) return
+        fetching = true
+        try {
+          if (isGlobalHome) {
+            const dirs = new Set<string>()
+            const ignore = Protected.names()
 
-      if (isGlobalHome) {
-        const dirs = new Set<string>()
-        const ignore = Protected.names()
+            const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
+            const shouldIgnore = (name: string) => name.startsWith(".") || ignore.has(name)
+            const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
 
-        const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
-        const shouldIgnore = (name: string) => name.startsWith(".") || ignore.has(name)
-        const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
+            const top = await fs.promises
+              .readdir(Instance.directory, { withFileTypes: true })
+              .catch(() => [] as fs.Dirent[])
 
-        const top = await fs.promises
-          .readdir(Instance.directory, { withFileTypes: true })
-          .catch(() => [] as fs.Dirent[])
+            for (const entry of top) {
+              if (ac.signal.aborted) return
+              if (!entry.isDirectory()) continue
+              if (shouldIgnore(entry.name)) continue
+              dirs.add(entry.name + "/")
 
-        for (const entry of top) {
-          if (!entry.isDirectory()) continue
-          if (shouldIgnore(entry.name)) continue
-          dirs.add(entry.name + "/")
+              const base = path.join(Instance.directory, entry.name)
+              const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+              for (const child of children) {
+                if (!child.isDirectory()) continue
+                if (shouldIgnoreNested(child.name)) continue
+                dirs.add(entry.name + "/" + child.name + "/")
+              }
+            }
 
-          const base = path.join(Instance.directory, entry.name)
-          const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
-          for (const child of children) {
-            if (!child.isDirectory()) continue
-            if (shouldIgnoreNested(child.name)) continue
-            dirs.add(entry.name + "/" + child.name + "/")
+            result.dirs = Array.from(dirs).toSorted()
+            cache = result
+            return
           }
-        }
 
-        result.dirs = Array.from(dirs).toSorted()
-        cache = result
-        fetching = false
-        return
+          const set = new Set<string>()
+          for await (const file of Ripgrep.files({ cwd: Instance.directory, signal: ac.signal })) {
+            result.files.push(file)
+            let current = file
+            while (true) {
+              const dir = path.dirname(current)
+              if (dir === ".") break
+              if (dir === current) break
+              current = dir
+              if (set.has(dir)) continue
+              set.add(dir)
+              result.dirs.push(dir + "/")
+            }
+          }
+          cache = result
+        } catch (error) {
+          // Aborting is how dispose asks the scan to stop; anything else is a real error.
+          if (ac.signal.aborted) return
+          throw error
+        } finally {
+          fetching = false
+        }
       }
 
-      const set = new Set<string>()
-      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
-        result.files.push(file)
-        let current = file
-        while (true) {
-          const dir = path.dirname(current)
-          if (dir === ".") break
-          if (dir === current) break
-          current = dir
-          if (set.has(dir)) continue
-          set.add(dir)
-          result.dirs.push(dir + "/")
-        }
-      }
-      cache = result
-      fetching = false
-    }
-    fn(cache)
+      inFlight = fn(cache)
 
-    return {
-      async files() {
-        if (!fetching) {
-          fn({
-            files: [],
-            dirs: [],
-          })
-        }
-        return cache
-      },
-    }
-  })
+      return {
+        async files() {
+          if (!fetching) {
+            inFlight = fn({ files: [], dirs: [] })
+          }
+          return cache
+        },
+        stop() {
+          ac.abort()
+          return inFlight
+        },
+      }
+    },
+    async (state) => {
+      await state.stop().catch(() => undefined)
+    },
+  )
 
   export function init() {
     state()
