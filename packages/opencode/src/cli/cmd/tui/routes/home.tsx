@@ -119,7 +119,17 @@ export function Home() {
           <Logo />
         </box>
         <box flexShrink={0} alignItems="center" paddingTop={1}>
-          <text fg={theme.textMuted}>RAMEN — Runtime Analysis & Monitoring Engine</text>
+          <text>
+            <span style={{ fg: theme.textMuted }}>RAMEN — </span>
+            <span style={{ bold: true, fg: theme.text }}>R</span>
+            <span style={{ fg: theme.textMuted }}>oot-cause </span>
+            <span style={{ bold: true, fg: theme.text }}>A</span>
+            <span style={{ fg: theme.textMuted }}>nalysis & </span>
+            <span style={{ bold: true, fg: theme.text }}>M</span>
+            <span style={{ fg: theme.textMuted }}>onitoring </span>
+            <span style={{ bold: true, fg: theme.text }}>En</span>
+            <span style={{ fg: theme.textMuted }}>gine</span>
+          </text>
           <text fg={"#ff6b6b"}>⚠ EXPERIMENTAL — No guarantees. Use at your own risk.</text>
           <Show when={!connected()}>
             <box paddingTop={1} alignItems="center">
