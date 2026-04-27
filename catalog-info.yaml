@@ -24,10 +24,13 @@ spec:
     spec:
       repository: elastic/elastic-ramen
       pipeline_file: ".buildkite/release.yml"
-      # Tag-triggered for production releases. Branch trigger is also
-      # enabled but filtered to ci/* so the pipeline can be exercised as
-      # a dry-run from feature branches (per design doc Phase 1, see
-      # PR #58 r3147641992); other branches and PRs are skipped.
+      # Tag-triggered for production releases. The tag is created and
+      # pushed by .github/workflows/release-ramen.yml (the GHA kickoff
+      # owns the operator UX); BK listens via Backstage's native tag
+      # trigger. Branch trigger is also enabled but filtered to ci/* so
+      # the pipeline can be exercised as a dry-run from feature branches
+      # (design doc Phase 1, PR #58 r3147641992); other branches and PRs
+      # are skipped.
       provider_settings:
         build_branches: true
         build_pull_requests: false

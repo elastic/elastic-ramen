@@ -1,0 +1,74 @@
+# Copyright (c) 2026-present, Elastic NV
+#
+# Release kick-off workflow.
+#
+# Per design doc (elastic/observability-robots#4250 Phase 4) and v1v's
+# PR #58 review (r3147634273): GHA owns the release-trigger UX, creates
+# the git tag, pushes it, and creates the draft GH release. Pushing the
+# tag fires the elastic-ramen-release Buildkite pipeline via Backstage's
+# native tag trigger; BK then builds + signs + uploads assets to the
+# existing draft. A maintainer reviews + clicks Publish in the UI to
+# fire .github/workflows/publish.yml for the npm push.
+#
+# IMPORTANT: order matters — the draft GH release is created AFTER the
+# tag is pushed because `gh release create … --draft` does not push the
+# tag publicly (and therefore wouldn't fire BK).
+name: Release Elastic RAMEN
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.1.0 or 0.0.7-test-rel)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  kickoff:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
+      - uses: elastic/oblt-actions/github/create-token@v1
+        id: fetch-token
+        with:
+          token-policy: token-policy-909fc0514fde
+
+      - name: Configure git identity
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Refuse if tag already exists
+        env:
+          GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
+        run: |
+          if git ls-remote --tags origin "v${{ inputs.version }}" | grep -q .; then
+            echo "ERROR: tag v${{ inputs.version }} already exists on origin." >&2
+            exit 1
+          fi
+
+      - name: Create + push tag (fires Buildkite via Backstage tag trigger)
+        env:
+          GITHUB_TOKEN: ${{ steps.fetch-token.outputs.token }}
+        run: |
+          # Re-point origin's URL to embed the ephemeral token so push works.
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git tag "v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --draft \
+            --title "v${{ inputs.version }}" \
+            --notes "Elastic RAMEN v${{ inputs.version }}"

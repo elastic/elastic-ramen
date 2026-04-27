@@ -12,9 +12,12 @@
 # sign-* trigger steps pick them up via INPUT_PATH=buildkite://.
 #
 # Required env:
-#   BUILDKITE_TAG   the release tag (e.g. v0.0.7-test-rel)
-#   GITHUB_TOKEN    ephemeral GH App token exported by the
-#                   elastic/vault-github-token plugin on this step.
+#   BUILDKITE_TAG    set by BK on tag-triggered builds (production).
+#                    For branch dry-runs (ci/* trigger), we synthesize
+#                    a placeholder version below so build.ts has
+#                    something to embed.
+#   GITHUB_TOKEN     ephemeral GH App token exported by the
+#                    elastic/vault-github-token plugin on this step.
 
 set -euxo pipefail
 
@@ -22,6 +25,13 @@ set -euxo pipefail
 # so callers that follow the gh CLI convention work too.
 GH_TOKEN="${GITHUB_TOKEN:?GITHUB_TOKEN must be set by the elastic/vault-github-token plugin}"
 export GH_TOKEN
+
+TAG="${BUILDKITE_TAG:-}"
+if [[ -z "$TAG" ]]; then
+  # Branch dry-run: synthesize a version so build.ts can run end-to-end.
+  TAG="v0.0.0-dryrun-${BUILDKITE_COMMIT:0:7}"
+  echo "No BUILDKITE_TAG set; running as dry-run with synthetic ${TAG}"
+fi
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -58,7 +68,7 @@ bun install --frozen-lockfile
 
 echo "--- bun run build (all 12 targets)"
 cd packages/opencode
-OPENCODE_VERSION="${BUILDKITE_TAG#v}" \
+OPENCODE_VERSION="${TAG#v}" \
 OPENCODE_RELEASE="1" \
 GH_REPO="elastic/elastic-ramen" \
 ELASTIC_CLI_DIR="${CLI_DIR}" \
