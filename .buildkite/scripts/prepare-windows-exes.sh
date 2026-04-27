@@ -19,7 +19,9 @@ for zip in "$WORK"/ramen-windows-*.zip; do
   base=$(basename "$zip" .zip)
   tmp=$(mktemp -d)
   unzip -q -o "$zip" -d "$tmp"
-  exe="$tmp/bin/elastic-ramen.exe"
+  # build.ts archives the binary with `cwd(binDir)` (build.ts:357-361),
+  # so the .exe lives at the archive root, not under bin/.
+  exe="$tmp/elastic-ramen.exe"
   if [[ ! -f "$exe" ]]; then
     echo "ERROR: expected $exe inside $zip" >&2
     exit 1

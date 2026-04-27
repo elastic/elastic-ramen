@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026-present, Elastic NV
 #
-# Strict mirror of elastic/synthetics-recorder/.buildkite/hooks/pre-command,
-# minus the nvm install (we install bun in build-and-package.sh on demand).
+# Pre-command hook for the elastic-ramen-release Buildkite pipeline.
+# Loads the BK API token used by .buildkite/scripts/download-signed-artifacts.sh
+# to look up `triggered_build.id` per sign-* step. GitHub access for the
+# build / create-release steps is provided by the
+# `elastic/vault-github-token` plugin attached to those steps directly,
+# not by this hook.
 #
 # Buildkite auto-masks env vars whose name ends with _SECRET or _TOKEN.
 
 set -eo pipefail
 
 # Only run for the elastic-ramen-release pipeline; agents may be shared.
+# Pre-command hooks are sourced; `return 0` is the correct early-exit
+# (`exit 0` actually breaks env loading on subsequent steps — confirmed
+# in elastic/synthetics-recorder/.buildkite/hooks/pre-command and PR #58
+# discussion r3147964816).
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "elastic-ramen-release" ]]; then
   return 0
 fi
@@ -22,15 +30,3 @@ if [[ -n "${BUILDKITE_TAG:-}" ]]; then
   DRY_RUN=false
 fi
 export DRY_RUN
-
-# Skip the GH token export when the running command is a pipeline upload —
-# the dynamic-step generator (download-signed-artifacts.sh) doesn't need
-# GH access. Matches synthetics-recorder.
-if [[ "${BUILDKITE_COMMAND:-}" =~ .*"upload".* ]]; then
-  echo "Skipped pre-command when running the Upload pipeline"
-else
-  echo "~~~ Configure ephemeral GitHub token"
-  GITHUB_TOKEN=${VAULT_GITHUB_TOKEN:-}
-  GH_TOKEN=${VAULT_GITHUB_TOKEN:-}
-  export GH_TOKEN GITHUB_TOKEN
-fi

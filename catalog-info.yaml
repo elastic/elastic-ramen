@@ -24,16 +24,19 @@ spec:
     spec:
       repository: elastic/elastic-ramen
       pipeline_file: ".buildkite/release.yml"
-      # Mirror of elastic/synthetics-recorder: tag-only trigger.
-      # Pattern allows v0.0.7-test-rel-style tags so we can iterate on
-      # the pipeline before cutting a real release.
+      # Tag-triggered for production releases. Branch trigger is also
+      # enabled but filtered to ci/* so the pipeline can be exercised as
+      # a dry-run from feature branches (per design doc Phase 1, see
+      # PR #58 r3147641992); other branches and PRs are skipped.
       provider_settings:
-        build_branches: false
+        build_branches: true
         build_pull_requests: false
         build_tags: true
         filter_enabled: true
+        # Note: BK conditional expressions interpret `$` as env-var
+        # substitution; escape end-of-string anchors as `$$`.
         filter_condition: |
-          build.tag =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.-]+)?$/
+          (build.branch =~ /^ci\//) || (build.tag =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.-]+)?$$/)
       cancel_intermediate_builds: false
       skip_intermediate_builds: false
       teams:

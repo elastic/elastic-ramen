@@ -1,36 +1,39 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026-present, Elastic NV
 #
-# Per-platform package step for elastic-ramen-release. Runs once per
-# matrix entry from .buildkite/release.yml.
+# Build step for elastic-ramen-release. Bun cross-compiles all 12
+# platform binaries from a single Linux docker agent in one process,
+# so we don't need a per-target matrix.
 #
-# Sets up bun + go, checks out the pinned elastic/cli source, builds the
-# elastic CLI for the target platform, then runs `bun run build --target=<…>`
-# which produces dist/ramen-<target>.{tar.gz,zip} (with bin/elastic-ramen[.exe]
-# + NOTICE + LICENSE inside). Renames the dist into artifacts-to-sign/ and
-# uploads as a BK artifact for the sign-* trigger steps to consume via
-# INPUT_PATH=buildkite://.
+# Sets up bun + go, checks out the pinned elastic/cli source, embeds
+# the elastic CLI per-target, then runs `bun run build` which produces
+# dist/ramen-<target>.{tar.gz,zip} for every supported target. Moves
+# them into artifacts-to-sign/ and uploads as BK artifacts so the
+# sign-* trigger steps pick them up via INPUT_PATH=buildkite://.
 #
-# Usage: build-and-package.sh <target>
-#   <target> is the suffix passed to build.ts --target=<…>:
-#     linux-arm64, linux-arm64-musl, linux-x64, linux-x64-baseline,
-#     linux-x64-musl, linux-x64-baseline-musl, darwin-arm64, darwin-x64,
-#     darwin-x64-baseline, windows-arm64, windows-x64, windows-x64-baseline
+# Required env:
+#   BUILDKITE_TAG   the release tag (e.g. v0.0.7-test-rel)
+#   GITHUB_TOKEN    ephemeral GH App token exported by the
+#                   elastic/vault-github-token plugin on this step.
 
 set -euxo pipefail
 
-TARGET="${1:?usage: build-and-package.sh <target>}"
+# The vault-github-token plugin only exports GITHUB_TOKEN; mirror to GH_TOKEN
+# so callers that follow the gh CLI convention work too.
+GH_TOKEN="${GITHUB_TOKEN:?GITHUB_TOKEN must be set by the elastic/vault-github-token plugin}"
+export GH_TOKEN
 
-# Resolve the elastic-ramen workspace root (the script runs from .buildkite/scripts/).
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-# bun installs to ~/.bun by default; respect any pinned version from .bun-version.
+# bun installs to ~/.bun by default; respect any pinned version from
+# .bun-version (build.ts will assert via @opencode-ai/script).
 if ! command -v bun >/dev/null; then
   curl -fsSL https://bun.sh/install | bash
   export PATH="$HOME/.bun/bin:$PATH"
 fi
 
-# Go for the elastic-cli embed.
+# Go for the elastic-cli embed. 1.23 matches the version on dev's
+# release-ramen.yml (pre-#58); follow-up issue tracks the upgrade.
 if ! command -v go >/dev/null; then
   GO_VERSION="1.23.4"
   curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz
@@ -38,8 +41,8 @@ if ! command -v go >/dev/null; then
   export PATH="/usr/local/go/bin:$PATH"
 fi
 
-# Pinned elastic CLI ref — matches what was in
-# .github/workflows/release-ramen.yml on dev.
+# Pinned elastic CLI ref — matches what was on dev's release-ramen.yml
+# (commit 26f5dfba4 at the time of writing).
 CLI_REF="b056a344e6b9b27e09bb2b6270be2e6b8c5bf2fc"
 CLI_DIR="${ROOT}/cli"
 if [[ ! -d "$CLI_DIR" ]]; then
@@ -53,23 +56,21 @@ cd "${ROOT}"
 echo "--- bun install"
 bun install --frozen-lockfile
 
-echo "--- bun run build --target=${TARGET}"
+echo "--- bun run build (all 12 targets)"
 cd packages/opencode
 OPENCODE_VERSION="${BUILDKITE_TAG#v}" \
 OPENCODE_RELEASE="1" \
 GH_REPO="elastic/elastic-ramen" \
 ELASTIC_CLI_DIR="${CLI_DIR}" \
-  bun run build --target="${TARGET}"
+  bun run build
 
-echo "--- Stage artifact in artifacts-to-sign/"
+echo "--- Stage artifacts in artifacts-to-sign/"
 mkdir -p "${ROOT}/artifacts-to-sign"
 shopt -s nullglob
-for f in "dist/ramen-${TARGET}.tar.gz" "dist/ramen-${TARGET}.zip"; do
-  if [[ -f "$f" ]]; then
-    cp "$f" "${ROOT}/artifacts-to-sign/"
-  fi
+for f in dist/ramen-*.tar.gz dist/ramen-*.zip; do
+  cp "$f" "${ROOT}/artifacts-to-sign/"
 done
 
 cd "${ROOT}"
 ls -la artifacts-to-sign/
-buildkite-agent artifact upload "artifacts-to-sign/ramen-${TARGET}.*"
+buildkite-agent artifact upload "artifacts-to-sign/*"

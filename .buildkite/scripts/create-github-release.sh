@@ -3,13 +3,15 @@
 #
 # Final step of elastic-ramen-release.
 #
-# Strict mirror of elastic/synthetics-recorder/.buildkite/scripts/create-github-release.sh
+# Mirror of elastic/synthetics-recorder/.buildkite/scripts/create-github-release.sh
 # with one elastic-ramen-specific addition: re-zip the Windows archives
 # with the signed bare .exe + the original NOTICE/LICENSE before
 # uploading to GH (sign-windows returns a bare .exe; users expect the
 # .zip wrapper that build.ts originally produced).
 #
-# Required env: BUILDKITE_TAG, VAULT_GITHUB_TOKEN (set by pre-command).
+# Required env: BUILDKITE_TAG. GITHUB_TOKEN is exported by the
+# elastic/vault-github-token plugin attached to this step (gh CLI
+# reads GITHUB_TOKEN natively).
 
 set -eox pipefail
 
@@ -39,7 +41,9 @@ for signed_exe in "$DIST_LOCATION"/ramen-windows-*.exe; do
   fi
   staging=$(mktemp -d)
   unzip -q "$unsigned_zip" -d "$staging"
-  cp "$signed_exe" "$staging/bin/elastic-ramen.exe"
+  # build.ts archives the binary with `cwd(binDir)` (build.ts:357-361),
+  # so the .exe (and NOTICE/LICENSE) live at the archive root, not under bin/.
+  cp "$signed_exe" "$staging/elastic-ramen.exe"
   ( cd "$staging" && zip -qr "${WORK_WIN_OUT}/${base}.zip" . )
   rm -rf "$staging"
 done
@@ -56,15 +60,6 @@ echo "--- Generate sha512 sidecars"
 echo "--- Final release asset list"
 ls -l "$DIST_LOCATION/"
 
-echo "--- Install gh :github:"
-if ! gh --version &>/dev/null ; then
-  wget -q https://github.com/cli/cli/releases/download/v2.50.0/gh_2.50.0_linux_amd64.tar.gz -O gh.tar.gz
-  tar -xpf gh.tar.gz --strip-components=2
-  PATH="$(pwd):${PATH}"
-  export PATH
-  gh --version
-fi
-
 echo "--- Run GitHub release"
 if [ -n "${BUILDKITE_TAG}" ] ; then
   if [ ! -d "$DIST_LOCATION" ] ; then
@@ -72,10 +67,10 @@ if [ -n "${BUILDKITE_TAG}" ] ; then
     exit 1
   fi
 
-  # VAULT_GITHUB_TOKEN is the GitHub ephemeral token created in Buildkite.
+  # GITHUB_TOKEN is exported by the elastic/vault-github-token plugin on this step;
+  # gh CLI reads it natively.
   # --draft so a maintainer can review assets before clicking Publish.
   # That click fires the release: published event → .github/workflows/publish.yml → npm.
-  GH_TOKEN=$VAULT_GITHUB_TOKEN \
   gh release create \
     "${BUILDKITE_TAG}" \
     --draft \
@@ -84,6 +79,5 @@ if [ -n "${BUILDKITE_TAG}" ] ; then
     "${DIST_LOCATION}"/*.*
 else
   echo "gh release won't be triggered (not a Git tag); listing existing releases for sanity:"
-  GH_TOKEN=$VAULT_GITHUB_TOKEN \
   gh release list --repo elastic/elastic-ramen
 fi

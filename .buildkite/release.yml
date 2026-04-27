@@ -3,69 +3,33 @@
 #
 # Buildkite release pipeline for elastic-ramen.
 #
-# Strict mirror of elastic/synthetics-recorder/.buildkite/release.yml,
-# adapted for elastic-ramen: 12 platform builds (bun cross-compiles all
-# from a Linux docker agent — no Mac Orka needed) instead of 4, no S3
-# publish step (npm + GH release attachments are the only distribution
-# channels). Step keys (sign-{gpg,macos,windows} and gpg/macos/windows
-# for the dynamic download steps) are load-bearing — see
+# Mirror of elastic/synthetics-recorder/.buildkite/release.yml for the
+# parts that handle signing, artifact download/upload, and the
+# pre-command secret. Build job structure differs deliberately: bun
+# cross-compiles all 12 platform binaries from a single Linux docker
+# agent in one step (vs. their per-platform Electron native build), so
+# we don't need a matrix.
+#
+# Step keys (sign-{gpg,macos,windows} and gpg/macos/windows for the
+# dynamic download steps) are load-bearing — see
 # .buildkite/scripts/download-signed-artifacts.sh and create-github-release.sh.
 #
-# Triggered by tag push (v[0-9]+.[0-9]+.[0-9]+ etc — see catalog-info.yaml
-# filter_condition). The end of the pipeline creates a DRAFT GitHub
-# release; a maintainer reviews it and clicks Publish in the UI, which
-# fires .github/workflows/publish.yml to push the 13 npm packages.
+# Triggered by tag push (v[0-9]+.[0-9]+.[0-9]+ etc — see
+# catalog-info.yaml filter_condition). The end of the pipeline creates a
+# DRAFT GitHub release; a maintainer reviews it and clicks Publish in
+# the UI, which fires .github/workflows/publish.yml to push the 13 npm
+# packages.
 
 steps:
-  # Build (12 parallel — one per platform)
-  - label: ":package: :linux: ramen-linux-arm64"
-    command: ".buildkite/scripts/build-and-package.sh linux-arm64"
+  - label: ":package: Build and package all platforms"
+    command: ".buildkite/scripts/build-and-package.sh"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :linux: ramen-linux-arm64-musl"
-    command: ".buildkite/scripts/build-and-package.sh linux-arm64-musl"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :linux: ramen-linux-x64"
-    command: ".buildkite/scripts/build-and-package.sh linux-x64"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :linux: ramen-linux-x64-baseline"
-    command: ".buildkite/scripts/build-and-package.sh linux-x64-baseline"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :linux: ramen-linux-x64-musl"
-    command: ".buildkite/scripts/build-and-package.sh linux-x64-musl"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :linux: ramen-linux-x64-baseline-musl"
-    command: ".buildkite/scripts/build-and-package.sh linux-x64-baseline-musl"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :mac: ramen-darwin-arm64"
-    command: ".buildkite/scripts/build-and-package.sh darwin-arm64"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :mac: ramen-darwin-x64"
-    command: ".buildkite/scripts/build-and-package.sh darwin-x64"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :mac: ramen-darwin-x64-baseline"
-    command: ".buildkite/scripts/build-and-package.sh darwin-x64-baseline"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :windows: ramen-windows-arm64"
-    command: ".buildkite/scripts/build-and-package.sh windows-arm64"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :windows: ramen-windows-x64"
-    command: ".buildkite/scripts/build-and-package.sh windows-x64"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
-  - label: ":package: :windows: ramen-windows-x64-baseline"
-    command: ".buildkite/scripts/build-and-package.sh windows-x64-baseline"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+    plugins:
+      # Sources an ephemeral GH App token via Vault and exports
+      # GITHUB_TOKEN — needed for the elastic/cli checkout in
+      # build-and-package.sh.
+      - elastic/vault-github-token#v0.1.0
 
   - wait: ~
 
@@ -115,6 +79,8 @@ steps:
       - .buildkite/scripts/download-signed-artifacts.sh "sign-windows" "windows"
       - .buildkite/scripts/download-signed-artifacts.sh "sign-gpg" "gpg" | buildkite-agent pipeline upload
       - .buildkite/scripts/download-signed-artifacts.sh "sign-windows" "windows" | buildkite-agent pipeline upload
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
 
   - wait: ~
 
@@ -122,6 +88,8 @@ steps:
     commands:
       - .buildkite/scripts/download-signed-artifacts.sh "sign-macos" "macos"
       - .buildkite/scripts/download-signed-artifacts.sh "sign-macos" "macos" | buildkite-agent pipeline upload
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
 
   - wait: ~
 
@@ -134,6 +102,12 @@ steps:
       - "gpg"
       - "windows"
       - "macos"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+    plugins:
+      # Sources an ephemeral GH App token via Vault and exports
+      # GITHUB_TOKEN — replaces the ad-hoc export in the pre-command hook.
+      - elastic/vault-github-token#v0.1.0
 
 notify:
   - slack: "#elastic-ramen-releases"
