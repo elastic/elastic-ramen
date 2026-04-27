@@ -2,6 +2,7 @@
 import p from "path"
 import fs from "fs"
 import os from "os"
+import crypto from "crypto"
 
 declare const ELASTIC_CLI_B64: string
 
@@ -19,24 +20,30 @@ export namespace ElasticBin {
       return cached
     }
 
-    // Compiled mode: extract from embedded base64
+    const cacheDir = p.join(os.homedir(), ".cache", "ramen")
+
+    // Compiled mode: extract from embedded base64. Key the cache filename on
+    // a content hash so upgrades don't silently reuse a stale binary.
     if (typeof ELASTIC_CLI_B64 === "string" && ELASTIC_CLI_B64.length > 0) {
-      const cacheDir = p.join(os.homedir(), ".cache", "ramen")
       fs.mkdirSync(cacheDir, { recursive: true })
-      const dest = p.join(cacheDir, "elastic" + ext)
+      const hash = crypto.createHash("sha256").update(ELASTIC_CLI_B64).digest("hex").slice(0, 16)
+      const dest = p.join(cacheDir, `elastic-${hash}${ext}`)
       if (!fs.existsSync(dest)) {
-        fs.writeFileSync(dest, Buffer.from(ELASTIC_CLI_B64, "base64"))
-        fs.chmodSync(dest, 0o755)
+        const tmp = `${dest}.tmp-${process.pid}`
+        fs.writeFileSync(tmp, Buffer.from(ELASTIC_CLI_B64, "base64"), { mode: 0o755 })
+        fs.renameSync(tmp, dest)
+        try {
+          for (const entry of fs.readdirSync(cacheDir)) {
+            if (entry === p.basename(dest)) continue
+            if (entry.startsWith("elastic-") || entry === "elastic" || entry === "elastic.exe") {
+              fs.unlinkSync(p.join(cacheDir, entry))
+            }
+          }
+        } catch {
+          // best-effort cleanup of older versions
+        }
       }
       cached = dest
-      return cached
-    }
-
-    // Check if a previously-built version left a cached binary
-    const cacheDir = p.join(os.homedir(), ".cache", "ramen")
-    const cachedBin = p.join(cacheDir, "elastic" + ext)
-    if (fs.existsSync(cachedBin)) {
-      cached = cachedBin
       return cached
     }
 

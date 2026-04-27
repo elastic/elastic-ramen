@@ -19,6 +19,25 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
+      - uses: elastic/oblt-actions/github/create-token@v1
+        id: fetch-token
+        with:
+          token-policy: token-policy-909fc0514fde
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Checkout elastic CLI
+        uses: actions/checkout@v4
+        with:
+          repository: elastic/cli
+          ref: b056a344e6b9b27e09bb2b6270be2e6b8c5bf2fc
+          path: cli
+          token: ${{ steps.fetch-token.outputs.token }}
+
       - name: Setup Node (for npm publish)
         uses: actions/setup-node@v6
         with:
@@ -33,7 +52,8 @@ jobs:
           OPENCODE_VERSION: ${{ github.event.release.tag_name }}
           OPENCODE_RELEASE: "1"
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
+          ELASTIC_CLI_DIR: ${{ github.workspace }}/cli
         working-directory: packages/opencode
         run: bun run build
 
@@ -42,4 +62,5 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ github.event.release.tag_name }}
           OPENCODE_RELEASE: "1"
+          NPM_CONFIG_PROVENANCE: "true"
         run: bun run script/publish.ts

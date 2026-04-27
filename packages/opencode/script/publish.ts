@@ -61,6 +61,7 @@ await Bun.file(`${wrapperDir}/package.json`).write(
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       license: pkg.license,
+      repository: pkg.repository,
       publishConfig: pkg.publishConfig,
       optionalDependencies: binaries,
     },
