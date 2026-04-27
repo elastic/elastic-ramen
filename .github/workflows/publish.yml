@@ -8,35 +8,21 @@ on:
 permissions:
   contents: read
 
+# Don't let two release-published events double-publish the same tag.
+concurrency:
+  group: publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-bun
-
-      # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
-      - uses: elastic/oblt-actions/github/create-token@v1
-        id: fetch-token
-        with:
-          token-policy: token-policy-909fc0514fde
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Checkout elastic CLI
-        uses: actions/checkout@v4
-        with:
-          repository: elastic/cli
-          ref: b056a344e6b9b27e09bb2b6270be2e6b8c5bf2fc
-          path: cli
-          token: ${{ steps.fetch-token.outputs.token }}
 
       - name: Setup Node (for npm publish)
         uses: actions/setup-node@v6
@@ -47,15 +33,19 @@ jobs:
       - name: Update npm to latest
         run: npm install -g npm@latest
 
-      - name: Build CLI binaries
+      # Stage the SAME signed binaries that are on the GH release into
+      # dist/ instead of rebuilding from source. The Buildkite
+      # elastic-ramen-release pipeline produced and signed those binaries
+      # (and uploaded sha512 + .asc sidecars). stage-from-release.ts
+      # hard-fails if any platform archive is missing, any sha512 check
+      # fails, or any linux .asc fails gpg verify.
+      - name: Stage signed binaries from release
         env:
           OPENCODE_VERSION: ${{ github.event.release.tag_name }}
-          OPENCODE_RELEASE: "1"
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
-          ELASTIC_CLI_DIR: ${{ github.workspace }}/cli
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: packages/opencode
-        run: bun run build
+        run: bun run script/stage-from-release.ts
 
       - name: Publish to npm
         working-directory: packages/opencode

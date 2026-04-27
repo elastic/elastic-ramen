@@ -1,0 +1,140 @@
+# Copyright (c) 2026-present, Elastic NV
+# yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json
+#
+# Buildkite release pipeline for elastic-ramen.
+#
+# Strict mirror of elastic/synthetics-recorder/.buildkite/release.yml,
+# adapted for elastic-ramen: 12 platform builds (bun cross-compiles all
+# from a Linux docker agent — no Mac Orka needed) instead of 4, no S3
+# publish step (npm + GH release attachments are the only distribution
+# channels). Step keys (sign-{gpg,macos,windows} and gpg/macos/windows
+# for the dynamic download steps) are load-bearing — see
+# .buildkite/scripts/download-signed-artifacts.sh and create-github-release.sh.
+#
+# Triggered by tag push (v[0-9]+.[0-9]+.[0-9]+ etc — see catalog-info.yaml
+# filter_condition). The end of the pipeline creates a DRAFT GitHub
+# release; a maintainer reviews it and clicks Publish in the UI, which
+# fires .github/workflows/publish.yml to push the 13 npm packages.
+
+steps:
+  # Build (12 parallel — one per platform)
+  - label: ":package: :linux: ramen-linux-arm64"
+    command: ".buildkite/scripts/build-and-package.sh linux-arm64"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :linux: ramen-linux-arm64-musl"
+    command: ".buildkite/scripts/build-and-package.sh linux-arm64-musl"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :linux: ramen-linux-x64"
+    command: ".buildkite/scripts/build-and-package.sh linux-x64"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :linux: ramen-linux-x64-baseline"
+    command: ".buildkite/scripts/build-and-package.sh linux-x64-baseline"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :linux: ramen-linux-x64-musl"
+    command: ".buildkite/scripts/build-and-package.sh linux-x64-musl"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :linux: ramen-linux-x64-baseline-musl"
+    command: ".buildkite/scripts/build-and-package.sh linux-x64-baseline-musl"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :mac: ramen-darwin-arm64"
+    command: ".buildkite/scripts/build-and-package.sh darwin-arm64"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :mac: ramen-darwin-x64"
+    command: ".buildkite/scripts/build-and-package.sh darwin-x64"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :mac: ramen-darwin-x64-baseline"
+    command: ".buildkite/scripts/build-and-package.sh darwin-x64-baseline"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :windows: ramen-windows-arm64"
+    command: ".buildkite/scripts/build-and-package.sh windows-arm64"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :windows: ramen-windows-x64"
+    command: ".buildkite/scripts/build-and-package.sh windows-x64"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+  - label: ":package: :windows: ramen-windows-x64-baseline"
+    command: ".buildkite/scripts/build-and-package.sh windows-x64-baseline"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+
+  - wait: ~
+
+  # signtool needs a bare PE — extract elastic-ramen.exe from each
+  # ramen-windows-*.zip and re-upload as artifacts-to-sign/<base>.exe so
+  # the windows trigger step's DOWNLOAD_ARTIFACTS_FILTER='*.exe' picks it up.
+  - label: ":windows: Prep windows .exe for Authenticode"
+    command: ".buildkite/scripts/prepare-windows-exes.sh"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+
+  - wait: ~
+
+  - label: GPG Sign artifacts
+    trigger: unified-release-gpg-signing
+    # NOTE: If you change 'key: sign-gpg' then change the matching call to
+    # .buildkite/scripts/download-signed-artifacts.sh below.
+    key: sign-gpg
+    build:
+      env:
+        INPUT_PATH: buildkite://
+
+  - label: MacOS Sign artifacts
+    trigger: unified-release-macos-signing
+    key: sign-macos
+    build:
+      env:
+        INPUT_PATH: buildkite://
+
+  - label: Windows Sign artifacts
+    trigger: unified-release-windows-signing
+    key: sign-windows
+    build:
+      env:
+        DOWNLOAD_ARTIFACTS_FILTER: "*.exe"
+        INPUT_PATH: buildkite://
+
+  - wait: ~
+
+  # The order matters: gpg files first, windows next, macos last. The
+  # current BK pipeline helpers use opinionated folder names
+  # (artifacts-to-sign and signed-artifacts) so the macos step must
+  # run last to avoid clobbering the others' outputs in signed-artifacts/.
+  - label: Download signed artifacts (windows and gpg)
+    commands:
+      - .buildkite/scripts/download-signed-artifacts.sh "sign-gpg" "gpg"
+      - .buildkite/scripts/download-signed-artifacts.sh "sign-windows" "windows"
+      - .buildkite/scripts/download-signed-artifacts.sh "sign-gpg" "gpg" | buildkite-agent pipeline upload
+      - .buildkite/scripts/download-signed-artifacts.sh "sign-windows" "windows" | buildkite-agent pipeline upload
+
+  - wait: ~
+
+  - label: Download signed artifacts (macos)
+    commands:
+      - .buildkite/scripts/download-signed-artifacts.sh "sign-macos" "macos"
+      - .buildkite/scripts/download-signed-artifacts.sh "sign-macos" "macos" | buildkite-agent pipeline upload
+
+  - wait: ~
+
+  - label: ":github: Publish GitHub release (draft)"
+    commands:
+      - .buildkite/scripts/create-github-release.sh
+    # Step names ("gpg", "windows", "macos") are emitted by
+    # .buildkite/scripts/download-signed-artifacts.sh as the dynamic step keys.
+    depends_on:
+      - "gpg"
+      - "windows"
+      - "macos"
+
+notify:
+  - slack: "#elastic-ramen-releases"
+    if: 'build.state != "passed"'

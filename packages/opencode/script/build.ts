@@ -60,6 +60,12 @@ console.log(`Loaded ${migrations.length} migrations`)
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+// --target=<os>-<arch>[-baseline][-musl] limits the build to one platform
+// (e.g. --target=linux-arm64, --target=darwin-x64-baseline). Used by
+// .buildkite/scripts/build-and-package.sh so each BK build step builds
+// one platform; the matrix's `gh release upload` is gated off in
+// matrix mode (the GH release is created later by create-github-release.sh).
+const targetFlag = process.argv.find((a) => a.startsWith("--target="))?.slice("--target=".length)
 
 const allTargets: {
   os: string
@@ -124,6 +130,17 @@ const allTargets: {
   },
 ]
 
+function targetSuffix(item: (typeof allTargets)[number]): string {
+  return [
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+}
+
 const targets = singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
@@ -143,7 +160,13 @@ const targets = singleFlag
 
       return true
     })
-  : allTargets
+  : targetFlag
+    ? allTargets.filter((item) => targetSuffix(item) === targetFlag)
+    : allTargets
+
+if (targetFlag && targets.length === 0) {
+  throw new Error(`--target=${targetFlag} did not match any known platform`)
+}
 
 await $`rm -rf dist`
 
@@ -337,7 +360,14 @@ if (Script.release) {
       await $`zip -r ../../${dirName}.zip ${files}`.cwd(binDir)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  // Matrix mode (--target=…): the BK build step uploads the archive
+  // via `buildkite-agent artifact upload`; the GH release is created
+  // later by .buildkite/scripts/create-github-release.sh, so don't try
+  // to upload here (the release doesn't exist yet at this point in the
+  // pipeline).
+  if (!targetFlag) {
+    await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  }
 }
 
 export { binaries }

@@ -6,11 +6,11 @@
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  name: buildkite-pipeline-elastic-ramen-sign
-  description: Buildkite pipeline that signs Elastic RAMEN release artifacts via unified-release-{gpg,macos,windows}-signing.
+  name: buildkite-pipeline-elastic-ramen-release
+  description: Buildkite pipeline that builds, signs, and creates a draft GitHub release for Elastic RAMEN.
   links:
     - title: Pipeline
-      url: https://buildkite.com/elastic/elastic-ramen-sign
+      url: https://buildkite.com/elastic/elastic-ramen-release
 spec:
   type: buildkite-pipeline
   owner: group:obs-elastic-brain-team
@@ -19,18 +19,21 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elastic-ramen-sign
-      description: Signs elastic-ramen release artifacts.
+      name: elastic-ramen-release
+      description: Builds, signs, and creates a draft GitHub release for elastic-ramen.
     spec:
       repository: elastic/elastic-ramen
-      pipeline_file: ".buildkite/sign.yml"
-      # Triggered by elastic/oblt-actions/buildkite/run from
-      # .github/workflows/release-ramen.yml. Disable native git triggers
-      # so PRs and tags don't accidentally fire the signing pipeline.
+      pipeline_file: ".buildkite/release.yml"
+      # Mirror of elastic/synthetics-recorder: tag-only trigger.
+      # Pattern allows v0.0.7-test-rel-style tags so we can iterate on
+      # the pipeline before cutting a real release.
       provider_settings:
         build_branches: false
         build_pull_requests: false
-        build_tags: false
+        build_tags: true
+        filter_enabled: true
+        filter_condition: |
+          build.tag =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.-]+)?$/
       cancel_intermediate_builds: false
       skip_intermediate_builds: false
       teams:
