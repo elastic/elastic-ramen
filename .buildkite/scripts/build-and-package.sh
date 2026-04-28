@@ -21,10 +21,7 @@
 
 set -euxo pipefail
 
-# The vault-github-token plugin only exports GITHUB_TOKEN; mirror to GH_TOKEN
-# so callers that follow the gh CLI convention work too.
-GH_TOKEN="${GITHUB_TOKEN:?GITHUB_TOKEN must be set by the elastic/vault-github-token plugin}"
-export GH_TOKEN
+: "${GITHUB_TOKEN:?GITHUB_TOKEN must be set by the elastic/vault-github-token plugin}"
 
 TAG="${BUILDKITE_TAG:-}"
 if [[ -z "$TAG" ]]; then
@@ -57,7 +54,7 @@ CLI_REF="b056a344e6b9b27e09bb2b6270be2e6b8c5bf2fc"
 CLI_DIR="${ROOT}/cli"
 if [[ ! -d "$CLI_DIR" ]]; then
   echo "--- Checkout elastic/cli @ ${CLI_REF}"
-  git clone --depth 1 --no-checkout "https://${GH_TOKEN}@github.com/elastic/cli.git" "$CLI_DIR"
+  git clone --depth 1 --no-checkout "https://x-access-token:${GITHUB_TOKEN}@github.com/elastic/cli.git" "$CLI_DIR"
   ( cd "$CLI_DIR" && git fetch --depth 1 origin "$CLI_REF" && git checkout FETCH_HEAD )
 fi
 

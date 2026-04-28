@@ -36,12 +36,42 @@ ls -ltra "$DIST_LOCATION/"
 buildkite-agent artifact download --step macos "$DIST_LOCATION/*.*" ./
 ls -ltra "$DIST_LOCATION/"
 
-# Pull the original unsigned windows zips so we can lift NOTICE/LICENSE.
+# Pull the original unsigned linux/windows archives so we can lift
+# NOTICE/LICENSE for repackaging.
+buildkite-agent artifact download "artifacts-to-sign/ramen-linux-*.tar.gz" .
 buildkite-agent artifact download "artifacts-to-sign/ramen-windows-*.zip" .
+
+echo "--- Repackage Linux tarballs with signed binary + .asc"
+WORK_LIN_OUT=$(mktemp -d)
+shopt -s nullglob
+for signed_bin in "$DIST_LOCATION"/ramen-linux-*-elastic-ramen; do
+  base=$(basename "$signed_bin" -elastic-ramen)
+  signed_asc="${signed_bin}.asc"
+  if [[ ! -f "$signed_asc" ]]; then
+    echo "ERROR: missing detached signature $signed_asc" >&2
+    exit 1
+  fi
+  unsigned_tar="artifacts-to-sign/${base}.tar.gz"
+  if [[ ! -f "$unsigned_tar" ]]; then
+    echo "ERROR: missing original tarball $unsigned_tar" >&2
+    exit 1
+  fi
+  staging=$(mktemp -d)
+  tar -xzf "$unsigned_tar" -C "$staging"
+  # build.ts archives at the archive root (cwd(binDir)) — same convention
+  # as windows zips.
+  cp "$signed_bin" "$staging/elastic-ramen"
+  cp "$signed_asc" "$staging/elastic-ramen.asc"
+  ( cd "$staging" && tar -czf "${WORK_LIN_OUT}/${base}.tar.gz" . )
+  rm -rf "$staging"
+done
+# Replace bare binaries + .asc in DIST_LOCATION with the re-tar'd archives.
+rm -f "$DIST_LOCATION"/ramen-linux-*-elastic-ramen "$DIST_LOCATION"/ramen-linux-*-elastic-ramen.asc
+mv "$WORK_LIN_OUT"/*.tar.gz "$DIST_LOCATION"/
+rmdir "$WORK_LIN_OUT"
 
 echo "--- Repackage Windows zips with signed .exe"
 WORK_WIN_OUT=$(mktemp -d)
-shopt -s nullglob
 for signed_exe in "$DIST_LOCATION"/ramen-windows-*.exe; do
   base=$(basename "$signed_exe" .exe)
   unsigned_zip="artifacts-to-sign/${base}.zip"

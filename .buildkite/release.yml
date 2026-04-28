@@ -41,6 +41,14 @@ steps:
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
 
+  # GPG signs the bare elastic-ramen binary (matching what we do for
+  # darwin/windows) rather than the wrapper .tar.gz; create-github-release.sh
+  # bundles the resulting .asc back into the tarball alongside the binary.
+  - label: ":linux: Prep linux binaries for GPG signing"
+    command: ".buildkite/scripts/prepare-linux-bins.sh"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential
+
   - wait: ~
 
   - label: GPG Sign artifacts
@@ -50,6 +58,7 @@ steps:
     key: sign-gpg
     build:
       env:
+        DOWNLOAD_ARTIFACTS_FILTER: "ramen-linux-*-elastic-ramen"
         INPUT_PATH: buildkite://
 
   - label: MacOS Sign artifacts

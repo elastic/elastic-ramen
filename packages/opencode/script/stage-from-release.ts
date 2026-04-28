@@ -31,7 +31,7 @@ await $`rm -rf dist`
 await $`mkdir -p dist/_archives`
 
 console.log(`Downloading signed assets for v${version}`)
-await $`gh release download v${version} --repo ${repo} --pattern '*.tar.gz' --pattern '*.zip' --pattern '*.tar.gz.asc' --pattern '*.sha512' --dir dist/_archives`
+await $`gh release download v${version} --repo ${repo} --pattern '*.tar.gz' --pattern '*.zip' --pattern '*.sha512' --dir dist/_archives`
 
 const downloaded = fs.readdirSync("dist/_archives")
 if (downloaded.length === 0) {
@@ -45,27 +45,17 @@ if (sha512Files.length > 0) {
   await $`bash -c 'cd dist/_archives && sha512sum --check *.sha512'`
 }
 
-const ascFiles = downloaded.filter((f) => f.endsWith(".tar.gz.asc"))
-if (ascFiles.length > 0) {
-  // Import the Elastic release public key so gpg --verify trusts the .asc files.
-  // Same key used by all elastic.co Linux packages.
-  console.log("Importing Elastic release GPG public key")
-  await $`bash -c 'curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --import'`
-
-  for (const asc of ascFiles) {
-    const tarball = asc.replace(/\.asc$/, "")
-    if (!downloaded.includes(tarball)) {
-      throw new Error(`missing tarball for ${asc}`)
-    }
-    console.log(`gpg --verify ${asc}`)
-    await $`gpg --verify dist/_archives/${asc} dist/_archives/${tarball}`
-  }
-}
+// The .asc detached signatures live INSIDE the linux tarballs (signed
+// by unified-release-gpg-signing against the bare elastic-ramen
+// binary, alongside NOTICE/LICENSE). Import the Elastic release public
+// key so `gpg --verify` post-extraction trusts them.
+console.log("Importing Elastic release GPG public key")
+await $`bash -c 'curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --import'`
 
 // Lay out dist/<basename>/bin/ from each archive so publish.ts can
 // `bun pm pack`. build.ts archives are made with `cwd(binDir)`, so
-// archive entries are at root (elastic-ramen, NOTICE, LICENSE) — extract
-// straight into bin/ to restore the original layout.
+// archive entries are at root (elastic-ramen, NOTICE, LICENSE, .asc)
+// — extract straight into bin/ to restore the original layout.
 const archives = downloaded.filter((f) => f.endsWith(".tar.gz") || f.endsWith(".zip"))
 for (const archive of archives) {
   const basename = archive.replace(/\.(tar\.gz|zip)$/, "")
@@ -81,6 +71,16 @@ for (const archive of archives) {
   const expectedBin = basename.includes("windows") ? "elastic-ramen.exe" : "elastic-ramen"
   if (!fs.existsSync(path.join(binDir, expectedBin))) {
     throw new Error(`extracted ${archive} but ${binDir}/${expectedBin} is missing`)
+  }
+
+  // For linux: verify the GPG detached signature against the bare binary.
+  const ascPath = path.join(binDir, `${expectedBin}.asc`)
+  if (basename.startsWith("ramen-linux-")) {
+    if (!fs.existsSync(ascPath)) {
+      throw new Error(`missing GPG signature ${ascPath} inside ${archive}`)
+    }
+    console.log(`gpg --verify ${binDir}/${expectedBin}.asc`)
+    await $`gpg --verify ${ascPath} ${path.join(binDir, expectedBin)}`
   }
 
   const npmOs = basename.includes("windows")

@@ -33,22 +33,21 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-
       # Token Policy:  https://github.com/elastic/catalog-info/tree/main/resources/github-token-policies/token-policy-elastic-ramen-release-ramen.yaml
       - uses: elastic/oblt-actions/github/create-token@v1
         id: fetch-token
         with:
           token-policy: token-policy-909fc0514fde
 
-      - name: Configure git identity
-        run: |
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
+      - uses: actions/checkout@v6
+        with:
+          # Persist this token for subsequent `git push`. Avoids the
+          # `git remote set-url` URL-rewriting workaround.
+          token: ${{ steps.fetch-token.outputs.token }}
+
+      - uses: elastic/oblt-actions/git/setup@v1
 
       - name: Refuse if tag already exists
-        env:
-          GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
         run: |
           if git ls-remote --tags origin "v${{ inputs.version }}" | grep -q .; then
             echo "ERROR: tag v${{ inputs.version }} already exists on origin." >&2
@@ -56,11 +55,7 @@ jobs:
           fi
 
       - name: Create + push tag (fires Buildkite via Backstage tag trigger)
-        env:
-          GITHUB_TOKEN: ${{ steps.fetch-token.outputs.token }}
         run: |
-          # Re-point origin's URL to embed the ephemeral token so push works.
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git tag "v${{ inputs.version }}"
           git push origin "v${{ inputs.version }}"
 
