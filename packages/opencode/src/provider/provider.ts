@@ -577,10 +577,26 @@ export namespace Provider {
       }
     },
     "cloudflare-ai-gateway": async (input) => {
+      // When baseURL is already configured (e.g. corporate config), skip the ID checks.
+      if (input.options?.baseURL) return { autoload: false }
+
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
 
-      if (!accountId || !gateway) return { autoload: false }
+      if (!accountId || !gateway) {
+        const missing = [
+          !accountId ? "CLOUDFLARE_ACCOUNT_ID" : undefined,
+          !gateway ? "CLOUDFLARE_GATEWAY_ID" : undefined,
+        ].filter((x): x is string => Boolean(x))
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              `${missing.join(" and ")} missing. Set with: ${missing.map((x) => `export ${x}=<value>`).join(" && ")}`,
+            )
+          },
+        }
+      }
 
       // Get API token from env or auth - required for authenticated gateways
       const apiToken = await (async () => {
