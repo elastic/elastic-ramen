@@ -17,6 +17,7 @@ import { $ } from "bun"
 import path from "path"
 import fs from "fs"
 import { fileURLToPath } from "url"
+import pkg from "../package.json"
 
 const dir = path.dirname(fileURLToPath(import.meta.url + "/.."))
 process.chdir(dir)
@@ -97,6 +98,8 @@ for (const archive of archives) {
         version,
         os: [npmOs],
         cpu: [cpu],
+        repository: pkg.repository,
+        license: pkg.license,
       },
       null,
       2,
