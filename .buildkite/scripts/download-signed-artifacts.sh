@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Copyright (c) 2026-present, Elastic NV
 #
 # Strict mirror of
@@ -31,7 +32,7 @@ if [ -z "$BUILDKITE_TOKEN_SECRET" ] ; then
 fi
 
 BUILDS_URL="https://api.buildkite.com/v2/organizations/elastic/pipelines/$BUILDKITE_PIPELINE_SLUG/builds"
-build_json=$(curl -sH "Authorization: Bearer $BUILDKITE_TOKEN_SECRET" "$BUILDS_URL/$BUILDKITE_BUILD_NUMBER")
+build_json=$(curl -sfH "Authorization: Bearer $BUILDKITE_TOKEN_SECRET" "$BUILDS_URL/$BUILDKITE_BUILD_NUMBER")
 SIGN_BUILD_ID=$(jq -r ".jobs[] | select(.step_key == \"$STEP\").triggered_build.id" <<< "$build_json")
 
 if [ -z "$SIGN_BUILD_ID" ] || [ "$SIGN_BUILD_ID" = "null" ] ; then
