@@ -44,7 +44,14 @@ fi
 if ! command -v go >/dev/null; then
   GO_VERSION="1.23.4"
   curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz
-  sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+  if [[ "$(id -u)" -eq 0 ]]; then
+    tar -C /usr/local -xzf /tmp/go.tar.gz
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+  else
+    echo "Go installation requires root privileges or sudo to extract into /usr/local" >&2
+    exit 1
+  fi
   export PATH="/usr/local/go/bin:$PATH"
 fi
 
