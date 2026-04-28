@@ -1,0 +1,23 @@
+name: PR Review Fork
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  run:
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.fork == true &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-auto-pr-review')
+    uses: elastic/ai-github-actions/.github/workflows/gh-aw-pr-review.lock.yml@v0
+    secrets:
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+    with:
+      additional-instructions: |
+        Do not mark a PR as 'request changes' or 'approve', only ever mark it as 'comment'
