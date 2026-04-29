@@ -500,7 +500,7 @@ function App() {
             setEsReady(true)
           }}
         />
-      ))
+      ), undefined, false)
       return
     }
     const url = status.context?.elasticsearch_url
