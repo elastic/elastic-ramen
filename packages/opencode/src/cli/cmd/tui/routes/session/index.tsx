@@ -1346,6 +1346,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const modelLabel = createMemo(() => {
+    const model = sync.data.provider.find((x) => x.id === props.message.providerID)?.models[props.message.modelID]
+    return model?.name ?? props.message.modelID
+  })
+
   const keybind = useKeybind()
 
   return (
@@ -1402,7 +1407,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <span style={{ fg: theme.textMuted }}> · {modelLabel()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>

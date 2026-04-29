@@ -108,7 +108,12 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     if (kibUrl) {
       input.kibana_url = kibUrl
       input.auth_mode = "kibana"
-      input.provider = await KibanaGateway.buildProvider(kibUrl, key)
+      try {
+        input.provider = await KibanaGateway.buildProvider(kibUrl, key)
+      } catch (e) {
+        setError("Could not reach Kibana to load connectors: " + (e as Error).message)
+        return
+      }
       input.model = "kibana/default"
     }
 
@@ -159,18 +164,25 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       if (effectiveKb) input.kibana_url = effectiveKb
       // Always construct provider ourselves to ensure correct baseURL and headers
       if (effectiveKb && key) {
-        input.provider = await KibanaGateway.buildProvider(effectiveKb, key)
+        try {
+          input.provider = await KibanaGateway.buildProvider(effectiveKb, key)
+        } catch (e) {
+          setError("Could not reach Kibana to load connectors: " + (e as Error).message)
+          return
+        }
       }
       if (parsed.model && typeof parsed.model === "string") input.model = parsed.model
       else if (input.provider) input.model = "kibana/default"
       await save(input)
+    }).catch((e: Error) => {
+      setError("Setup failed: " + e.message)
     })
   }
 
   useKeyboard((evt) => {
     if (evt.name === "return" && (evt.ctrl || evt.meta)) {
       if (mode() === "manual-json") {
-        void submitManual()
+        submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
       } else if (mode() === "kibana-url") {
         submitKibanaUrl()
       }

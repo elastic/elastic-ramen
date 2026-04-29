@@ -154,4 +154,26 @@ describe("KibanaGateway", () => {
       server.stop(true)
     }
   })
+
+  test("refreshKibanaProviderModels keeps models when fetch throws (unreachable host)", async () => {
+    // 127.0.0.1:1 is reliably closed, so fetch() rejects rather than returning a non-OK response.
+    const base = "http://127.0.0.1:1"
+    const provider = {
+      options: {
+        baseURL: `${base}/internal/elastic_ramen/v1`,
+        headers: { Authorization: "ApiKey x" },
+      },
+      models: { default: { id: "default", api: { id: "default", npm: "@ai-sdk/openai-compatible" } } },
+    }
+    await KibanaGateway.refreshKibanaProviderModels(provider)
+    expect(Object.keys(provider.models)).toEqual(["default"])
+  })
+
+  test("tryFetchConnectors returns undefined when fetch throws", async () => {
+    expect(await KibanaGateway.tryFetchConnectors("http://127.0.0.1:1", "k")).toBeUndefined()
+  })
+
+  test("tryFetchAgentBuilderDefaultConnectorId returns undefined when fetch throws", async () => {
+    expect(await KibanaGateway.tryFetchAgentBuilderDefaultConnectorId("http://127.0.0.1:1", "k")).toBeUndefined()
+  })
 })
