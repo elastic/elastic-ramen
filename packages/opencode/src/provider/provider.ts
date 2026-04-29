@@ -47,6 +47,7 @@ import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
+import { KibanaGateway } from "../elastic/kibana-gateway"
 import { Installation } from "../installation"
 
 const DEFAULT_CHUNK_TIMEOUT = 120_000
@@ -1067,6 +1068,10 @@ export namespace Provider {
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
+    }
+
+    if (providers.kibana) {
+      await KibanaGateway.refreshKibanaProviderModels(providers.kibana)
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
