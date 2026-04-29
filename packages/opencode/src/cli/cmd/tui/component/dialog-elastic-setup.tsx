@@ -180,7 +180,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   }
 
   useKeyboard((evt) => {
-    if (evt.name === "return" && (evt.ctrl || evt.meta)) {
+    if (evt.name === "return") {
       if (mode() === "manual-json") {
         submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
       } else if (mode() === "kibana-url") {
@@ -232,7 +232,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
         <box paddingBottom={1}>
           <text fg={theme.text}>
-            ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+            enter <span style={{ fg: theme.textMuted }}>connect</span>
           </text>
         </box>
 
@@ -308,7 +308,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         <box paddingBottom={1}>
           <Show when={!saving()} fallback={<text fg={theme.textMuted}>connecting...</text>}>
             <text fg={theme.text}>
-              ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+              enter <span style={{ fg: theme.textMuted }}>connect</span>
             </text>
           </Show>
         </box>
