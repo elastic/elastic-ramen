@@ -2,6 +2,7 @@
 import path from "path"
 import os from "os"
 import { Filesystem } from "@/util/filesystem"
+import { kibanaProvider } from "./kibana-provider"
 
 export namespace ElasticAuth {
   export interface Context {
@@ -29,6 +30,15 @@ export namespace ElasticAuth {
     auth_mode?: string
     provider?: Record<string, unknown>
     model?: string
+    /** Profile name (YAML context key). Default `default`. */
+    context?: string
+    /** If true (default), make this profile active after save. */
+    activate?: boolean
+  }
+
+  export interface ProfileList {
+    names: string[]
+    current: string
   }
 
   /** Same directory as the elastic Go CLI: filepath.Join(os.UserConfigDir(), "elastic") */
@@ -124,6 +134,39 @@ export namespace ElasticAuth {
     return lines.join("\n")
   }
 
+  function canon(raw: string | undefined): string {
+    const t = (raw ?? "").trim()
+    if (!t) return "default"
+    if (!/^[a-zA-Z0-9_-]+$/.test(t)) {
+      throw new Error("Profile name may only contain letters, digits, hyphen, and underscore")
+    }
+    return t
+  }
+
+  async function readRaw(): Promise<{ current: string; contexts: Record<string, Context> } | undefined> {
+    const fp = filepath()
+    if (!(await Filesystem.exists(fp))) return undefined
+    const raw = await Bun.file(fp).text().catch(() => "")
+    if (!raw.trim()) return undefined
+    const cfg = parseYaml(raw)
+    const cur = cfg["current-context"]
+    const bag = cfg.contexts
+    if (!cur || !bag || typeof bag !== "object") return undefined
+    const contexts: Record<string, Context> = {}
+    for (const [k, v] of Object.entries(bag)) {
+      if (v && typeof v === "object") contexts[k] = { ...(v as Context) }
+    }
+    if (Object.keys(contexts).length === 0) return undefined
+    return { current: String(cur), contexts }
+  }
+
+  export async function profiles(): Promise<ProfileList> {
+    const raw = await readRaw()
+    if (!raw) return { names: [], current: "default" }
+    const names = Object.keys(raw.contexts).toSorted()
+    return { names, current: raw.current }
+  }
+
   export async function check(): Promise<Status> {
     const fp = filepath()
     if (!(await Filesystem.exists(fp))) return { configured: false, missing: ["config file"] }
@@ -155,7 +198,7 @@ export namespace ElasticAuth {
     return { configured: true, name, context: ctx }
   }
 
-  async function configJson(): Promise<string | undefined> {
+  async function configJsonPath(): Promise<string | undefined> {
     const cwd = process.cwd()
     for (const name of ["elastic_ramen.json", "elastic_ramen.jsonc"]) {
       const fp = path.join(cwd, name)
@@ -164,11 +207,103 @@ export namespace ElasticAuth {
     return undefined
   }
 
+  function ensureEab(json: Record<string, unknown>) {
+    if (!json.mcp) json.mcp = {}
+    const m = json.mcp as Record<string, unknown>
+    if (!m["eab"]) {
+      m["eab"] = {
+        type: "local",
+        command: ["elastic", "ab", "mcp", "proxy"],
+        enabled: true,
+      }
+    }
+    if (!json.permission) json.permission = {}
+    const p = json.permission as Record<string, unknown>
+    if (!p["eab_*"]) p["eab_*"] = "allow"
+  }
+
+  async function clearOverrides() {
+    for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
+      const override = path.join(process.cwd(), ".opencode", name)
+      if (await Filesystem.exists(override)) {
+        const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
+        if (overrideJson && (overrideJson.provider || overrideJson.model)) {
+          delete overrideJson.provider
+          delete overrideJson.model
+          await Filesystem.writeJson(override, overrideJson)
+        }
+      }
+    }
+  }
+
+  /** Rewrite project `elastic_ramen` provider + model from the active YAML context (after profile switch). */
+  export async function applyProjectProvider() {
+    const status = await check()
+    if (!status.configured || !status.context) return
+    const kb = status.context.kibana_url
+    const key = status.context.api_key
+    if (!kb || !key) return
+
+    const provider = kibanaProvider(kb, key)
+    let cfg = await configJsonPath()
+    if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
+    const json = (await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))) as Record<string, unknown>
+    json.provider = provider
+    const m = json.model
+    if (typeof m !== "string" || !m.startsWith("kibana/")) json.model = "kibana/default"
+    ensureEab(json)
+    await Filesystem.writeJson(cfg, json)
+    await clearOverrides()
+  }
+
+  export async function setCurrent(name: string) {
+    const key = canon(name)
+    const raw = await readRaw()
+    if (!raw || !raw.contexts[key]) throw new Error(`Unknown profile "${key}"`)
+
+    const fp = filepath()
+    await Bun.write(fp, toYaml({ current: key, contexts: raw.contexts }), { mode: 0o600 } as any)
+    await applyProjectProvider()
+  }
+
+  export async function removeContext(name: string) {
+    const key = canon(name)
+    const raw = await readRaw()
+    if (!raw || !raw.contexts[key]) return
+    const keys = Object.keys(raw.contexts)
+    if (keys.length <= 1) throw new Error("Cannot remove the only profile")
+
+    const next = { ...raw.contexts }
+    delete next[key]
+
+    let current = raw.current
+    if (current === key) {
+      const rest = keys.filter((k) => k !== key).toSorted()
+      current = rest[0]!
+    }
+
+    const fp = filepath()
+    await Bun.write(fp, toYaml({ current, contexts: next }), { mode: 0o600 } as any)
+    await applyProjectProvider()
+  }
+
+  async function writeElasticRamenFromSave(input: SaveInput) {
+    if (!input.provider) return
+    let cfg = await configJsonPath()
+    if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
+    const json = (await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))) as Record<string, unknown>
+    json.provider = input.provider
+    if (input.model) json.model = input.model
+    ensureEab(json)
+    await Filesystem.writeJson(cfg, json)
+    await clearOverrides()
+  }
+
   export async function reset() {
     const { unlink } = await import("fs/promises")
     await unlink(filepath()).catch(() => {})
 
-    const cfg = await configJson()
+    const cfg = await configJsonPath()
     if (cfg) {
       const json = await Filesystem.readJson(cfg).catch(() => ({}))
       delete json.provider
@@ -185,6 +320,9 @@ export namespace ElasticAuth {
     const { mkdir } = await import("fs/promises")
     await mkdir(d, { recursive: true, mode: 0o700 })
 
+    const name = canon(input.context)
+    const activate = input.activate !== false
+
     const ctx: Context = {}
     if (input.cloud_id) ctx.cloud_id = input.cloud_id
     if (input.elasticsearch_url) ctx.elasticsearch_url = input.elasticsearch_url
@@ -192,46 +330,22 @@ export namespace ElasticAuth {
     if (input.api_key) ctx.api_key = input.api_key
     if (input.auth_mode) ctx.auth_mode = input.auth_mode
 
-    const yaml = toYaml({ current: "default", contexts: { default: ctx } })
+    let merged: Record<string, Context> = {}
+    let priorCurrent = name
+    const existing = await readRaw()
+    if (existing) {
+      merged = { ...existing.contexts }
+      priorCurrent = existing.current
+      const prev = merged[name] ?? {}
+      merged[name] = { ...prev, ...ctx }
+    } else {
+      merged[name] = ctx
+    }
+
+    const current = activate ? name : priorCurrent
+    const yaml = toYaml({ current, contexts: merged })
     await Bun.write(fp, yaml, { mode: 0o600 } as any)
 
-    if (input.provider) {
-      let cfg = await configJson()
-      if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
-      const json = await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))
-      json.provider = input.provider
-      if (input.model) json.model = input.model
-
-      // Ensure MCP config for eab is present
-      if (!json.mcp) json.mcp = {}
-      if (!json.mcp["eab"]) {
-        json.mcp["eab"] = {
-          type: "local",
-          command: ["elastic", "ab", "mcp", "proxy"],
-          enabled: true,
-        }
-      }
-      // Auto-allow MCP tools
-      if (!json.permission) json.permission = {}
-      if (!json.permission["eab_*"]) {
-        json.permission["eab_*"] = "allow"
-      }
-
-      await Filesystem.writeJson(cfg, json)
-
-      // Also clear provider/model overrides from .opencode/opencode.jsonc so they don't
-      // take precedence over the project-level config we just wrote
-      for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
-        const override = path.join(process.cwd(), ".opencode", name)
-        if (await Filesystem.exists(override)) {
-          const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
-          if (overrideJson && (overrideJson.provider || overrideJson.model)) {
-            delete overrideJson.provider
-            delete overrideJson.model
-            await Filesystem.writeJson(override, overrideJson)
-          }
-        }
-      }
-    }
+    await writeElasticRamenFromSave(input)
   }
 }

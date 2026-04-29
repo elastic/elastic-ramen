@@ -10,42 +10,8 @@ import { Link } from "@tui/ui/link"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
+import { kibanaProvider, profileNameFromSetup } from "@/elastic/kibana-provider"
 import { Process } from "@/util/process"
-
-function buildProvider(kibanaUrl: string, apiKey: string) {
-  const baseURL = kibanaUrl.replace(/\/+$/, "") + "/internal/elastic_ramen/v1"
-  return {
-    kibana: {
-      name: "Kibana LLM Gateway",
-      id: "kibana",
-      npm: "@ai-sdk/openai-compatible",
-      env: [],
-      models: {
-        default: {
-          id: "default",
-          name: "Default Connector",
-          attachment: false,
-          reasoning: false,
-          temperature: true,
-          tool_call: true,
-          release_date: "2025-01-01",
-          cost: { input: 0, output: 0 },
-          limit: { context: 128000, output: 8192 },
-        },
-      },
-      options: {
-        baseURL,
-        apiKey: "ignored",
-        headers: {
-          Authorization: `ApiKey ${apiKey}`,
-          "kbn-xsrf": "true",
-          "x-elastic-internal-origin": "kibana",
-          "elastic-api-version": "2023-10-31",
-        },
-      },
-    },
-  }
-}
 
 export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void }) {
   const dialog = useDialog()
@@ -84,7 +50,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     setSaving(true)
     setError("")
 
-    await ElasticAuth.save(input).catch((e: Error) => {
+    const ctx = profileNameFromSetup(input.kibana_url, input.elasticsearch_url)
+    await ElasticAuth.save({ ...input, context: ctx }).catch((e: Error) => {
       setError("Failed to save config: " + e.message)
       setSaving(false)
     })
@@ -142,7 +109,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     if (kibUrl) {
       input.kibana_url = kibUrl
       input.auth_mode = "kibana"
-      input.provider = buildProvider(kibUrl, key)
+      input.provider = kibanaProvider(kibUrl, key)
       input.model = "kibana/default"
     }
 
@@ -193,7 +160,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       if (effectiveKb) input.kibana_url = effectiveKb
       // Always construct provider ourselves to ensure correct baseURL and headers
       if (effectiveKb && key) {
-        input.provider = buildProvider(effectiveKb, key)
+        input.provider = kibanaProvider(effectiveKb, key)
       }
       if (parsed.model && typeof parsed.model === "string") input.model = parsed.model
       else if (input.provider) input.model = "kibana/default"

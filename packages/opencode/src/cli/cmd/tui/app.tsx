@@ -50,7 +50,9 @@ import { Handover } from "@/elastic/handover"
 import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
+import { DialogKibanaContext } from "@tui/component/dialog-kibana-context"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
+import { ElasticProfileProvider, useElasticProfile } from "@tui/context/elastic-profile"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -169,7 +171,9 @@ export function tui(input: {
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
                                               <AlertsProvider>
-                                                <App />
+                                                <ElasticProfileProvider>
+                                                  <App />
+                                                </ElasticProfileProvider>
                                               </AlertsProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
@@ -359,10 +363,15 @@ function App() {
 
   // Alert polling for connected Kibana instance
   const alertsCtx = useAlerts()
+  const elasticProfile = useElasticProfile()
   let alertPoller: ReturnType<typeof ElasticAlerts.poller> | undefined
 
-  function startAlerts(url: string, key: string) {
-    if (alertPoller) return
+  const [esReady, setEsReady] = createSignal(false)
+
+  function restartAlerts(url: string, key: string) {
+    alertPoller?.stop()
+    alertPoller = undefined
+    alertsCtx.set([])
     alertPoller = ElasticAlerts.poller(url, key)
       .on((fresh, all) => {
         alertsCtx.set(all)
@@ -385,7 +394,44 @@ function App() {
       .start()
   }
 
-  const [esReady, setEsReady] = createSignal(false)
+  async function reloadKibanaIntegration(opts?: { resetSession?: boolean }) {
+    await sdk.client.instance.dispose().catch(() => {})
+    await sync.bootstrap()
+    try {
+      toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
+      await sdk.client.mcp.connect({ name: "eab" })
+      const fresh = await sdk.client.mcp.status()
+      if (fresh.data) {
+        sync.set("mcp", fresh.data)
+        const mcpStatus = fresh.data["eab"]
+        if (mcpStatus?.status === "connected") {
+          toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
+        } else {
+          toast.show({
+            variant: "error",
+            message: `MCP server eab status: ${mcpStatus?.status ?? "unknown"}${"error" in (mcpStatus ?? {}) ? ` - ${(mcpStatus as any).error}` : ""}`,
+            duration: 8000,
+          })
+        }
+      }
+    } catch (err) {
+      toast.show({
+        variant: "error",
+        message: `MCP connect failed: ${err instanceof Error ? err.message : String(err)}`,
+        duration: 8000,
+      })
+    }
+    const creds = await ElasticAlerts.resolve()
+    if (creds) restartAlerts(creds.url, creds.key)
+    else {
+      alertPoller?.stop()
+      alertPoller = undefined
+      alertsCtx.set([])
+    }
+    await elasticProfile.refresh()
+    setEsReady(true)
+    if (opts?.resetSession) route.navigate({ type: "home" })
+  }
   function buildRounds(sessionID: string): ConversationRound[] {
     const msgs = sync.data.message[sessionID] ?? []
     const result: ConversationRound[] = []
@@ -471,32 +517,7 @@ function App() {
           kibanaBase={args.kibanaBase}
           onComplete={async () => {
             dialog.clear()
-
-            // Dispose the server-side instance so it re-reads config files
-            await sdk.client.instance.dispose().catch(() => {})
-
-            // Re-bootstrap to pick up the new provider config written during auth
-            await sync.bootstrap()
-
-            try {
-              toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
-              await sdk.client.mcp.connect({ name: "eab" })
-              const fresh = await sdk.client.mcp.status()
-              if (fresh.data) {
-                sync.set("mcp", fresh.data)
-                const mcpStatus = fresh.data["eab"]
-                if (mcpStatus?.status === "connected") {
-                  toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
-                } else {
-                  toast.show({ variant: "error", message: `MCP server eab status: ${mcpStatus?.status ?? "unknown"}${"error" in (mcpStatus ?? {}) ? ` - ${(mcpStatus as any).error}` : ""}`, duration: 8000 })
-                }
-              }
-            } catch (err) {
-              toast.show({ variant: "error", message: `MCP connect failed: ${err instanceof Error ? err.message : String(err)}`, duration: 8000 })
-            }
-            const creds = await ElasticAlerts.resolve()
-            if (creds) startAlerts(creds.url, creds.key)
-            setEsReady(true)
+            await reloadKibanaIntegration()
           }}
         />
       ))
@@ -504,7 +525,7 @@ function App() {
     }
     const url = status.context?.elasticsearch_url
     const key = status.context?.api_key
-    if (url && key) startAlerts(url, key)
+    if (url && key) restartAlerts(url, key)
     if (url && key) setEsReady(true)
   })
 
@@ -519,23 +540,7 @@ function App() {
             kibanaBase={args.kibanaBase}
             onComplete={async () => {
               dialog.clear()
-              await sdk.client.instance.dispose().catch(() => {})
-              await sync.bootstrap()
-              try {
-                toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
-                await sdk.client.mcp.connect({ name: "eab" })
-                const fresh = await sdk.client.mcp.status()
-                if (fresh.data) {
-                  sync.set("mcp", fresh.data)
-                  const mcpStatus = fresh.data["eab"]
-                  if (mcpStatus?.status === "connected") {
-                    toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
-                  }
-                }
-              } catch {}
-              const creds = await ElasticAlerts.resolve()
-              if (creds) startAlerts(creds.url, creds.key)
-              setEsReady(true)
+              await reloadKibanaIntegration()
             }}
           />
         ))
@@ -718,6 +723,19 @@ function App() {
       },
     },
     {
+      title: "Switch Kibana profile",
+      value: "kibana.profiles",
+      category: "Provider",
+      suggested: true,
+      slash: {
+        name: "profiles",
+        aliases: ["kibana-profiles", "contexts"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogKibanaContext onReload={reloadKibanaIntegration} />)
+      },
+    },
+    {
       title: "Connect to Kibana",
       value: "kibana.connect",
       suggested: !connected(),
@@ -731,23 +749,7 @@ function App() {
             kibanaBase={args.kibanaBase}
             onComplete={async () => {
               dialog.clear()
-              await sdk.client.instance.dispose().catch(() => {})
-              await sync.bootstrap()
-              try {
-                toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
-                await sdk.client.mcp.connect({ name: "eab" })
-                const fresh = await sdk.client.mcp.status()
-                if (fresh.data) {
-                  sync.set("mcp", fresh.data)
-                  const mcpStatus = fresh.data["eab"]
-                  if (mcpStatus?.status === "connected") {
-                    toast.show({ variant: "success", message: "MCP server eab connected", duration: 3000 })
-                  }
-                }
-              } catch {}
-              const creds = await ElasticAlerts.resolve()
-              if (creds) startAlerts(creds.url, creds.key)
-              setEsReady(true)
+              await reloadKibanaIntegration()
             }}
           />
         ))
