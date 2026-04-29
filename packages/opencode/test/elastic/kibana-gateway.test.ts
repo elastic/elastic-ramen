@@ -17,12 +17,21 @@ describe("KibanaGateway", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
+        if (req.url.includes("/internal/search_inference_endpoints/connectors")) {
+          return Response.json({
+            connectors: [{ connectorId: "preferred-inference" }],
+            soEntryFound: false,
+          })
+        }
         if (!req.url.includes("/internal/elastic_ramen/v1/models")) {
           return new Response("not found", { status: 404 })
         }
         return Response.json({
           object: "list",
-          data: [{ id: "my-inference", owned_by: ".inference", object: "model" }],
+          data: [
+            { id: "preferred-inference", owned_by: ".inference", object: "model" },
+            { id: "my-inference", owned_by: ".inference", object: "model" },
+          ],
         })
       },
     })
@@ -30,9 +39,11 @@ describe("KibanaGateway", () => {
       const base = `http://127.0.0.1:${server.port}`
       const p = await KibanaGateway.buildProvider(base, "Zm9v")
       expect(p.kibana.models.default).toBeDefined()
+      expect((p.kibana.models.default as { id: string }).id).toBe("preferred-inference")
       expect(p.kibana.models["my-inference"]).toBeDefined()
       expect((p.kibana.models["my-inference"] as { id: string; name: string }).id).toBe("my-inference")
       expect((p.kibana.models["my-inference"] as { name: string }).name).toBe("My Inference")
+      expect(p.kibana.models["preferred-inference"]).toBeUndefined()
       expect(p.kibana.options.baseURL).toBe(`${base}/internal/elastic_ramen/v1`)
     } finally {
       server.stop(true)
@@ -55,6 +66,16 @@ describe("KibanaGateway", () => {
     }
   })
 
+  test("tryFetchAgentBuilderDefaultConnectorId returns undefined when connectors route fails", async () => {
+    const server = Bun.serve({ port: 0, fetch: () => new Response("", { status: 502 }) })
+    try {
+      const base = `http://127.0.0.1:${server.port}`
+      expect(await KibanaGateway.tryFetchAgentBuilderDefaultConnectorId(base, "k")).toBeUndefined()
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test("tryFetchConnectors returns undefined when response not ok", async () => {
     const server = Bun.serve({ port: 0, fetch: () => new Response("", { status: 502 }) })
     try {
@@ -69,8 +90,11 @@ describe("KibanaGateway", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
+        if (req.url.includes("/internal/search_inference_endpoints/connectors")) {
+          return Response.json({ connectors: [{ connectorId: "conn-b" }], soEntryFound: false })
+        }
         if (!req.url.includes("/internal/elastic_ramen/v1/models")) return new Response("no", { status: 404 })
-        return Response.json({ data: [{ id: "conn-b" }] })
+        return Response.json({ data: [{ id: "conn-a" }, { id: "conn-b" }] })
       },
     })
     try {
@@ -104,9 +128,10 @@ describe("KibanaGateway", () => {
       }
       await KibanaGateway.refreshKibanaProviderModels(provider)
       const models = provider.models as Record<string, { api: { id: string }; name: string }>
-      expect(Object.keys(models).sort()).toEqual(["conn-b", "default"])
-      expect(models["conn-b"].api.id).toBe("conn-b")
-      expect(models["conn-b"].name).toBe("Conn B")
+      expect(Object.keys(models).sort()).toEqual(["conn-a", "default"])
+      expect(models.default.api.id).toBe("conn-b")
+      expect(models["conn-a"].api.id).toBe("conn-a")
+      expect(models["conn-a"].name).toBe("Conn A")
     } finally {
       server.stop(true)
     }
