@@ -180,8 +180,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   }
 
   useKeyboard((evt) => {
-    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
-      props.onEscape?.()
+    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && props.onEscape) {
+      props.onEscape()
       evt.preventDefault()
       evt.stopPropagation()
       return
