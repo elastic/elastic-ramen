@@ -91,7 +91,7 @@ export namespace TuiConfig {
     if (!data || typeof data !== "object" || Array.isArray(data)) return {}
 
     // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
-    // (mirroring the old opencode.json shape) still get their settings applied.
+    // (mirroring the elastic_ramen.json shape) still get their settings applied.
     const normalized = (() => {
       const copy = { ...(data as Record<string, unknown>) }
       if (!("tui" in copy)) return copy
