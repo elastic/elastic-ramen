@@ -23,15 +23,20 @@ function pad(s: string, w: number): string {
 
 export const ChartTool = Tool.define("chart", {
   description: [
-    "Visualize categorical data as a table with inline bar charts.",
-    "Use this to present data with string categories and one or more numerical value columns.",
-    "Each numerical cell renders a proportional bar for easy visual comparison.",
+    "Render tabular data as an inline bar chart in the ramen terminal UI.",
+    "Call this automatically whenever you have ES|QL query results or any other",
+    "tabular data with numeric columns worth visualizing — do not wait to be asked.",
+    "Each numeric column gets its own proportional bar per row for instant visual comparison.",
+    "Supports multiple value columns (e.g. count + avg_duration side by side).",
     "",
-    "Example input:",
-    '  columns: ["Revenue", "Profit"]',
+    "When to call: after any ES|QL result, aggregation, metric comparison, or ranked list.",
+    "Map ES|QL columns to chart columns; map each result row's label field to `label`.",
+    "",
+    "Example — ES|QL result {rows: [{category:'web', count:120, p99:340}, ...]}:",
+    '  columns: ["count", "p99_ms"]',
     "  rows: [",
-    '    { label: "Product A", values: [95.2, 67.3] },',
-    '    { label: "Product B", values: [67.1, 38.5] }',
+    '    { label: "web",   values: [120, 340] },',
+    '    { label: "db",    values: [45,  890] }',
     "  ]",
   ].join("\n"),
   parameters: z.object({

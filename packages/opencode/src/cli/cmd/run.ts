@@ -29,6 +29,7 @@ import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
+import { ChartTool } from "../../tool/chart"
 import { Locale } from "../../util/locale"
 
 type ToolProps<T extends Tool.Info> = {
@@ -63,6 +64,14 @@ function block(info: Inline, output?: string) {
   if (!output?.trim()) return
   UI.println(output)
   UI.empty()
+}
+
+function chart(info: ToolProps<typeof ChartTool>) {
+  if (info.part.state.status !== "completed") return fallback(info.part)
+  block(
+    { icon: "📊", title: info.part.state.title ?? "Chart" },
+    info.part.state.output,
+  )
 }
 
 function fallback(part: ToolPart) {
@@ -427,6 +436,7 @@ export const RunCommand = cmd({
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
           if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
           if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
+          if (part.tool === "chart") return chart(props<typeof ChartTool>(part))
           return fallback(part)
         } catch {
           return fallback(part)
