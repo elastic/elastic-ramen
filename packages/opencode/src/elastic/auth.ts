@@ -219,10 +219,10 @@ export namespace ElasticAuth {
 
       await Filesystem.writeJson(cfg, json)
 
-      // Also clear provider/model overrides from .opencode/opencode.jsonc so they don't
+      // Also clear provider/model overrides from .elastic-ramen/elastic_ramen.jsonc so they don't
       // take precedence over the project-level config we just wrote
       for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
-        const override = path.join(process.cwd(), ".opencode", name)
+        const override = path.join(process.cwd(), ".elastic-ramen", name)
         if (await Filesystem.exists(override)) {
           const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
           if (overrideJson && (overrideJson.provider || overrideJson.model)) {

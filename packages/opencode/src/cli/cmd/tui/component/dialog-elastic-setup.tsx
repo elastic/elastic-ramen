@@ -13,7 +13,7 @@ import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
 
-export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void }) {
+export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void; onEscape?: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
@@ -180,6 +180,12 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   }
 
   useKeyboard((evt) => {
+    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
+      props.onEscape?.()
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
     if (evt.name === "return") {
       if (mode() === "manual-json") {
         submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
@@ -230,10 +236,13 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <text fg={"#ff6b6b"}>{error()}</text>
         </Show>
 
-        <box paddingBottom={1}>
+        <box paddingBottom={1} flexDirection="column" gap={0}>
           <text fg={theme.text}>
             enter <span style={{ fg: theme.textMuted }}>connect</span>
           </text>
+          <Show when={!!props.onEscape}>
+            <text fg={theme.textMuted}>escape / ctrl+c  quit</text>
+          </Show>
         </box>
 
         <box paddingTop={1}>
