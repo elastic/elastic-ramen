@@ -35,7 +35,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
-import { KibanaGateway } from "@/elastic/kibana-gateway"
+import { resolveModelLabel } from "@tui/util/model-label"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1347,12 +1347,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
-  const modelLabel = createMemo(() => {
-    const model = sync.data.provider.find((x) => x.id === props.message.providerID)?.models[props.message.modelID]
-    if (model?.name) return model.name
-    if (props.message.providerID === "kibana") return KibanaGateway.connectorDisplayName(props.message.modelID)
-    return props.message.modelID
-  })
+  const modelLabel = createMemo(() =>
+    resolveModelLabel(sync.data.provider, props.message.providerID, props.message.modelID),
+  )
 
   const keybind = useKeybind()
 
