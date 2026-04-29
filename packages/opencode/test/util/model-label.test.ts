@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveModelLabel } from "../../../src/cli/cmd/tui/util/model-label"
+import { resolveModelLabel } from "../../src/util/model-label"
 
 describe("resolveModelLabel", () => {
   test("beautifies the raw connector id for kibana when the lookup misses", () => {
@@ -16,7 +16,7 @@ describe("resolveModelLabel", () => {
         },
       },
     ]
-    expect(resolveModelLabel(providers, "kibana", ".anthropic-claude-4.6-opus-chat_completion")).toBe(
+    expect(resolveModelLabel("kibana", ".anthropic-claude-4.6-opus-chat_completion", providers)).toBe(
       "Anthropic Claude 4.6 Opus",
     )
   })

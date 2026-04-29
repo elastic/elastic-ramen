@@ -35,7 +35,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
-import { resolveModelLabel } from "@tui/util/model-label"
+import { resolveModelLabel } from "@/util/model-label"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1348,7 +1348,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const modelLabel = createMemo(() =>
-    resolveModelLabel(sync.data.provider, props.message.providerID, props.message.modelID),
+    resolveModelLabel(props.message.providerID, props.message.modelID, sync.data.provider),
   )
 
   const keybind = useKeybind()
