@@ -10,6 +10,7 @@ import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
+import { resolveModelLabel } from "../../util/model-label"
 import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
@@ -455,7 +456,9 @@ export const RunCommand = cmd({
             toggles.get("start") !== true
           ) {
             UI.empty()
-            UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+            UI.println(
+              `> ${event.properties.info.agent} · ${resolveModelLabel(event.properties.info.providerID, event.properties.info.modelID)}`,
+            )
             UI.empty()
             toggles.set("start", true)
           }
