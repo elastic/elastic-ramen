@@ -61,42 +61,25 @@ describe("ChartTool", () => {
     expect(res.output).toContain("Category")
     expect(res.title).toBe("bar chart")
     expect(res.metadata.data.type).toBe("bar")
+    expect(res.metadata.data.stacked).toBe(false)
   })
 
-  test("line chart renders grid and legend", async () => {
+  test("horizontal chart renders", async () => {
     const res = await exec({
-      type: "line",
-      columns: ["cpu"],
-      rows: [
-        { label: "10:00", values: [10] },
-        { label: "10:01", values: [50] },
-        { label: "10:02", values: [30] },
-      ],
-    })
-    expect(res.output).toContain("cpu")
-    expect(res.output).toContain("10:00")
-    expect(res.output).toContain("10:02")
-    expect(res.title).toBe("line chart")
-    expect(res.metadata.data.type).toBe("line")
-  })
-
-  test("pie chart renders slices and total", async () => {
-    const res = await exec({
-      type: "pie",
+      type: "horizontal",
       columns: ["count"],
       rows: [
-        { label: "web", values: [80] },
-        { label: "db", values: [20] },
+        { label: "a", values: [50] },
+        { label: "b", values: [100] },
       ],
     })
-    expect(res.output).toContain("web")
-    expect(res.output).toContain("db")
-    expect(res.output).toContain("Total: 100")
-    expect(res.title).toBe("pie chart")
-    expect(res.metadata.data.type).toBe("pie")
+    expect(res.output).toContain("a")
+    expect(res.output).toContain("b")
+    expect(res.title).toBe("horizontal chart")
+    expect(res.metadata.data.type).toBe("horizontal")
   })
 
-  test("histogram falls back to bar rendering", async () => {
+  test("histogram falls back to vertical bar rendering", async () => {
     const res = await exec({
       type: "histogram",
       columns: ["freq"],
@@ -109,6 +92,35 @@ describe("ChartTool", () => {
     expect(res.output).toContain("10-20")
     expect(res.title).toBe("histogram chart")
     expect(res.metadata.data.type).toBe("histogram")
+  })
+
+  test("stacked bar chart combines columns", async () => {
+    const res = await exec({
+      type: "bar",
+      stacked: true,
+      columns: ["ok", "err"],
+      rows: [
+        { label: "web", values: [80, 20] },
+        { label: "db", values: [95, 5] },
+      ],
+    })
+    expect(res.output).toContain("web")
+    expect(res.output).toContain("db")
+    expect(res.output).toContain("Total")
+    expect(res.metadata.data.stacked).toBe(true)
+  })
+
+  test("stacked horizontal chart combines columns", async () => {
+    const res = await exec({
+      type: "horizontal",
+      stacked: true,
+      columns: ["ok", "err"],
+      rows: [
+        { label: "web", values: [80, 20] },
+      ],
+    })
+    expect(res.output).toContain("web")
+    expect(res.metadata.data.stacked).toBe(true)
   })
 
   test("custom title is used", async () => {

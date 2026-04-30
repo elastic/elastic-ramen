@@ -26,10 +26,6 @@ function pad(s: string, w: number): string {
   return s + " ".repeat(Math.max(0, w - s.length))
 }
 
-function padStart(s: string, w: number): string {
-  return " ".repeat(Math.max(0, w - s.length)) + s
-}
-
 function colorFor(i: number): string {
   return ANSI_COLORS[i % ANSI_COLORS.length]
 }
@@ -38,6 +34,7 @@ function barChart(params: {
   title?: string
   columns: string[]
   rows: { label: string; values: number[] }[]
+  stacked?: boolean
 }): { lines: string[]; maxes: number[] } {
   const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
   const nums = params.rows.map((r) => params.columns.map((_, i) => fmt(r.values[i] ?? 0)))
@@ -58,178 +55,131 @@ function barChart(params: {
     lines.push("")
   }
 
-  lines.push(border("┌", "┬", "┐"))
-  lines.push(rowLine("Category", params.columns))
-  lines.push(border("├", "┼", "┤"))
-  lines.push(
-    ...params.rows.map((r, ri) =>
-      rowLine(
-        r.label,
-        params.columns.map((_, ci) => render(r.values[ci] ?? 0, maxes[ci], colorFor(ci)) + " " + nums[ri][ci]),
-      ),
-    ),
-  )
-  lines.push(border("└", "┴", "┘"))
+  if (params.stacked && params.columns.length > 1) {
+    const rowTotals = params.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+    const globalMax = Math.max(1, ...rowTotals)
 
-  return { lines, maxes }
-}
+    const tw = Math.max(6, ...rowTotals.map((t) => fmt(t).length))
+    const headerBorder = (left: string, mid: string, right: string) =>
+      left + "─".repeat(lw + 2) + mid + "─".repeat(BAR_WIDTH + 2) + mid + "─".repeat(tw + 2) + right
 
-function histogram(params: {
-  title?: string
-  columns: string[]
-  rows: { label: string; values: number[] }[]
-}): { lines: string[]; maxes: number[] } {
-  // Histogram is rendered like a bar chart but with a single numeric column.
-  return barChart(params)
-}
-
-function lineChart(params: {
-  title?: string
-  columns: string[]
-  rows: { label: string; values: number[] }[]
-}): { lines: string[]; maxes: number[] } {
-  const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
-  const globalMax = Math.max(1, ...maxes)
-  const plotH = 12
-  const plotW = Math.max(20, params.rows.length * 3)
-
-  const grid: string[][] = Array.from({ length: plotH }, () => Array(plotW).fill(" "))
-
-  for (let ci = 0; ci < params.columns.length; ci++) {
-    const pts = params.rows.map((r) => r.values[ci] ?? 0)
-    const colPx = plotW / Math.max(1, pts.length - 1)
-    for (let i = 0; i < pts.length - 1; i++) {
-      const x0 = Math.round(i * colPx)
-      const x1 = Math.round((i + 1) * colPx)
-      const y0 = plotH - 1 - Math.round((pts[i] / globalMax) * (plotH - 1))
-      const y1 = plotH - 1 - Math.round((pts[i + 1] / globalMax) * (plotH - 1))
-      // Bresenham-ish line
-      const dx = x1 - x0
-      const dy = y1 - y0
-      const steps = Math.max(Math.abs(dx), Math.abs(dy))
-      for (let s = 0; s <= steps; s++) {
-        const t = steps === 0 ? 0 : s / steps
-        const x = Math.round(x0 + dx * t)
-        const y = Math.round(y0 + dy * t)
-        if (x >= 0 && x < plotW && y >= 0 && y < plotH) grid[y][x] = "*"
+    const segments = (values: number[]) => {
+      if (globalMax <= 0) return " ".repeat(BAR_WIDTH)
+      const total = values.reduce((s, v) => s + v, 0)
+      let out = ""
+      for (let i = 0; i < values.length; i++) {
+        const frac = values[i] / globalMax
+        const segW = Math.round(frac * BAR_WIDTH)
+        out += colorFor(i) + "█".repeat(Math.max(0, segW)) + ANSI_RESET
       }
+      const fill = BAR_WIDTH - out.replace(/\x1b\[[0-9;]*m/g, "").length
+      if (fill > 0) out += " ".repeat(fill)
+      return out.slice(0, out.length + Math.min(0, fill))
     }
-  }
 
-  const yLabelW = Math.max(4, fmt(globalMax).length)
-  const lines: string[] = []
-  if (params.title) {
-    lines.push(params.title)
+    const legend = params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  ")
+
+    lines.push(headerBorder("┌", "┬", "┐"))
+    lines.push("│ " + pad("Category", lw) + " │ " + pad("Total", BAR_WIDTH) + " │ " + pad("Value", tw) + " │")
+    lines.push(headerBorder("├", "┼", "┤"))
+    for (let ri = 0; ri < params.rows.length; ri++) {
+      const r = params.rows[ri]
+      const seg = segments(r.values)
+      lines.push("│ " + pad(r.label, lw) + " │ " + seg + " │ " + pad(fmt(rowTotals[ri]), tw) + " │")
+    }
+    lines.push(headerBorder("└", "┴", "┘"))
     lines.push("")
-  }
-
-  for (let y = 0; y < plotH; y++) {
-    const val = Math.round(((plotH - 1 - y) / (plotH - 1)) * globalMax)
-    const label = padStart(fmt(val), yLabelW)
-    lines.push(`${label} │${grid[y].join("")}`)
-  }
-
-  const xSep = "─".repeat(plotW)
-  lines.push(" ".repeat(yLabelW) + " ├" + xSep)
-
-  // X-axis labels: show first, middle, last
-  const xLabels: string[] = []
-  const first = params.rows[0]?.label ?? ""
-  const mid = params.rows[Math.floor(params.rows.length / 2)]?.label ?? ""
-  const last = params.rows[params.rows.length - 1]?.label ?? ""
-  const leftPad = yLabelW + 3
-  xLabels.push(" ".repeat(leftPad) + first)
-  if (mid && mid !== first) {
-    const midPos = Math.floor(plotW / 2) - Math.floor(mid.length / 2)
-    if (midPos > first.length) {
-      xLabels.push(
-        " ".repeat(leftPad + midPos) + mid,
-      )
-    }
-  }
-  if (last !== first) {
-    xLabels.push(" ".repeat(leftPad + plotW - last.length) + last)
-  }
-  lines.push(...xLabels)
-
-  // Legend
-  lines.push("")
-  for (let ci = 0; ci < params.columns.length; ci++) {
-    lines.push(`${colorFor(ci)}* ${params.columns[ci]}${ANSI_RESET}`)
+    lines.push(legend)
+  } else {
+    lines.push(border("┌", "┬", "┐"))
+    lines.push(rowLine("Category", params.columns))
+    lines.push(border("├", "┼", "┤"))
+    lines.push(
+      ...params.rows.map((r, ri) =>
+        rowLine(
+          r.label,
+          params.columns.map((_, ci) => render(r.values[ci] ?? 0, maxes[ci], colorFor(ci)) + " " + nums[ri][ci]),
+        ),
+      ),
+    )
+    lines.push(border("└", "┴", "┘"))
   }
 
   return { lines, maxes }
 }
 
-function pieChart(params: {
+function horizontalBarChart(params: {
   title?: string
   columns: string[]
   rows: { label: string; values: number[] }[]
+  stacked?: boolean
 }): { lines: string[]; maxes: number[] } {
-  // Use the first numeric column for slice sizes.
-  const idx = 0
-  const total = params.rows.reduce((sum, r) => sum + (r.values[idx] ?? 0), 0)
   const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
-
+  const lw = Math.max(8, ...params.rows.map((r) => r.label.length))
   const lines: string[] = []
+
   if (params.title) {
     lines.push(params.title)
     lines.push("")
   }
 
-  if (total <= 0) {
-    lines.push("No data")
-    return { lines, maxes }
+  if (params.stacked && params.columns.length > 1) {
+    const rowTotals = params.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+    const globalMax = Math.max(1, ...rowTotals)
+
+    for (const r of params.rows) {
+      const total = r.values.reduce((s, v) => s + (v ?? 0), 0)
+      let bar = ""
+      for (let i = 0; i < r.values.length; i++) {
+        const frac = r.values[i] / globalMax
+        const segW = Math.round(frac * BAR_WIDTH)
+        bar += colorFor(i) + "█".repeat(Math.max(0, segW)) + ANSI_RESET
+      }
+      const fill = BAR_WIDTH - bar.replace(/\x1b\[[0-9;]*m/g, "").length
+      if (fill > 0) bar += " ".repeat(fill)
+      bar = bar.slice(0, bar.length + Math.min(0, fill))
+      lines.push("│ " + pad(r.label, lw) + " │ " + bar + " │ " + fmt(total))
+    }
+
+    const legend = params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  ")
+    lines.push("")
+    lines.push(legend)
+  } else {
+    const globalMax = Math.max(1, ...maxes)
+    for (const r of params.rows) {
+      for (let ci = 0; ci < params.columns.length; ci++) {
+        const val = r.values[ci] ?? 0
+        const bar = render(val, globalMax, colorFor(ci))
+        const col = params.columns.length > 1 ? ` · ${params.columns[ci]}` : ""
+        lines.push("│ " + pad(r.label + col, lw + col.length) + " │ " + bar + " │ " + fmt(val))
+      }
+      if (params.columns.length > 1) lines.push("")
+    }
   }
-
-  const slices = params.rows.map((r, i) => ({
-    label: r.label,
-    value: r.values[idx] ?? 0,
-    pct: ((r.values[idx] ?? 0) / total) * 100,
-    color: colorFor(i),
-  }))
-
-  const lw = Math.max(8, ...slices.map((s) => s.label.length))
-  const vw = Math.max(6, ...slices.map((s) => fmt(s.value).length))
-
-  const barW = 20
-  const border = (left: string, mid: string, right: string) =>
-    left + "─".repeat(lw + 2) + mid + "─".repeat(barW + 2) + mid + "─".repeat(vw + 2) + mid + "─".repeat(7) + right
-
-  lines.push(border("┌", "┬", "┐"))
-  lines.push("│ " + pad("Category", lw) + " │ " + pad("Visual", barW) + " │ " + pad("Value", vw) + " │ " + pad("Pct", 5) + " │")
-  lines.push(border("├", "┼", "┤"))
-
-  for (const s of slices) {
-    const frac = Math.round((s.value / total) * barW)
-    const vis = s.color + "█".repeat(frac) + ANSI_RESET + " ".repeat(barW - frac)
-    lines.push("│ " + pad(s.label, lw) + " │ " + vis + " │ " + pad(fmt(s.value), vw) + " │ " + pad(fmt(s.pct) + "%", 5) + " │")
-  }
-
-  lines.push(border("└", "┴", "┘"))
-  lines.push("")
-  lines.push(`Total: ${fmt(total)}`)
 
   return { lines, maxes }
 }
 
 export const ChartTool = Tool.define("chart", {
   description: [
-    "Render tabular data as an inline chart in the ramen terminal UI.",
+    "Render tabular data as an inline bar chart in the ramen terminal UI.",
     "Call this automatically whenever you have ES|QL query results or any other",
     "tabular data with numeric columns worth visualizing — do not wait to be asked.",
     "",
-    "When to call: after any ES|QL result, aggregation, metric comparison, or ranked list.",
-    "Map ES|QL columns to chart columns; map each result row's label field to `label`.",
+    "IMPORTANT: after rendering the chart, do NOT repeat the same data in text.",
+    "The chart is the answer. Avoid statements like 'as you can see, X is 42 and Y is 99'.",
     "",
     "Chart types:",
-    "  bar       — vertical bars per row, one per column (default). Best for comparisons.",
-    "  line      — line plot over rows. Best for time-series or trends.",
-    "  pie       — proportions of the first value column. Best for part-to-whole.",
-    "  histogram — bar chart variant. Best for binned distributions.",
+    "  bar       — vertical bars per row. Default. Good for comparing categories.",
+    "  horizontal — bars extend left-to-right from the label. Better for long labels.",
+    "  histogram — vertical bars for binned distributions.",
+    "",
+    "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
+    "Unstacked (default) shows columns side-by-side per row for comparison.",
     "",
     "Example — ES|QL result {rows: [{category:'web', count:120, p99:340}, ...]}:",
     '  type: "bar"',
+    '  stacked: false',
     '  columns: ["count", "p99_ms"]',
     "  rows: [",
     '    { label: "web",   values: [120, 340] },',
@@ -238,9 +188,13 @@ export const ChartTool = Tool.define("chart", {
   ].join("\n"),
   parameters: z.object({
     type: z
-      .enum(["bar", "line", "pie", "histogram"])
+      .enum(["bar", "horizontal", "histogram"])
       .default("bar")
-      .describe("Chart type: bar, line, pie, or histogram"),
+      .describe("Chart layout: bar (vertical), horizontal (left-to-right), or histogram"),
+    stacked: z
+      .boolean()
+      .default(false)
+      .describe("When true and there are multiple columns, stack their values into one bar per row"),
     title: z.string().optional().describe("Optional chart title"),
     columns: z.array(z.string()).describe("Headers for the numerical value columns"),
     rows: z
@@ -254,21 +208,17 @@ export const ChartTool = Tool.define("chart", {
       .describe("Data rows with category labels and numerical values"),
   }),
   async execute(params) {
+    const stacked = params.stacked ?? false
     let result: { lines: string[]; maxes: number[] }
 
     switch (params.type) {
-      case "line":
-        result = lineChart(params)
-        break
-      case "pie":
-        result = pieChart(params)
+      case "horizontal":
+        result = horizontalBarChart({ ...params, stacked })
         break
       case "histogram":
-        result = histogram(params)
-        break
       case "bar":
       default:
-        result = barChart(params)
+        result = barChart({ ...params, stacked })
         break
     }
 
@@ -277,6 +227,7 @@ export const ChartTool = Tool.define("chart", {
       metadata: {
         data: {
           type: params.type,
+          stacked,
           title: params.title,
           columns: params.columns,
           rows: params.rows,
