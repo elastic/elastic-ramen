@@ -63,37 +63,45 @@ export namespace KibanaGateway {
   export async function tryFetchAgentBuilderDefaultConnectorId(kibanaUrl: string, apiKey: string) {
     const base = kibanaUrl.replace(/\/+$/, "")
     const q = new URLSearchParams({ featureId: agentBuilderFeature })
-    const res = await fetch(`${base}/internal/search_inference_endpoints/connectors?${q}`, {
-      headers: { ...authHeaders(apiKey), "elastic-api-version": "1" },
-    })
-    if (!res.ok) return undefined
-    const json = (await res.json()) as { connectors?: { connectorId?: string }[] }
-    const rows = json.connectors
-    if (!Array.isArray(rows) || rows.length === 0) return undefined
-    const id = rows[0]?.connectorId
-    if (typeof id !== "string" || id.length === 0) return undefined
-    return id
+    try {
+      const res = await fetch(`${base}/internal/search_inference_endpoints/connectors?${q}`, {
+        headers: { ...authHeaders(apiKey), "elastic-api-version": "1" },
+      })
+      if (!res.ok) return undefined
+      const json = (await res.json()) as { connectors?: { connectorId?: string }[] }
+      const rows = json.connectors
+      if (!Array.isArray(rows) || rows.length === 0) return undefined
+      const id = rows[0]?.connectorId
+      if (typeof id !== "string" || id.length === 0) return undefined
+      return id
+    } catch {
+      return undefined
+    }
   }
 
   /** Like `fetchConnectors`, but returns `undefined` when the request fails so callers can keep existing models. */
   export async function tryFetchConnectors(kibanaUrl: string, apiKey: string) {
     const base = kibanaUrl.replace(/\/+$/, "")
-    const res = await fetch(`${base}/internal/elastic_ramen/v1/models`, {
-      headers: authHeaders(apiKey),
-    })
-    if (!res.ok) return undefined
-    const json = (await res.json()) as { data?: { id?: string; owned_by?: string }[] }
-    const rows = json.data
-    if (!Array.isArray(rows)) return undefined
-    const out: { id: string; owned_by?: string }[] = []
-    for (const row of rows) {
-      if (typeof row.id !== "string" || row.id.length === 0) continue
-      out.push({
-        id: row.id,
-        owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
+    try {
+      const res = await fetch(`${base}/internal/elastic_ramen/v1/models`, {
+        headers: authHeaders(apiKey),
       })
+      if (!res.ok) return undefined
+      const json = (await res.json()) as { data?: { id?: string; owned_by?: string }[] }
+      const rows = json.data
+      if (!Array.isArray(rows)) return undefined
+      const out: { id: string; owned_by?: string }[] = []
+      for (const row of rows) {
+        if (typeof row.id !== "string" || row.id.length === 0) continue
+        out.push({
+          id: row.id,
+          owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
+        })
+      }
+      return out
+    } catch {
+      return undefined
     }
-    return out
   }
 
   /**

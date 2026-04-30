@@ -50,11 +50,11 @@ export namespace Config {
   function systemManagedConfigDir(): string {
     switch (process.platform) {
       case "darwin":
-        return "/Library/Application Support/opencode"
+        return "/Library/Application Support/elastic-ramen"
       case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "elastic-ramen")
       default:
-        return "/etc/opencode"
+        return "/etc/elastic-ramen"
     }
   }
 
@@ -81,10 +81,10 @@ export namespace Config {
 
     // Config loading order (low -> high precedence): https://elastic.co/docs/config#precedence-order
     // 1) Remote .well-known/opencode (org defaults)
-    // 2) Global config (~/.config/opencode/opencode.json{,c})
+    // 2) Global config (~/.config/elastic-ramen/elastic_ramen.json{,c})
     // 3) Custom config (OPENCODE_CONFIG)
-    // 4) Project config (opencode.json{,c})
-    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
+    // 4) Project config (elastic_ramen.json{,c})
+    // 5) .elastic-ramen directories (.elastic-ramen/agents/, .elastic-ramen/commands/, .elastic-ramen/plugins/, .elastic-ramen/elastic_ramen.json{,c})
     // 6) Inline config (OPENCODE_CONFIG_CONTENT)
     // Managed config directory is enterprise-only and always overrides everything above.
     let result: Info = {}
@@ -134,7 +134,7 @@ export namespace Config {
 
     const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
 
-    // .opencode directory config overrides (project and global) config sources.
+    // .elastic-ramen directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
@@ -142,7 +142,7 @@ export namespace Config {
     const deps = []
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+      if (dir.endsWith(".elastic-ramen") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
@@ -376,7 +376,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const patterns = ["/.elastic-ramen/command/", "/.elastic-ramen/commands/", "/command/", "/commands/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const name = trim(file)
 
@@ -415,7 +415,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const patterns = ["/.elastic-ramen/agent/", "/.elastic-ramen/agents/", "/agent/", "/agents/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const agentName = trim(file)
 
@@ -509,9 +509,9 @@ export namespace Config {
    * Deduplicates plugins by name, with later entries (higher priority) winning.
    * Priority order (highest to lowest):
    * 1. Local plugin/ directory
-   * 2. Local opencode.json
+   * 2. Local elastic_ramen.json
    * 3. Global plugin/ directory
-   * 4. Global opencode.json
+   * 4. Global elastic_ramen.json
    *
    * Since plugins are added in low-to-high priority order,
    * we reverse, deduplicate (keeping first occurrence), then restore order.

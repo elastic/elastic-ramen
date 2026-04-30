@@ -35,6 +35,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { resolveModelLabel } from "@/util/model-label"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1346,6 +1347,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const modelLabel = createMemo(() =>
+    resolveModelLabel(props.message.providerID, props.message.modelID, sync.data.provider),
+  )
+
   const keybind = useKeybind()
 
   return (
@@ -1402,7 +1407,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <span style={{ fg: theme.textMuted }}> · {modelLabel()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>

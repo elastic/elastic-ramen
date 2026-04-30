@@ -469,6 +469,7 @@ function App() {
       dialog.replace(() => (
         <DialogElasticSetup
           kibanaBase={args.kibanaBase}
+          onEscape={() => exit()}
           onComplete={async () => {
             dialog.clear()
 
@@ -499,7 +500,7 @@ function App() {
             setEsReady(true)
           }}
         />
-      ))
+      ), undefined, false)
       return
     }
     const url = status.context?.elasticsearch_url
@@ -517,6 +518,7 @@ function App() {
         dialog.replace(() => (
           <DialogElasticSetup
             kibanaBase={args.kibanaBase}
+            onEscape={() => exit()}
             onComplete={async () => {
               dialog.clear()
               await sdk.client.instance.dispose().catch(() => {})
@@ -538,7 +540,7 @@ function App() {
               setEsReady(true)
             }}
           />
-        ))
+        ), undefined, false)
       },
     ),
   )

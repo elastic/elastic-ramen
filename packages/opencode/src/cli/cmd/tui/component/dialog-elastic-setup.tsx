@@ -13,7 +13,7 @@ import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
 
-export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void }) {
+export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void; onEscape?: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
@@ -108,7 +108,12 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     if (kibUrl) {
       input.kibana_url = kibUrl
       input.auth_mode = "kibana"
-      input.provider = await KibanaGateway.buildProvider(kibUrl, key)
+      try {
+        input.provider = await KibanaGateway.buildProvider(kibUrl, key)
+      } catch (e) {
+        setError("Could not reach Kibana to load connectors: " + (e as Error).message)
+        return
+      }
       input.model = "kibana/default"
     }
 
@@ -159,18 +164,31 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       if (effectiveKb) input.kibana_url = effectiveKb
       // Always construct provider ourselves to ensure correct baseURL and headers
       if (effectiveKb && key) {
-        input.provider = await KibanaGateway.buildProvider(effectiveKb, key)
+        try {
+          input.provider = await KibanaGateway.buildProvider(effectiveKb, key)
+        } catch (e) {
+          setError("Could not reach Kibana to load connectors: " + (e as Error).message)
+          return
+        }
       }
       if (parsed.model && typeof parsed.model === "string") input.model = parsed.model
       else if (input.provider) input.model = "kibana/default"
       await save(input)
+    }).catch((e: Error) => {
+      setError("Setup failed: " + e.message)
     })
   }
 
   useKeyboard((evt) => {
-    if (evt.name === "return" && (evt.ctrl || evt.meta)) {
+    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && props.onEscape) {
+      props.onEscape()
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+    if (evt.name === "return") {
       if (mode() === "manual-json") {
-        void submitManual()
+        submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
       } else if (mode() === "kibana-url") {
         submitKibanaUrl()
       }
@@ -218,10 +236,13 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <text fg={"#ff6b6b"}>{error()}</text>
         </Show>
 
-        <box paddingBottom={1}>
+        <box paddingBottom={1} flexDirection="column" gap={0}>
           <text fg={theme.text}>
-            ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+            enter <span style={{ fg: theme.textMuted }}>connect</span>
           </text>
+          <Show when={!!props.onEscape}>
+            <text fg={theme.textMuted}>escape / ctrl+c  quit</text>
+          </Show>
         </box>
 
         <box paddingTop={1}>
@@ -296,7 +317,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         <box paddingBottom={1}>
           <Show when={!saving()} fallback={<text fg={theme.textMuted}>connecting...</text>}>
             <text fg={theme.text}>
-              ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+              enter <span style={{ fg: theme.textMuted }}>connect</span>
             </text>
           </Show>
         </box>
