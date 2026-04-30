@@ -1646,8 +1646,10 @@ const CHART_COLORS = (theme: ReturnType<typeof useTheme>["theme"]) => [
 function Chart(props: ToolProps<typeof ChartTool>) {
   const { theme } = useTheme()
   const data = createMemo(() => props.metadata.data as
-    | { title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
+    | { type?: string; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
     | undefined)
+
+  const type = createMemo(() => data()?.type ?? "bar")
 
   const widths = createMemo(() => {
     const d = data()
@@ -1666,7 +1668,232 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     return left + "─".repeat(w.lw + 2) + d.columns.map((_, i) => mid + "─".repeat(w.cw[i] + 2)).join("") + right
   }
 
-  const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length))
+  const padText = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length))
+  const padStartText = (s: string, w: number) => " ".repeat(Math.max(0, w - s.length)) + s
+
+  const barChart = (d: { title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }) => {
+    const colors = CHART_COLORS(theme)
+    return (
+      <box>
+        <text fg={theme.textMuted}>{borderLine("┌", "┬", "┐")}</text>
+        <text>
+          <span style={{ fg: theme.textMuted }}>│ </span>
+          <span style={{ fg: theme.text, bold: true }}>{padText("Category", widths().lw)}</span>
+          <span style={{ fg: theme.textMuted }}> </span>
+          <For each={d.columns}>
+            {(col, ci) => (
+              <>
+                <span style={{ fg: theme.textMuted }}>│ </span>
+                <span style={{ fg: colors[ci() % colors.length], bold: true }}>
+                  {padText(col, widths().cw[ci()])}
+                </span>
+                <span style={{ fg: theme.textMuted }}> </span>
+              </>
+            )}
+          </For>
+          <span style={{ fg: theme.textMuted }}>│</span>
+        </text>
+        <text fg={theme.textMuted}>{borderLine("├", "┼", "┤")}</text>
+        <For each={d.rows}>
+          {(row) => (
+            <text>
+              <span style={{ fg: theme.textMuted }}>│ </span>
+              <span style={{ fg: theme.text }}>{padText(row.label, widths().lw)}</span>
+              <span style={{ fg: theme.textMuted }}> </span>
+              <For each={d.columns}>
+                {(_, ci) => {
+                  const val = row.values[ci()] ?? 0
+                  const bar = renderBar(val, d.maxes[ci()])
+                  const num = fmtNum(val)
+                  return (
+                    <>
+                      <span style={{ fg: theme.textMuted }}>│ </span>
+                      <span style={{ fg: colors[ci() % colors.length] }}>{bar}</span>
+                      <span style={{ fg: theme.text }}>
+                        {" " + padText(num, widths().cw[ci()] - BAR_WIDTH - 1)}
+                      </span>
+                      <span style={{ fg: theme.textMuted }}> </span>
+                    </>
+                  )
+                }}
+              </For>
+              <span style={{ fg: theme.textMuted }}>│</span>
+            </text>
+          )}
+        </For>
+        <text fg={theme.textMuted}>{borderLine("└", "┴", "┘")}</text>
+      </box>
+    )
+  }
+
+  const lineChart = (d: { title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }) => {
+    const colors = CHART_COLORS(theme)
+    const globalMax = Math.max(1, ...d.maxes)
+    const plotH = 12
+    const plotW = Math.max(20, d.rows.length * 3)
+    const yLabelW = Math.max(4, fmtNum(globalMax).length)
+
+    const grid: string[][] = Array.from({ length: plotH }, () => Array(plotW).fill(" "))
+    for (let ci = 0; ci < d.columns.length; ci++) {
+      const pts = d.rows.map((r) => r.values[ci] ?? 0)
+      const colPx = plotW / Math.max(1, pts.length - 1)
+      for (let i = 0; i < pts.length - 1; i++) {
+        const x0 = Math.round(i * colPx)
+        const x1 = Math.round((i + 1) * colPx)
+        const y0 = plotH - 1 - Math.round((pts[i] / globalMax) * (plotH - 1))
+        const y1 = plotH - 1 - Math.round((pts[i + 1] / globalMax) * (plotH - 1))
+        const dx = x1 - x0
+        const dy = y1 - y0
+        const steps = Math.max(Math.abs(dx), Math.abs(dy))
+        for (let s = 0; s <= steps; s++) {
+          const t = steps === 0 ? 0 : s / steps
+          const x = Math.round(x0 + dx * t)
+          const y = Math.round(y0 + dy * t)
+          if (x >= 0 && x < plotW && y >= 0 && y < plotH) grid[y][x] = "*"
+        }
+      }
+    }
+
+    const lines: any[] = []
+    if (d.title) {
+      lines.push({ text: d.title, spans: [{ text: d.title, fg: theme.text }] })
+      lines.push({ text: "", spans: [{ text: "" }] })
+    }
+
+    for (let y = 0; y < plotH; y++) {
+      const val = Math.round(((plotH - 1 - y) / (plotH - 1)) * globalMax)
+      const label = padStartText(fmtNum(val), yLabelW)
+      const left = `${label} │`
+      const rowText = grid[y].join("")
+      lines.push({
+        text: left + rowText,
+        spans: [
+          { text: left, fg: theme.textMuted },
+          { text: rowText, fg: theme.text },
+        ],
+      })
+    }
+
+    lines.push({
+      text: " ".repeat(yLabelW) + " ├" + "─".repeat(plotW),
+      spans: [{ text: " ".repeat(yLabelW) + " ├" + "─".repeat(plotW), fg: theme.textMuted }],
+    })
+
+    const first = d.rows[0]?.label ?? ""
+    const mid = d.rows[Math.floor(d.rows.length / 2)]?.label ?? ""
+    const last = d.rows[d.rows.length - 1]?.label ?? ""
+    const leftPad = yLabelW + 3
+    lines.push({ text: " ".repeat(leftPad) + first, spans: [{ text: " ".repeat(leftPad) + first, fg: theme.textMuted }] })
+    if (mid && mid !== first) {
+      const midPos = Math.floor(plotW / 2) - Math.floor(mid.length / 2)
+      if (midPos > first.length) {
+        lines.push({ text: " ".repeat(leftPad + midPos) + mid, spans: [{ text: " ".repeat(leftPad + midPos) + mid, fg: theme.textMuted }] })
+      }
+    }
+    if (last !== first) {
+      lines.push({ text: " ".repeat(leftPad + plotW - last.length) + last, spans: [{ text: " ".repeat(leftPad + plotW - last.length) + last, fg: theme.textMuted }] })
+    }
+
+    lines.push({ text: "", spans: [{ text: "" }] })
+    for (let ci = 0; ci < d.columns.length; ci++) {
+      const legend = `* ${d.columns[ci]}`
+      lines.push({ text: legend, spans: [{ text: "* ", fg: colors[ci % colors.length] }, { text: d.columns[ci], fg: theme.text }] })
+    }
+
+    return (
+      <box>
+        <For each={lines}>
+          {(line) => (
+            <text>
+              <For each={line.spans}>
+                {(span) => <span style={{ fg: span.fg ?? theme.text }}>{span.text}</span>}
+              </For>
+            </text>
+          )}
+        </For>
+      </box>
+    )
+  }
+
+  const pieChart = (d: { title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }) => {
+    const colors = CHART_COLORS(theme)
+    const idx = 0
+    const total = d.rows.reduce((sum, r) => sum + (r.values[idx] ?? 0), 0)
+    const lw = Math.max(8, ...d.rows.map((r) => r.label.length))
+    const vw = Math.max(6, ...d.rows.map((r) => fmtNum(r.values[idx] ?? 0).length))
+    const barW = 20
+
+    const border = (left: string, mid: string, right: string) =>
+      left + "─".repeat(lw + 2) + mid + "─".repeat(barW + 2) + mid + "─".repeat(vw + 2) + mid + "─".repeat(7) + right
+
+    const slices = d.rows.map((r, i) => ({
+      label: r.label,
+      value: r.values[idx] ?? 0,
+      pct: total > 0 ? ((r.values[idx] ?? 0) / total) * 100 : 0,
+      color: colors[i % colors.length],
+    }))
+
+    const lines: any[] = []
+    if (d.title) {
+      lines.push({ text: d.title, spans: [{ text: d.title, fg: theme.text }] })
+      lines.push({ text: "", spans: [{ text: "" }] })
+    }
+
+    if (total <= 0) {
+      lines.push({ text: "No data", spans: [{ text: "No data", fg: theme.textMuted }] })
+      return (
+        <box>
+          <For each={lines}>
+            {(line) => (
+              <text>
+                <For each={line.spans}>
+                  {(span) => <span style={{ fg: span.fg ?? theme.text }}>{span.text}</span>}
+                </For>
+              </text>
+            )}
+          </For>
+        </box>
+      )
+    }
+
+    const header = "│ " + padText("Category", lw) + " │ " + padText("Visual", barW) + " │ " + padText("Value", vw) + " │ " + padText("Pct", 5) + " │"
+    lines.push({ text: border("┌", "┬", "┐"), spans: [{ text: border("┌", "┬", "┐"), fg: theme.textMuted }] })
+    lines.push({ text: header, spans: [{ text: header, fg: theme.textMuted }] })
+    lines.push({ text: border("├", "┼", "┤"), spans: [{ text: border("├", "┼", "┤"), fg: theme.textMuted }] })
+
+    for (const s of slices) {
+      const frac = Math.round((s.value / total) * barW)
+      const visBar = "█".repeat(frac) + " ".repeat(barW - frac)
+      const left = "│ " + padText(s.label, lw) + " │ "
+      const right = " │ " + padText(fmtNum(s.value), vw) + " │ " + padText(fmtNum(s.pct) + "%", 5) + " │"
+      lines.push({
+        text: left + visBar + right,
+        spans: [
+          { text: left, fg: theme.textMuted },
+          { text: visBar, fg: s.color },
+          { text: right, fg: theme.textMuted },
+        ],
+      })
+    }
+
+    lines.push({ text: border("└", "┴", "┘"), spans: [{ text: border("└", "┴", "┘"), fg: theme.textMuted }] })
+    lines.push({ text: "", spans: [{ text: "" }] })
+    lines.push({ text: `Total: ${fmtNum(total)}`, spans: [{ text: `Total: ${fmtNum(total)}`, fg: theme.text }] })
+
+    return (
+      <box>
+        <For each={lines}>
+          {(line) => (
+            <text>
+              <For each={line.spans}>
+                {(span) => <span style={{ fg: span.fg ?? theme.text }}>{span.text}</span>}
+              </For>
+            </text>
+          )}
+        </For>
+      </box>
+    )
+  }
 
   return (
     <Show
@@ -1678,58 +1905,21 @@ function Chart(props: ToolProps<typeof ChartTool>) {
       }
     >
       {(d) => {
-        const colors = CHART_COLORS(theme)
+        const t = type()
+        const title = d().title ?? (t === "bar" ? "Chart" : t + " chart")
         return (
-          <BlockTool title={`# 📊 ${d().title ?? "Chart"}`} part={props.part}>
-            <box>
-              <text fg={theme.textMuted}>{borderLine("┌", "┬", "┐")}</text>
-              <text>
-                <span style={{ fg: theme.textMuted }}>│ </span>
-                <span style={{ fg: theme.text, bold: true }}>{pad("Category", widths().lw)}</span>
-                <span style={{ fg: theme.textMuted }}> </span>
-                <For each={d().columns}>
-                  {(col, ci) => (
-                    <>
-                      <span style={{ fg: theme.textMuted }}>│ </span>
-                      <span style={{ fg: colors[ci() % colors.length], bold: true }}>
-                        {pad(col, widths().cw[ci()])}
-                      </span>
-                      <span style={{ fg: theme.textMuted }}> </span>
-                    </>
-                  )}
-                </For>
-                <span style={{ fg: theme.textMuted }}>│</span>
-              </text>
-              <text fg={theme.textMuted}>{borderLine("├", "┼", "┤")}</text>
-              <For each={d().rows}>
-                {(row) => (
-                  <text>
-                    <span style={{ fg: theme.textMuted }}>│ </span>
-                    <span style={{ fg: theme.text }}>{pad(row.label, widths().lw)}</span>
-                    <span style={{ fg: theme.textMuted }}> </span>
-                    <For each={d().columns}>
-                      {(_, ci) => {
-                        const val = row.values[ci()] ?? 0
-                        const bar = renderBar(val, d().maxes[ci()])
-                        const num = fmtNum(val)
-                        return (
-                          <>
-                            <span style={{ fg: theme.textMuted }}>│ </span>
-                            <span style={{ fg: colors[ci() % colors.length] }}>{bar}</span>
-                            <span style={{ fg: theme.text }}>
-                              {" " + pad(num, widths().cw[ci()] - BAR_WIDTH - 1)}
-                            </span>
-                            <span style={{ fg: theme.textMuted }}> </span>
-                          </>
-                        )
-                      }}
-                    </For>
-                    <span style={{ fg: theme.textMuted }}>│</span>
-                  </text>
-                )}
-              </For>
-              <text fg={theme.textMuted}>{borderLine("└", "┴", "┘")}</text>
-            </box>
+          <BlockTool title={`# 📊 ${title}`} part={props.part}>
+            <Switch>
+              <Match when={t === "line"}>
+                {lineChart(d())}
+              </Match>
+              <Match when={t === "pie"}>
+                {pieChart(d())}
+              </Match>
+              <Match when={true}>
+                {barChart(d())}
+              </Match>
+            </Switch>
           </BlockTool>
         )
       }}
