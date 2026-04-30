@@ -165,7 +165,7 @@ export const McpAuthCommand = cmd({
 
         if (oauthServers.length === 0) {
           prompts.log.warn("No OAuth-capable MCP servers configured")
-          prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in opencode.json:")
+          prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in elastic_ramen.json:")
           prompts.log.info(`
   "mcp": {
     "my-server": {
@@ -387,14 +387,14 @@ export async function resolveConfigPath(baseDir: string, global = false) {
   // Non-git projects use "/" as worktree sentinel — fall back to cwd to avoid
   // writing to the filesystem root (EROFS).
   const dir = baseDir === "/" ? process.cwd() : baseDir
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
+  // Check for existing config files (prefer .jsonc over .json, check .elastic-ramen/ subdirectory too)
   const candidates = [
     path.join(dir, "elastic_ramen.json"), path.join(dir, "elastic_ramen.jsonc"),
   ]
 
   if (!global) {
     candidates.push(
-      path.join(dir, ".opencode", "elastic_ramen.json"), path.join(dir, ".opencode", "elastic_ramen.jsonc"),
+      path.join(dir, ".elastic-ramen", "elastic_ramen.json"), path.join(dir, ".elastic-ramen", "elastic_ramen.jsonc"),
     )
   }
 

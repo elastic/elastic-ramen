@@ -47,6 +47,7 @@ import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
+import { KibanaGateway } from "../elastic/kibana-gateway"
 import { Installation } from "../installation"
 
 const DEFAULT_CHUNK_TIMEOUT = 120_000
@@ -320,7 +321,7 @@ export namespace Provider {
           }
 
           // Region resolution precedence (highest to lowest):
-          // 1. options.region from opencode.json provider config
+          // 1. options.region from elastic_ramen.json provider config
           // 2. defaultRegion from AWS_REGION environment variable
           // 3. Default "us-east-1" (baked into defaultRegion)
           const region = options?.region ?? defaultRegion
@@ -974,17 +975,8 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
-    // load env
-    const env = Env.all()
-    for (const [providerID, provider] of Object.entries(database)) {
-      if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
-      if (!apiKey) continue
-      mergeProvider(providerID, {
-        source: "env",
-        key: provider.env.length === 1 ? apiKey : undefined,
-      })
-    }
+    // Elastic RAMEN: env-based provider keys are intentionally ignored.
+    // All LLM access goes through the Kibana LLM Gateway configured via ElasticAuth.
 
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
@@ -1067,6 +1059,10 @@ export namespace Provider {
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
+    }
+
+    if (providers.kibana) {
+      await KibanaGateway.refreshKibanaProviderModels(providers.kibana)
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {

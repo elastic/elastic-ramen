@@ -7,30 +7,6 @@ import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
 import { Global } from "../../src/global"
 
-test("GitLab Duo: loads provider with API key from environment", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "elastic_ramen.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("GITLAB_TOKEN", "test-gitlab-token")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["gitlab"]).toBeDefined()
-      expect(providers["gitlab"].key).toBe("test-gitlab-token")
-    },
-  })
-})
-
 test("GitLab Duo: config instanceUrl option sets baseURL", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

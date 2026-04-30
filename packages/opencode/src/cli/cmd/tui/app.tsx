@@ -515,12 +515,13 @@ function App() {
       dialog.replace(() => (
         <DialogElasticSetup
           kibanaBase={args.kibanaBase}
+          onEscape={() => exit()}
           onComplete={async () => {
             dialog.clear()
             await reloadKibanaIntegration()
           }}
         />
-      ))
+      ), undefined, false)
       return
     }
     const url = status.context?.elasticsearch_url
@@ -538,12 +539,13 @@ function App() {
         dialog.replace(() => (
           <DialogElasticSetup
             kibanaBase={args.kibanaBase}
+            onEscape={() => exit()}
             onComplete={async () => {
               dialog.clear()
               await reloadKibanaIntegration()
             }}
           />
-        ))
+        ), undefined, false)
       },
     ),
   )

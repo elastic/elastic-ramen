@@ -10,10 +10,11 @@ import { Link } from "@tui/ui/link"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
-import { kibanaProvider, profileNameFromSetup } from "@/elastic/kibana-provider"
+import { profileNameFromSetup } from "@/elastic/kibana-provider"
+import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
 
-export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void }) {
+export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void; onEscape?: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
@@ -74,7 +75,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     props.onComplete()
   }
 
-  function submitManual() {
+  async function submitManual() {
     const raw = jsonInput?.plainText?.trim() ?? ""
     if (!raw) {
       setError("Paste the JSON from the Kibana onboarding page")
@@ -109,11 +110,16 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     if (kibUrl) {
       input.kibana_url = kibUrl
       input.auth_mode = "kibana"
-      input.provider = kibanaProvider(kibUrl, key)
+      try {
+        input.provider = await KibanaGateway.buildProvider(kibUrl, key)
+      } catch (e) {
+        setError("Could not reach Kibana to load connectors: " + (e as Error).message)
+        return
+      }
       input.model = "kibana/default"
     }
 
-    save(input)
+    await save(input)
   }
 
   function submitKibanaUrl() {
@@ -148,7 +154,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   function startCallback(base: string) {
     cb?.stop()
     cb = ElasticCallback.start()
-    cb.promise.then((payload) => {
+    cb.promise.then(async (payload) => {
       const parsed = payload as Record<string, any>
       const es = parsed.es_url || parsed.elasticsearch_url
       const key = parsed.api_key
@@ -160,18 +166,31 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       if (effectiveKb) input.kibana_url = effectiveKb
       // Always construct provider ourselves to ensure correct baseURL and headers
       if (effectiveKb && key) {
-        input.provider = kibanaProvider(effectiveKb, key)
+        try {
+          input.provider = await KibanaGateway.buildProvider(effectiveKb, key)
+        } catch (e) {
+          setError("Could not reach Kibana to load connectors: " + (e as Error).message)
+          return
+        }
       }
       if (parsed.model && typeof parsed.model === "string") input.model = parsed.model
       else if (input.provider) input.model = "kibana/default"
-      save(input)
+      await save(input)
+    }).catch((e: Error) => {
+      setError("Setup failed: " + e.message)
     })
   }
 
   useKeyboard((evt) => {
-    if (evt.name === "return" && (evt.ctrl || evt.meta)) {
+    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && props.onEscape) {
+      props.onEscape()
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+    if (evt.name === "return") {
       if (mode() === "manual-json") {
-        submitManual()
+        submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
       } else if (mode() === "kibana-url") {
         submitKibanaUrl()
       }
@@ -219,10 +238,13 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <text fg={"#ff6b6b"}>{error()}</text>
         </Show>
 
-        <box paddingBottom={1}>
+        <box paddingBottom={1} flexDirection="column" gap={0}>
           <text fg={theme.text}>
-            ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+            enter <span style={{ fg: theme.textMuted }}>connect</span>
           </text>
+          <Show when={!!props.onEscape}>
+            <text fg={theme.textMuted}>escape / ctrl+c  quit</text>
+          </Show>
         </box>
 
         <box paddingTop={1}>
@@ -297,7 +319,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         <box paddingBottom={1}>
           <Show when={!saving()} fallback={<text fg={theme.textMuted}>connecting...</text>}>
             <text fg={theme.text}>
-              ctrl+enter <span style={{ fg: theme.textMuted }}>connect</span>
+              enter <span style={{ fg: theme.textMuted }}>connect</span>
             </text>
           </Show>
         </box>

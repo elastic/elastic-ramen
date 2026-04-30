@@ -224,7 +224,7 @@ export namespace ElasticAuth {
 
   async function clearOverrides() {
     for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
-      const override = path.join(process.cwd(), ".opencode", name)
+      const override = path.join(process.cwd(), ".elastic-ramen", name)
       if (await Filesystem.exists(override)) {
         const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
         if (overrideJson && (overrideJson.provider || overrideJson.model)) {

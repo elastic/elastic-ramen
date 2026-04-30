@@ -149,21 +149,18 @@ describe("session.prompt special characters", () => {
 
 describe("session.prompt agent variant", () => {
   test("applies agent variant only when using agent model", async () => {
-    const prev = process.env.OPENAI_API_KEY
-    process.env.OPENAI_API_KEY = "test-openai-key"
-
-    try {
-      await using tmp = await tmpdir({
-        git: true,
-        config: {
-          agent: {
-            build: {
-              model: "openai/gpt-5.2",
-              variant: "xhigh",
-            },
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        provider: { openai: { options: { apiKey: "test" } } },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+            variant: "xhigh",
           },
         },
-      })
+      },
+    })
 
       await Instance.provide({
         directory: tmp.path,
@@ -203,9 +200,5 @@ describe("session.prompt agent variant", () => {
           await Session.remove(session.id)
         },
       })
-    } finally {
-      if (prev === undefined) delete process.env.OPENAI_API_KEY
-      else process.env.OPENAI_API_KEY = prev
-    }
   })
 })

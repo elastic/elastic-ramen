@@ -1629,6 +1629,52 @@ describe("ProviderTransform.message - cache control on gateway", () => {
   })
 })
 
+describe("ProviderTransform.message - kibana LLM gateway", () => {
+  const kibanaModel = {
+    id: ".anthropic-claude-4.5-haiku-chat_completion",
+    providerID: "kibana",
+    api: {
+      id: ".anthropic-claude-4.5-haiku-chat_completion",
+      url: "https://kibana.example/internal/elastic_ramen/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Anthropic Claude 4.5 Haiku",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 128000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-01-01",
+  } as any
+
+  test("does not add prompt cache options when connector id contains claude", () => {
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kibanaModel, {}) as any[]
+
+    expect(result[0].providerOptions).toBeUndefined()
+    expect(result[1].providerOptions).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
