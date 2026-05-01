@@ -2,7 +2,7 @@
 import path from "path"
 import os from "os"
 import { Filesystem } from "@/util/filesystem"
-import { kibanaProvider } from "./kibana-provider"
+import { KibanaGateway } from "./kibana-gateway"
 
 export namespace ElasticAuth {
   export interface Context {
@@ -57,6 +57,61 @@ export namespace ElasticAuth {
 
   export function configPath(): string {
     return filepath()
+  }
+
+  /**
+   * Normalize a profile name into a YAML-safe context key.
+   * Replaces invalid chars with `_`, collapses runs, trims, caps at 64. Empty → `"default"`.
+   */
+  export function canon(raw: string | undefined): string {
+    const t = (raw ?? "")
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+    if (!t) return "default"
+    return t.length > 64 ? t.slice(0, 64) : t
+  }
+
+  /** First hostname label, or `undefined` if the URL is unparseable. */
+  function hostHead(url: string): string | undefined {
+    try {
+      const u = new URL(url.trim().replace(/\/+$/, ""))
+      const first = u.hostname.split(".")[0]
+      return first && first.length > 0 ? first : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** Cloud deployment URLs match `<id>.<service>.<region>...`; keep the part before the last hyphen as the name. */
+  function cloudDeploymentName(url: string, service: "kb" | "es"): string | undefined {
+    try {
+      const host = new URL(url.trim().replace(/\/+$/, "")).hostname
+      const m = host.match(new RegExp(`^([^.]+)\\.${service}\\.[^.]+\\.`))
+      const id = m?.[1]
+      if (!id) return undefined
+      const i = id.lastIndexOf("-")
+      return i > 0 ? id.slice(0, i) : id
+    } catch {
+      return undefined
+    }
+  }
+
+  /** Profile name from Kibana URL. Cloud `name-hash.kb...` → `name`; otherwise first hostname label. */
+  export function profileNameFromKibanaUrl(url: string): string {
+    return canon(cloudDeploymentName(url, "kb") ?? hostHead(url))
+  }
+
+  /** Profile name from Elasticsearch URL. Cloud `name-hash.es...` → `name`; otherwise first hostname label. */
+  export function profileNameFromElasticsearchUrl(url: string): string {
+    return canon(cloudDeploymentName(url, "es") ?? hostHead(url))
+  }
+
+  export function profileNameFromSetup(kibanaUrl?: string, elasticsearchUrl?: string): string {
+    if (kibanaUrl) return profileNameFromKibanaUrl(kibanaUrl)
+    if (elasticsearchUrl) return profileNameFromElasticsearchUrl(elasticsearchUrl)
+    return "default"
   }
 
   /** Decode a Cloud ID into ES and Kibana URLs. Format: `name:base64(host$es_uuid$kibana_uuid)` */
@@ -132,15 +187,6 @@ export namespace ElasticAuth {
     }
     lines.push("")
     return lines.join("\n")
-  }
-
-  function canon(raw: string | undefined): string {
-    const t = (raw ?? "").trim()
-    if (!t) return "default"
-    if (!/^[a-zA-Z0-9_-]+$/.test(t)) {
-      throw new Error("Profile name may only contain letters, digits, hyphen, and underscore")
-    }
-    return t
   }
 
   async function readRaw(): Promise<{ current: string; contexts: Record<string, Context> } | undefined> {
@@ -222,48 +268,68 @@ export namespace ElasticAuth {
     if (!p["eab_*"]) p["eab_*"] = "allow"
   }
 
-  async function clearOverrides() {
+  /**
+   * True when `currentModel` is `kibana/<connector>` and `<connector>` exists in the new
+   * provider's models map. Used to decide whether to preserve the user's connector pick
+   * across a profile switch, or fall back to the default.
+   */
+  export function shouldKeepKibanaModel(currentModel: unknown, provider: unknown): boolean {
+    if (typeof currentModel !== "string" || !currentModel.startsWith("kibana/")) return false
+    const connector = currentModel.slice("kibana/".length)
+    if (!connector) return false
+    const models = (provider as { kibana?: { models?: Record<string, unknown> } })?.kibana?.models ?? {}
+    return connector in models
+  }
+
+  /**
+   * Write `provider` (and optionally `model`) into the project's `elastic_ramen.json`,
+   * ensure the eab MCP entry, and clear any provider/model overrides under `.elastic-ramen/`.
+   *
+   * `preserveModelIfKibana` keeps an existing `kibana/<connector>` choice — but only if
+   * `<connector>` exists in the new provider's models map (see {@link shouldKeepKibanaModel}).
+   */
+  async function writeProjectConfig(opts: { provider: unknown; model?: string; preserveModelIfKibana?: boolean }) {
+    let cfg = await configJsonPath()
+    if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
+    const json = (await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))) as Record<string, unknown>
+    json.provider = opts.provider
+    if (opts.model) {
+      const keep = (opts.preserveModelIfKibana ?? false) && shouldKeepKibanaModel(json.model, opts.provider)
+      if (!keep) json.model = opts.model
+    }
+    ensureEab(json)
+    await Filesystem.writeJson(cfg, json)
     for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
       const override = path.join(process.cwd(), ".elastic-ramen", name)
-      if (await Filesystem.exists(override)) {
-        const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
-        if (overrideJson && (overrideJson.provider || overrideJson.model)) {
-          delete overrideJson.provider
-          delete overrideJson.model
-          await Filesystem.writeJson(override, overrideJson)
-        }
+      if (!(await Filesystem.exists(override))) continue
+      const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
+      if (overrideJson && (overrideJson.provider || overrideJson.model)) {
+        delete overrideJson.provider
+        delete overrideJson.model
+        await Filesystem.writeJson(override, overrideJson)
       }
     }
   }
 
-  /** Rewrite project `elastic_ramen` provider + model from the active YAML context (after profile switch). */
-  export async function applyProjectProvider() {
-    const status = await check()
-    if (!status.configured || !status.context) return
-    const kb = status.context.kibana_url
-    const key = status.context.api_key
-    if (!kb || !key) return
-
-    const provider = kibanaProvider(kb, key)
-    let cfg = await configJsonPath()
-    if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
-    const json = (await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))) as Record<string, unknown>
-    json.provider = provider
-    const m = json.model
-    if (typeof m !== "string" || !m.startsWith("kibana/")) json.model = "kibana/default"
-    ensureEab(json)
-    await Filesystem.writeJson(cfg, json)
-    await clearOverrides()
+  /**
+   * Pre-flight a profile switch: build the provider against the target context, then write
+   * YAML and project config. If buildProvider throws (network/auth), nothing on disk changes.
+   */
+  async function commitSwitch(currentName: string, contexts: Record<string, Context>) {
+    const ctx = contexts[currentName]
+    let provider: Awaited<ReturnType<typeof KibanaGateway.buildProvider>> | undefined
+    if (ctx?.kibana_url && ctx.api_key) {
+      provider = await KibanaGateway.buildProvider(ctx.kibana_url, ctx.api_key)
+    }
+    await Bun.write(filepath(), toYaml({ current: currentName, contexts }), { mode: 0o600 } as any)
+    if (provider) await writeProjectConfig({ provider, model: "kibana/default", preserveModelIfKibana: true })
   }
 
   export async function setCurrent(name: string) {
     const key = canon(name)
     const raw = await readRaw()
     if (!raw || !raw.contexts[key]) throw new Error(`Unknown profile "${key}"`)
-
-    const fp = filepath()
-    await Bun.write(fp, toYaml({ current: key, contexts: raw.contexts }), { mode: 0o600 } as any)
-    await applyProjectProvider()
+    await commitSwitch(key, raw.contexts)
   }
 
   export async function removeContext(name: string) {
@@ -276,27 +342,12 @@ export namespace ElasticAuth {
     const next = { ...raw.contexts }
     delete next[key]
 
-    let current = raw.current
-    if (current === key) {
-      const rest = keys.filter((k) => k !== key).toSorted()
-      current = rest[0]!
+    if (raw.current === key) {
+      const newCurrent = keys.filter((k) => k !== key).toSorted()[0]!
+      await commitSwitch(newCurrent, next)
+    } else {
+      await Bun.write(filepath(), toYaml({ current: raw.current, contexts: next }), { mode: 0o600 } as any)
     }
-
-    const fp = filepath()
-    await Bun.write(fp, toYaml({ current, contexts: next }), { mode: 0o600 } as any)
-    await applyProjectProvider()
-  }
-
-  async function writeElasticRamenFromSave(input: SaveInput) {
-    if (!input.provider) return
-    let cfg = await configJsonPath()
-    if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
-    const json = (await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))) as Record<string, unknown>
-    json.provider = input.provider
-    if (input.model) json.model = input.model
-    ensureEab(json)
-    await Filesystem.writeJson(cfg, json)
-    await clearOverrides()
   }
 
   export async function reset() {
@@ -346,6 +397,6 @@ export namespace ElasticAuth {
     const yaml = toYaml({ current, contexts: merged })
     await Bun.write(fp, yaml, { mode: 0o600 } as any)
 
-    await writeElasticRamenFromSave(input)
+    if (input.provider) await writeProjectConfig({ provider: input.provider, model: input.model })
   }
 }

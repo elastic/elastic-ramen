@@ -10,7 +10,6 @@ import { Link } from "@tui/ui/link"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
-import { profileNameFromSetup } from "@/elastic/kibana-provider"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
 
@@ -51,7 +50,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     setSaving(true)
     setError("")
 
-    const ctx = profileNameFromSetup(input.kibana_url, input.elasticsearch_url)
+    const ctx = ElasticAuth.profileNameFromSetup(input.kibana_url, input.elasticsearch_url)
     await ElasticAuth.save({ ...input, context: ctx }).catch((e: Error) => {
       setError("Failed to save config: " + e.message)
       setSaving(false)
