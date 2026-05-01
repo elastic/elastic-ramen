@@ -394,9 +394,26 @@ function App() {
       .start()
   }
 
+  /**
+   * Best-effort reload of Kibana-dependent runtime after auth changes (setup, profile switch).
+   * Each subsystem (bootstrap, MCP, alerts, profile label) fails independently with a toast;
+   * this function never throws, so callers can rely on disk state and runtime state being aligned
+   * by the time it returns. Anything still broken surfaces as a toast.
+   */
   async function reloadKibanaIntegration(opts?: { resetSession?: boolean }) {
+    const stepFail = (label: string, err: unknown) =>
+      toast.show({
+        variant: "error",
+        message: `${label}: ${err instanceof Error ? err.message : String(err)}`,
+        duration: 8000,
+      })
+
     await sdk.client.instance.dispose().catch(() => {})
-    await sync.bootstrap()
+    try {
+      await sync.bootstrap()
+    } catch (err) {
+      stepFail("Bootstrap failed", err)
+    }
     try {
       toast.show({ variant: "info", message: "Connecting MCP server eab...", duration: 3000 })
       await sdk.client.mcp.connect({ name: "eab" })
@@ -415,20 +432,24 @@ function App() {
         }
       }
     } catch (err) {
-      toast.show({
-        variant: "error",
-        message: `MCP connect failed: ${err instanceof Error ? err.message : String(err)}`,
-        duration: 8000,
-      })
+      stepFail("MCP connect failed", err)
     }
-    const creds = await ElasticAlerts.resolve()
-    if (creds) restartAlerts(creds.url, creds.key)
-    else {
-      alertPoller?.stop()
-      alertPoller = undefined
-      alertsCtx.set([])
+    try {
+      const creds = await ElasticAlerts.resolve()
+      if (creds) restartAlerts(creds.url, creds.key)
+      else {
+        alertPoller?.stop()
+        alertPoller = undefined
+        alertsCtx.set([])
+      }
+    } catch (err) {
+      stepFail("Alerts reload failed", err)
     }
-    await elasticProfile.refresh()
+    try {
+      await elasticProfile.refresh()
+    } catch (err) {
+      stepFail("Profile refresh failed", err)
+    }
     setEsReady(true)
     if (opts?.resetSession) route.navigate({ type: "home" })
   }
