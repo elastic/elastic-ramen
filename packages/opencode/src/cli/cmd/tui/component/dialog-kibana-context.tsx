@@ -68,13 +68,15 @@ export function DialogKibanaContext(props: {
           try {
             await ElasticAuth.removeContext(profileToDelete)
             const next = await ElasticAuth.profiles()
-            if (next.names.length === 0) {
+            toast.show({ variant: "success", message: `Removed profile ${profileToDelete}`, duration: 3000 })
+            if (wasActive) {
+              await props.onReload({ resetSession: true })
+              dialog.clear()
+            } else if (next.names.length === 0) {
               dialog.clear()
             } else {
               setSnap(next)
             }
-            toast.show({ variant: "success", message: `Removed profile ${profileToDelete}`, duration: 3000 })
-            if (wasActive) props.onReload({ resetSession: true })
           } catch (e) {
             toast.show({ variant: "error", message: e instanceof Error ? e.message : String(e), duration: 5000 })
           } finally {
