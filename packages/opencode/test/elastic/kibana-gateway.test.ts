@@ -40,6 +40,7 @@ describe("KibanaGateway", () => {
       const p = await KibanaGateway.buildProvider(base, "Zm9v")
       expect(p.kibana.models.default).toBeDefined()
       expect((p.kibana.models.default as { id: string }).id).toBe("preferred-inference")
+      expect((p.kibana.models.default as { name: string }).name).toBe("Preferred Inference (default)")
       expect(p.kibana.models["my-inference"]).toBeDefined()
       expect((p.kibana.models["my-inference"] as { id: string; name: string }).id).toBe("my-inference")
       expect((p.kibana.models["my-inference"] as { name: string }).name).toBe("My Inference")
@@ -130,6 +131,7 @@ describe("KibanaGateway", () => {
       const models = provider.models as Record<string, { api: { id: string }; name: string }>
       expect(Object.keys(models).sort()).toEqual(["conn-a", "default"])
       expect(models.default.api.id).toBe("conn-b")
+      expect(models.default.name).toBe("Conn B (default)")
       expect(models["conn-a"].api.id).toBe("conn-a")
       expect(models["conn-a"].name).toBe("Conn A")
     } finally {

@@ -139,6 +139,7 @@ export namespace KibanaGateway {
       next.default = {
         ...prev,
         id: apiId,
+        name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
         api: { ...(prev.api as object), id: apiId },
       }
     } else {
@@ -146,7 +147,7 @@ export namespace KibanaGateway {
       next.default = {
         ...copy,
         id: apiId,
-        name: "Default Connector",
+        name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
         api: { ...copy.api, id: apiId },
       }
     }
@@ -174,7 +175,7 @@ export namespace KibanaGateway {
     const models: Record<string, Record<string, unknown>> = {
       default: {
         id: apiId,
-        name: "Default Connector",
+        name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
         ...template,
       },
     }
