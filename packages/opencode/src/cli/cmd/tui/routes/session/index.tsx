@@ -1689,6 +1689,38 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     return { barW, lw, nw, cw }
   })
 
+  /** Widest chart line; if wider than content area, show stripped text output instead. */
+  const need = createMemo(() => {
+    const d = data()
+    if (!d) return 0
+    const l = layout()
+    const t = type()
+    const s = stacked()
+    const n = d.columns.length
+
+    if (t === "horizontal") {
+      const lw = Math.max(8, ...d.rows.map((r) => r.label.length))
+      if (s && n > 1) {
+        const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+        const tw = Math.max(6, ...rowTotals.map((x) => fmtNum(x).length))
+        return 8 + lw + l.barW + tw
+      }
+      const maxVal = Math.max(1, ...l.nw)
+      const suffix = n > 1 ? 3 + Math.max(0, ...d.columns.map((c) => c.length)) : 0
+      return lw + suffix + l.barW + maxVal + 12
+    }
+
+    if (s && n > 1) {
+      const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+      const tw = Math.max(6, ...rowTotals.map((x) => fmtNum(x).length))
+      return 8 + l.lw + l.barW + tw
+    }
+
+    return 4 + l.lw + d.columns.reduce((acc, _, i) => acc + 3 + l.cw[i], 0)
+  })
+
+  const fits = createMemo(() => need() <= ctx.width - 1)
+
   const borderLine = (left: string, mid: string, right: string) => {
     const l = layout()
     const d = data()
@@ -1926,6 +1958,17 @@ function Chart(props: ToolProps<typeof ChartTool>) {
         const t = type()
         const s = stacked()
         const title = d().title ?? (t === "bar" ? "Chart" : t + " chart")
+        const text = stripAnsi(props.output?.trim() ?? "")
+        if (!fits() && text.length > 0) {
+          return (
+            <BlockTool title={`# 📊 ${title}`} part={props.part}>
+              <box gap={1}>
+                <text fg={theme.textMuted}>Chart wider than terminal — text output.</text>
+                <text fg={theme.text}>{text}</text>
+              </box>
+            </BlockTool>
+          )
+        }
         const dataBlock = t === "horizontal" ? horizontalBarChart({ ...d(), stacked: s }) : barChart({ ...d(), stacked: s })
         return (
           <BlockTool title={`# 📊 ${title}`} part={props.part}>

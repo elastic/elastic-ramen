@@ -166,13 +166,17 @@ export const ChartTool = Tool.define("chart", {
     "Call this automatically whenever you have ES|QL query results or any other",
     "tabular data with numeric columns worth visualizing — do not wait to be asked.",
     "",
+    "If there are fewer than 2 data rows, prefer plain text instead of this tool —",
+    "a chart rarely helps for a single category.",
+    "",
     "IMPORTANT: after rendering the chart, do NOT repeat the same data in text.",
     "The chart is the answer. Avoid statements like 'as you can see, X is 42 and Y is 99'.",
     "",
     "Chart types:",
     "  bar       — vertical bars per row. Default. Good for comparing categories.",
     "  horizontal — bars extend left-to-right from the label. Better for long labels.",
-    "  histogram — vertical bars for binned distributions.",
+    "  histogram — same vertical bar table as bar; use for binned buckets (ES|QL histograms)",
+    "            so the choice of type matches the query, not because the drawing differs.",
     "",
     "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
     "Unstacked (default) shows columns side-by-side per row for comparison.",
@@ -190,7 +194,9 @@ export const ChartTool = Tool.define("chart", {
     type: z
       .enum(["bar", "horizontal", "histogram"])
       .default("bar")
-      .describe("Chart layout: bar (vertical), horizontal (left-to-right), or histogram"),
+      .describe(
+        "Chart layout: bar (vertical), horizontal (left-to-right), or histogram (same drawing as bar, for binned data)",
+      ),
     stacked: z
       .boolean()
       .default(false)
@@ -218,6 +224,7 @@ export const ChartTool = Tool.define("chart", {
       case "histogram":
       case "bar":
       default:
+        // histogram uses the same ASCII layout as bar; type is for binned semantics / metadata.
         result = barChart({ ...params, stacked })
         break
     }
