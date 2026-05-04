@@ -1,8 +1,10 @@
-import { test, expect, describe, mock, afterEach } from "bun:test"
+import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
+import { eq } from "drizzle-orm"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
+import { AccountStateTable } from "../../src/account/account.sql"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -10,9 +12,18 @@ import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
+import { Database } from "../../src/storage/db"
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+
+beforeEach(async () => {
+  Config.global.reset()
+  await Instance.disposeAll().catch(() => {})
+  Database.use((db) => {
+    db.update(AccountStateTable).set({ active_account_id: null, active_org_id: null }).where(eq(AccountStateTable.id, 1)).run()
+  })
+})
 
 afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
@@ -817,6 +828,7 @@ test("resolves scoped npm plugins in config", async () => {
 
 test("merges plugin arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
+    git: true,
     init: async (dir) => {
       // Create a nested project structure with local .elastic-ramen config
       const projectDir = path.join(dir, "project")
@@ -895,6 +907,7 @@ Helper subagent prompt`,
 
 test("merges instructions arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
+    git: true,
     init: async (dir) => {
       const projectDir = path.join(dir, "project")
       const opencodeDir = path.join(projectDir, ".elastic-ramen")
@@ -934,6 +947,7 @@ test("merges instructions arrays from global and local configs", async () => {
 
 test("deduplicates duplicate instructions from global and local configs", async () => {
   await using tmp = await tmpdir({
+    git: true,
     init: async (dir) => {
       const projectDir = path.join(dir, "project")
       const opencodeDir = path.join(projectDir, ".elastic-ramen")
@@ -976,6 +990,7 @@ test("deduplicates duplicate instructions from global and local configs", async 
 
 test("deduplicates duplicate plugins from global and local configs", async () => {
   await using tmp = await tmpdir({
+    git: true,
     init: async (dir) => {
       // Create a nested project structure with local .elastic-ramen config
       const projectDir = path.join(dir, "project")
@@ -1749,6 +1764,7 @@ describe("deduplicatePlugins", () => {
 
   test("local plugin directory overrides global opencode.json plugin", async () => {
     await using tmp = await tmpdir({
+      git: true,
       init: async (dir) => {
         const projectDir = path.join(dir, "project")
         const opencodeDir = path.join(projectDir, ".elastic-ramen")

@@ -35,6 +35,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { stripAttachmentTags } from "@/util/attachment_tag"
 import { resolveModelLabel } from "@/util/model-label"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
@@ -50,7 +51,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
-import { ChartTool, BAR_WIDTH, render as renderBar, fmt as fmtNum } from "@/tool/chart"
+import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum, segSizes } from "@/tool/chart"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -1464,15 +1465,16 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const body = createMemo(() => stripAttachmentTags(props.part.text.trim()))
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={body()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
               streaming={true}
-              content={props.part.text.trim()}
+              content={body()}
               conceal={ctx.conceal()}
             />
           </Match>
@@ -1482,7 +1484,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
-              content={props.part.text.trim()}
+              content={body()}
               conceal={ctx.conceal()}
               fg={theme.text}
             />
@@ -1645,28 +1647,193 @@ const CHART_COLORS = (theme: ReturnType<typeof useTheme>["theme"]) => [
 
 function Chart(props: ToolProps<typeof ChartTool>) {
   const { theme } = useTheme()
+  const ctx = use()
   const data = createMemo(() => props.metadata.data as
-    | { title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
+    | { type?: string; stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
     | undefined)
 
-  const widths = createMemo(() => {
+  const stacked = createMemo(() => data()?.stacked ?? false)
+
+  const layout = createMemo(() => {
     const d = data()
-    if (!d) return { lw: 8, nw: [] as number[], cw: [] as number[] }
+    if (!d) return { barW: BAR_WIDTH, lw: 8, nw: [] as number[], cw: [] as number[] }
+
     const nums = d.rows.map((r) => d.columns.map((_, i) => fmtNum(r.values[i] ?? 0)))
     const lw = Math.max(8, ...d.rows.map((r) => r.label.length))
     const nw = d.columns.map((_, i) => Math.max(0, ...nums.map((n) => n[i].length)))
-    const cw = d.columns.map((col, i) => Math.max(col.length, BAR_WIDTH + 1 + nw[i]))
-    return { lw, nw, cw }
+    const numCols = Math.max(1, d.columns.length)
+    const margin = 8
+
+    // Shrink bars from ctx.width when needed; `fits` + stripped text handles true overflow.
+    let barW: number
+
+    if (stacked() && numCols > 1) {
+      const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+      const tw = Math.max(6, ...rowTotals.map((t) => fmtNum(t).length))
+      const room = ctx.width - lw - tw - 10 - margin
+      barW = Math.max(1, Math.min(100, room))
+    } else {
+      const totalNums = nw.reduce((a, b) => a + b, 0)
+      const overhead = 4 + lw + numCols * 4 + totalNums + margin
+      const room = Math.floor((ctx.width - overhead) / numCols)
+      barW = Math.max(1, Math.min(50, room))
+    }
+
+    const cw = d.columns.map((col, i) => Math.max(col.length, barW + 1 + nw[i]))
+    return { barW, lw, nw, cw }
   })
 
+  /** Widest chart line; if wider than content area, show stripped text output instead. */
+  const need = createMemo(() => {
+    const d = data()
+    if (!d) return 0
+    const l = layout()
+    const s = stacked()
+    const n = d.columns.length
+
+    if (s && n > 1) {
+      const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+      const tw = Math.max(6, ...rowTotals.map((x) => fmtNum(x).length))
+      return 10 + l.lw + l.barW + tw
+    }
+
+    return 4 + l.lw + d.columns.reduce((acc, _, i) => acc + 3 + l.cw[i], 0)
+  })
+
+  const fits = createMemo(() => need() <= ctx.width - 1)
+
   const borderLine = (left: string, mid: string, right: string) => {
-    const w = widths()
+    const l = layout()
     const d = data()
     if (!d) return ""
-    return left + "─".repeat(w.lw + 2) + d.columns.map((_, i) => mid + "─".repeat(w.cw[i] + 2)).join("") + right
+    return left + "─".repeat(l.lw + 2) + d.columns.map((_, i) => mid + "─".repeat(l.cw[i] + 2)).join("") + right
   }
 
-  const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length))
+  const padText = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length))
+
+  function renderBarDyn(value: number, max: number, width: number) {
+    if (max <= 0) return " ".repeat(width)
+    const ratio = Math.min(value / max, 1)
+    const full = Math.floor(ratio * width)
+    const frac = Math.round((ratio * width - full) * 8)
+    const partial = frac > 0 && frac < 8 ? EIGHTHS[frac] : ""
+    return "█".repeat(full) + partial + " ".repeat(Math.max(0, width - full - (partial ? 1 : 0)))
+  }
+
+  const barChart = (d: { stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }) => {
+    const colors = CHART_COLORS(theme)
+    const { barW } = layout()
+
+    if (d.stacked && d.columns.length > 1) {
+      const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
+      const globalMax = Math.max(1, ...rowTotals)
+      const tw = Math.max(6, ...rowTotals.map((t) => fmtNum(t).length))
+      const headerBorder = (left: string, mid: string, right: string) =>
+        left + "─".repeat(layout().lw + 2) + mid + "─".repeat(barW + 2) + mid + "─".repeat(tw + 2) + right
+
+      return (
+        <box>
+          <text fg={theme.textMuted}>{headerBorder("┌", "┬", "┐")}</text>
+          <text>
+            <span style={{ fg: theme.textMuted }}>│ </span>
+            <span style={{ fg: theme.text, bold: true }}>{padText("Category", layout().lw)}</span>
+            <span style={{ fg: theme.textMuted }}> │ </span>
+            <span style={{ fg: theme.text, bold: true }}>{padText("Total", barW)}</span>
+            <span style={{ fg: theme.textMuted }}> │ </span>
+            <span style={{ fg: theme.text, bold: true }}>{padText("Value", tw)}</span>
+            <span style={{ fg: theme.textMuted }}> │</span>
+          </text>
+          <text fg={theme.textMuted}>{headerBorder("├", "┼", "┤")}</text>
+          <For each={d.rows}>
+            {(row, ri) => {
+              const total = rowTotals[ri()]
+              const sw = segSizes(row.values, globalMax, barW)
+              const used = sw.reduce((a, b) => a + b, 0)
+              return (
+                <text>
+                  <span style={{ fg: theme.textMuted }}>│ </span>
+                  <span style={{ fg: theme.text }}>{padText(row.label, layout().lw)}</span>
+                  <span style={{ fg: theme.textMuted }}> │ </span>
+                  <For each={d.columns}>
+                    {(_, ci) => (
+                      <span style={{ fg: colors[ci() % colors.length] }}>{"█".repeat(sw[ci()])}</span>
+                    )}
+                  </For>
+                  <span>{" ".repeat(barW - used)}</span>
+                  <span style={{ fg: theme.textMuted }}> │ </span>
+                  <span style={{ fg: theme.text }}>{padText(fmtNum(total), tw)}</span>
+                  <span style={{ fg: theme.textMuted }}> │</span>
+                </text>
+              )
+            }}
+          </For>
+          <text fg={theme.textMuted}>{headerBorder("└", "┴", "┘")}</text>
+          <box gap={1}>
+            <For each={d.columns}>
+              {(col, ci) => (
+                <text>
+                  <span style={{ fg: colors[ci() % colors.length] }}>█</span>
+                  <span style={{ fg: theme.text }}> {col}</span>
+                </text>
+              )}
+            </For>
+          </box>
+        </box>
+      )
+    }
+
+    return (
+      <box>
+        <text fg={theme.textMuted}>{borderLine("┌", "┬", "┐")}</text>
+        <text>
+          <span style={{ fg: theme.textMuted }}>│ </span>
+          <span style={{ fg: theme.text, bold: true }}>{padText("Category", layout().lw)}</span>
+          <span style={{ fg: theme.textMuted }}> </span>
+          <For each={d.columns}>
+            {(col, ci) => (
+              <>
+                <span style={{ fg: theme.textMuted }}>│ </span>
+                <span style={{ fg: colors[ci() % colors.length], bold: true }}>
+                  {padText(col, layout().cw[ci()])}
+                </span>
+                <span style={{ fg: theme.textMuted }}> </span>
+              </>
+            )}
+          </For>
+          <span style={{ fg: theme.textMuted }}>│</span>
+        </text>
+        <text fg={theme.textMuted}>{borderLine("├", "┼", "┤")}</text>
+        <For each={d.rows}>
+          {(row) => (
+            <text>
+              <span style={{ fg: theme.textMuted }}>│ </span>
+              <span style={{ fg: theme.text }}>{padText(row.label, layout().lw)}</span>
+              <span style={{ fg: theme.textMuted }}> </span>
+              <For each={d.columns}>
+                {(_, ci) => {
+                  const val = row.values[ci()] ?? 0
+                  const bar = renderBarDyn(val, d.maxes[ci()], barW)
+                  const num = fmtNum(val)
+                  return (
+                    <>
+                      <span style={{ fg: theme.textMuted }}>│ </span>
+                      <span style={{ fg: colors[ci() % colors.length] }}>{bar}</span>
+                      <span style={{ fg: theme.text }}>
+                        {" " + padText(num, layout().cw[ci()] - barW - 1)}
+                      </span>
+                      <span style={{ fg: theme.textMuted }}> </span>
+                    </>
+                  )
+                }}
+              </For>
+              <span style={{ fg: theme.textMuted }}>│</span>
+            </text>
+          )}
+        </For>
+        <text fg={theme.textMuted}>{borderLine("└", "┴", "┘")}</text>
+      </box>
+    )
+  }
 
   return (
     <Show
@@ -1678,58 +1845,23 @@ function Chart(props: ToolProps<typeof ChartTool>) {
       }
     >
       {(d) => {
-        const colors = CHART_COLORS(theme)
+        const s = stacked()
+        const title = d().title ?? "Chart"
+        const text = stripAnsi(props.output?.trim() ?? "")
+        if (!fits() && text.length > 0) {
+          return (
+            <BlockTool title={`# 📊 ${title}`} part={props.part}>
+              <box gap={1}>
+                <text fg={theme.textMuted}>Chart wider than terminal — text output.</text>
+                <text fg={theme.text}>{text}</text>
+              </box>
+            </BlockTool>
+          )
+        }
+        const dataBlock = barChart({ ...d(), stacked: s })
         return (
-          <BlockTool title={`# 📊 ${d().title ?? "Chart"}`} part={props.part}>
-            <box>
-              <text fg={theme.textMuted}>{borderLine("┌", "┬", "┐")}</text>
-              <text>
-                <span style={{ fg: theme.textMuted }}>│ </span>
-                <span style={{ fg: theme.text, bold: true }}>{pad("Category", widths().lw)}</span>
-                <span style={{ fg: theme.textMuted }}> </span>
-                <For each={d().columns}>
-                  {(col, ci) => (
-                    <>
-                      <span style={{ fg: theme.textMuted }}>│ </span>
-                      <span style={{ fg: colors[ci() % colors.length], bold: true }}>
-                        {pad(col, widths().cw[ci()])}
-                      </span>
-                      <span style={{ fg: theme.textMuted }}> </span>
-                    </>
-                  )}
-                </For>
-                <span style={{ fg: theme.textMuted }}>│</span>
-              </text>
-              <text fg={theme.textMuted}>{borderLine("├", "┼", "┤")}</text>
-              <For each={d().rows}>
-                {(row) => (
-                  <text>
-                    <span style={{ fg: theme.textMuted }}>│ </span>
-                    <span style={{ fg: theme.text }}>{pad(row.label, widths().lw)}</span>
-                    <span style={{ fg: theme.textMuted }}> </span>
-                    <For each={d().columns}>
-                      {(_, ci) => {
-                        const val = row.values[ci()] ?? 0
-                        const bar = renderBar(val, d().maxes[ci()])
-                        const num = fmtNum(val)
-                        return (
-                          <>
-                            <span style={{ fg: theme.textMuted }}>│ </span>
-                            <span style={{ fg: colors[ci() % colors.length] }}>{bar}</span>
-                            <span style={{ fg: theme.text }}>
-                              {" " + pad(num, widths().cw[ci()] - BAR_WIDTH - 1)}
-                            </span>
-                            <span style={{ fg: theme.textMuted }}> </span>
-                          </>
-                        )
-                      }}
-                    </For>
-                    <span style={{ fg: theme.textMuted }}>│</span>
-                  </text>
-                )}
-              </For>
-              <text fg={theme.textMuted}>{borderLine("└", "┴", "┘")}</text>
-            </box>
+          <BlockTool title={`# 📊 ${title}`} part={props.part}>
+            {dataBlock}
           </BlockTool>
         )
       }}

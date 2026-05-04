@@ -30,7 +30,10 @@ import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
+import { ChartTool } from "../../tool/chart"
 import { Locale } from "../../util/locale"
+import { stripAttachmentTags } from "../../util/attachment_tag"
+import stripAnsi from "strip-ansi"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -66,16 +69,24 @@ function block(info: Inline, output?: string) {
   UI.empty()
 }
 
+function chart(info: ToolProps<typeof ChartTool>) {
+  if (info.part.state.status !== "completed") return fallback(info.part)
+  const output = info.part.state.output
+  block(
+    { icon: "📊", title: info.part.state.title ?? "Chart" },
+    process.stdout.isTTY ? output : output && stripAnsi(output),
+  )
+}
+
 function fallback(part: ToolPart) {
   const state = part.state
   const input = "input" in state ? state.input : undefined
   const title =
     ("title" in state && state.title ? state.title : undefined) ||
     (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : "Unknown")
-  inline({
-    icon: "⚙",
-    title: `${part.tool} ${title}`,
-  })
+  const raw = state.status === "completed" ? state.output?.trim() : undefined
+  const output = raw ? stripAttachmentTags(raw) : undefined
+  block({ icon: "⚙", title: `${part.tool} ${title}` }, output)
 }
 
 function glob(info: ToolProps<typeof GlobTool>) {
@@ -428,6 +439,7 @@ export const RunCommand = cmd({
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
           if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
           if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
+          if (part.tool === "chart") return chart(props<typeof ChartTool>(part))
           return fallback(part)
         } catch {
           return fallback(part)
@@ -501,7 +513,7 @@ export const RunCommand = cmd({
 
             if (part.type === "text" && part.time?.end) {
               if (emit("text", { part })) continue
-              const text = part.text.trim()
+              const text = stripAttachmentTags(part.text.trim())
               if (!text) continue
               if (!process.stdout.isTTY) {
                 process.stdout.write(text + EOL)
