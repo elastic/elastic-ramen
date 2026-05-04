@@ -79,19 +79,15 @@ describe("ChartTool", () => {
     expect(res.metadata.data.type).toBe("horizontal")
   })
 
-  test("histogram falls back to vertical bar rendering", async () => {
+  test("stacked bar keeps ANSI intact when rounding would overflow bar width", async () => {
     const res = await exec({
-      type: "histogram",
-      columns: ["freq"],
-      rows: [
-        { label: "0-10", values: [5] },
-        { label: "10-20", values: [12] },
-      ],
+      type: "bar",
+      stacked: true,
+      columns: ["a", "b", "c"],
+      rows: [{ label: "x", values: [1, 1, 1] }],
     })
-    expect(res.output).toContain("0-10")
-    expect(res.output).toContain("10-20")
-    expect(res.title).toBe("histogram chart")
-    expect(res.metadata.data.type).toBe("histogram")
+    expect(res.output).toContain("x")
+    expect(res.output.replace(/\x1b\[[0-9;]*m/g, "").includes("\x1b")).toBe(false)
   })
 
   test("stacked bar chart combines columns", async () => {

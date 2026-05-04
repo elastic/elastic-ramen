@@ -30,6 +30,33 @@ function colorFor(i: number): string {
   return ANSI_COLORS[i % ANSI_COLORS.length]
 }
 
+/** Integer segment widths for stacked bars; sum is at most `width` (no ANSI slicing). */
+function segSizes(values: number[], globalMax: number, width: number): number[] {
+  if (values.length === 0 || width <= 0) return values.map(() => 0)
+  if (globalMax <= 0) return values.map(() => 0)
+  const w = values.map((v) => Math.max(0, Math.round(((v ?? 0) / globalMax) * width)))
+  let sum = w.reduce((a, b) => a + b, 0)
+  while (sum > width) {
+    let i = w.length - 1
+    while (i >= 0 && w[i] === 0) i--
+    if (i < 0) break
+    w[i]--
+    sum--
+  }
+  return w
+}
+
+function ansiStack(values: number[], globalMax: number, width: number): string {
+  const sw = segSizes(values, globalMax, width)
+  let out = ""
+  for (let i = 0; i < values.length; i++) {
+    out += colorFor(i) + "█".repeat(sw[i]) + ANSI_RESET
+  }
+  const used = sw.reduce((a, b) => a + b, 0)
+  if (used < width) out += " ".repeat(width - used)
+  return out
+}
+
 function barChart(params: {
   title?: string
   columns: string[]
@@ -63,20 +90,6 @@ function barChart(params: {
     const headerBorder = (left: string, mid: string, right: string) =>
       left + "─".repeat(lw + 2) + mid + "─".repeat(BAR_WIDTH + 2) + mid + "─".repeat(tw + 2) + right
 
-    const segments = (values: number[]) => {
-      if (globalMax <= 0) return " ".repeat(BAR_WIDTH)
-      const total = values.reduce((s, v) => s + v, 0)
-      let out = ""
-      for (let i = 0; i < values.length; i++) {
-        const frac = values[i] / globalMax
-        const segW = Math.round(frac * BAR_WIDTH)
-        out += colorFor(i) + "█".repeat(Math.max(0, segW)) + ANSI_RESET
-      }
-      const fill = BAR_WIDTH - out.replace(/\x1b\[[0-9;]*m/g, "").length
-      if (fill > 0) out += " ".repeat(fill)
-      return out.slice(0, out.length + Math.min(0, fill))
-    }
-
     const legend = params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  ")
 
     lines.push(headerBorder("┌", "┬", "┐"))
@@ -84,7 +97,7 @@ function barChart(params: {
     lines.push(headerBorder("├", "┼", "┤"))
     for (let ri = 0; ri < params.rows.length; ri++) {
       const r = params.rows[ri]
-      const seg = segments(r.values)
+      const seg = globalMax <= 0 ? " ".repeat(BAR_WIDTH) : ansiStack(r.values, globalMax, BAR_WIDTH)
       lines.push("│ " + pad(r.label, lw) + " │ " + seg + " │ " + pad(fmt(rowTotals[ri]), tw) + " │")
     }
     lines.push(headerBorder("└", "┴", "┘"))
@@ -129,15 +142,7 @@ function horizontalBarChart(params: {
 
     for (const r of params.rows) {
       const total = r.values.reduce((s, v) => s + (v ?? 0), 0)
-      let bar = ""
-      for (let i = 0; i < r.values.length; i++) {
-        const frac = r.values[i] / globalMax
-        const segW = Math.round(frac * BAR_WIDTH)
-        bar += colorFor(i) + "█".repeat(Math.max(0, segW)) + ANSI_RESET
-      }
-      const fill = BAR_WIDTH - bar.replace(/\x1b\[[0-9;]*m/g, "").length
-      if (fill > 0) bar += " ".repeat(fill)
-      bar = bar.slice(0, bar.length + Math.min(0, fill))
+      const bar = globalMax <= 0 ? " ".repeat(BAR_WIDTH) : ansiStack(r.values, globalMax, BAR_WIDTH)
       lines.push("│ " + pad(r.label, lw) + " │ " + bar + " │ " + fmt(total))
     }
 
@@ -175,8 +180,6 @@ export const ChartTool = Tool.define("chart", {
     "Chart types:",
     "  bar       — vertical bars per row. Default. Good for comparing categories.",
     "  horizontal — bars extend left-to-right from the label. Better for long labels.",
-    "  histogram — same vertical bar table as bar; use for binned buckets (ES|QL histograms)",
-    "            so the choice of type matches the query, not because the drawing differs.",
     "",
     "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
     "Unstacked (default) shows columns side-by-side per row for comparison.",
@@ -191,12 +194,7 @@ export const ChartTool = Tool.define("chart", {
     "  ]",
   ].join("\n"),
   parameters: z.object({
-    type: z
-      .enum(["bar", "horizontal", "histogram"])
-      .default("bar")
-      .describe(
-        "Chart layout: bar (vertical), horizontal (left-to-right), or histogram (same drawing as bar, for binned data)",
-      ),
+    type: z.enum(["bar", "horizontal"]).default("bar").describe("Chart layout: bar (vertical) or horizontal (left-to-right)"),
     stacked: z
       .boolean()
       .default(false)
@@ -221,10 +219,8 @@ export const ChartTool = Tool.define("chart", {
       case "horizontal":
         result = horizontalBarChart({ ...params, stacked })
         break
-      case "histogram":
       case "bar":
       default:
-        // histogram uses the same ASCII layout as bar; type is for binned semantics / metadata.
         result = barChart({ ...params, stacked })
         break
     }
