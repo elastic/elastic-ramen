@@ -31,7 +31,7 @@ function colorFor(i: number): string {
 }
 
 /** Integer segment widths for stacked bars; sum is at most `width` (no ANSI slicing). */
-function segSizes(values: number[], globalMax: number, width: number): number[] {
+export function segSizes(values: number[], globalMax: number, width: number): number[] {
   if (values.length === 0 || width <= 0) return values.map(() => 0)
   if (globalMax <= 0) return values.map(() => 0)
   const w = values.map((v) => Math.max(0, Math.round(((v ?? 0) / globalMax) * width)))
@@ -46,7 +46,7 @@ function segSizes(values: number[], globalMax: number, width: number): number[] 
   return w
 }
 
-function ansiStack(values: number[], globalMax: number, width: number): string {
+export function ansiStack(values: number[], globalMax: number, width: number): string {
   const sw = segSizes(values, globalMax, width)
   let out = ""
   for (let i = 0; i < values.length; i++) {
@@ -165,6 +165,25 @@ function horizontalBarChart(params: {
   return { lines, maxes }
 }
 
+export const chartParameters = z.object({
+  type: z.enum(["bar", "horizontal"]).default("bar").describe("Chart layout: bar (vertical) or horizontal (left-to-right)"),
+  stacked: z
+    .boolean()
+    .default(false)
+    .describe("When true and there are multiple columns, stack their values into one bar per row"),
+  title: z.string().optional().describe("Optional chart title"),
+  columns: z.array(z.string()).describe("Headers for the numerical value columns"),
+  rows: z
+    .array(
+      z.object({
+        label: z.string().describe("Category label"),
+        values: z.array(z.number()).describe("One numerical value per column"),
+      }),
+    )
+    .min(1)
+    .describe("Data rows with category labels and numerical values"),
+})
+
 export const ChartTool = Tool.define("chart", {
   description: [
     "Render tabular data as an inline bar chart in the ramen terminal UI.",
@@ -193,26 +212,9 @@ export const ChartTool = Tool.define("chart", {
     '    { label: "db",    values: [45,  890] }',
     "  ]",
   ].join("\n"),
-  parameters: z.object({
-    type: z.enum(["bar", "horizontal"]).default("bar").describe("Chart layout: bar (vertical) or horizontal (left-to-right)"),
-    stacked: z
-      .boolean()
-      .default(false)
-      .describe("When true and there are multiple columns, stack their values into one bar per row"),
-    title: z.string().optional().describe("Optional chart title"),
-    columns: z.array(z.string()).describe("Headers for the numerical value columns"),
-    rows: z
-      .array(
-        z.object({
-          label: z.string().describe("Category label"),
-          values: z.array(z.number()).describe("One numerical value per column"),
-        }),
-      )
-      .min(1)
-      .describe("Data rows with category labels and numerical values"),
-  }),
+  parameters: chartParameters,
   async execute(params) {
-    const stacked = params.stacked ?? false
+    const stacked = params.stacked
     let result: { lines: string[]; maxes: number[] }
 
     switch (params.type) {
