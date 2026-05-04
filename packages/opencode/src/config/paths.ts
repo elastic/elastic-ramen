@@ -17,12 +17,18 @@ export namespace ConfigPaths {
     tui: ["tui"],
   }
 
+  /** Without git, worktree is "/"; do not walk the whole filesystem for project config. */
+  function upStop(directory: string, worktree: string) {
+    return worktree === "/" ? directory : worktree
+  }
+
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
     const names = CONFIG_NAMES[name] ?? [name]
+    const stop = upStop(directory, worktree)
     for (const n of names) {
       for (const file of [`${n}.jsonc`, `${n}.json`]) {
-        const found = await Filesystem.findUp(file, directory, worktree)
+        const found = await Filesystem.findUp(file, directory, stop)
         for (const resolved of found.toReversed()) {
           files.push(resolved)
         }
@@ -32,6 +38,7 @@ export namespace ConfigPaths {
   }
 
   export async function directories(directory: string, worktree: string) {
+    const stop = upStop(directory, worktree)
     return [
       Global.Path.config,
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
@@ -39,7 +46,7 @@ export namespace ConfigPaths {
             Filesystem.up({
               targets: [".elastic-ramen"],
               start: directory,
-              stop: worktree,
+              stop,
             }),
           )
         : []),

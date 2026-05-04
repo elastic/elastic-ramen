@@ -22,8 +22,12 @@ export function fmt(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(1)
 }
 
+function visible(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*m/g, "")
+}
+
 function pad(s: string, w: number): string {
-  return s + " ".repeat(Math.max(0, w - s.length))
+  return s + " ".repeat(Math.max(0, w - visible(s).length))
 }
 
 function colorFor(i: number): string {
@@ -121,52 +125,7 @@ function barChart(params: {
   return { lines, maxes }
 }
 
-function horizontalBarChart(params: {
-  title?: string
-  columns: string[]
-  rows: { label: string; values: number[] }[]
-  stacked?: boolean
-}): { lines: string[]; maxes: number[] } {
-  const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
-  const lw = Math.max(8, ...params.rows.map((r) => r.label.length))
-  const lines: string[] = []
-
-  if (params.title) {
-    lines.push(params.title)
-    lines.push("")
-  }
-
-  if (params.stacked && params.columns.length > 1) {
-    const rowTotals = params.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
-    const globalMax = Math.max(1, ...rowTotals)
-
-    for (const r of params.rows) {
-      const total = r.values.reduce((s, v) => s + (v ?? 0), 0)
-      const bar = globalMax <= 0 ? " ".repeat(BAR_WIDTH) : ansiStack(r.values, globalMax, BAR_WIDTH)
-      lines.push("│ " + pad(r.label, lw) + " │ " + bar + " │ " + fmt(total))
-    }
-
-    const legend = params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  ")
-    lines.push("")
-    lines.push(legend)
-  } else {
-    const globalMax = Math.max(1, ...maxes)
-    for (const r of params.rows) {
-      for (let ci = 0; ci < params.columns.length; ci++) {
-        const val = r.values[ci] ?? 0
-        const bar = render(val, globalMax, colorFor(ci))
-        const col = params.columns.length > 1 ? ` · ${params.columns[ci]}` : ""
-        lines.push("│ " + pad(r.label + col, lw + col.length) + " │ " + bar + " │ " + fmt(val))
-      }
-      if (params.columns.length > 1) lines.push("")
-    }
-  }
-
-  return { lines, maxes }
-}
-
 export const chartParameters = z.object({
-  type: z.enum(["bar", "horizontal"]).default("bar").describe("Chart layout: bar (vertical) or horizontal (left-to-right)"),
   stacked: z
     .boolean()
     .default(false)
@@ -196,15 +155,12 @@ export const ChartTool = Tool.define("chart", {
     "IMPORTANT: after rendering the chart, do NOT repeat the same data in text.",
     "The chart is the answer. Avoid statements like 'as you can see, X is 42 and Y is 99'.",
     "",
-    "Chart types:",
-    "  bar       — vertical bars per row. Default. Good for comparing categories.",
-    "  horizontal — bars extend left-to-right from the label. Better for long labels.",
+    "Layout: table with one horizontal magnitude bar per numeric cell (category × column).",
     "",
     "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
     "Unstacked (default) shows columns side-by-side per row for comparison.",
     "",
     "Example — ES|QL result {rows: [{category:'web', count:120, p99:340}, ...]}:",
-    '  type: "bar"',
     '  stacked: false',
     '  columns: ["count", "p99_ms"]',
     "  rows: [",
@@ -215,23 +171,17 @@ export const ChartTool = Tool.define("chart", {
   parameters: chartParameters,
   async execute(params) {
     const stacked = params.stacked
-    let result: { lines: string[]; maxes: number[] }
+    const result = barChart({ ...params, stacked })
 
-    switch (params.type) {
-      case "horizontal":
-        result = horizontalBarChart({ ...params, stacked })
-        break
-      case "bar":
-      default:
-        result = barChart({ ...params, stacked })
-        break
-    }
+    const lines = result.lines
+    const t = params.title
+    const body = t && lines[0] === t ? lines.slice(lines[1] === "" ? 2 : 1) : lines
 
     return {
-      title: params.title ?? params.type + " chart",
+      title: params.title ?? "bar chart",
       metadata: {
         data: {
-          type: params.type,
+          type: "bar" as const,
           stacked,
           title: params.title,
           columns: params.columns,
@@ -239,7 +189,7 @@ export const ChartTool = Tool.define("chart", {
           maxes: result.maxes,
         },
       },
-      output: result.lines.join("\n"),
+      output: body.join("\n"),
     }
   },
 })

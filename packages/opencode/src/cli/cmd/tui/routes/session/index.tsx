@@ -50,7 +50,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
-import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum } from "@/tool/chart"
+import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum, segSizes } from "@/tool/chart"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -1650,7 +1650,6 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     | { type?: string; stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
     | undefined)
 
-  const type = createMemo(() => data()?.type ?? "bar")
   const stacked = createMemo(() => data()?.stacked ?? false)
 
   const layout = createMemo(() => {
@@ -1665,17 +1664,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
 
     let barW = BAR_WIDTH
 
-    if (type() === "horizontal") {
-      if (stacked() && numCols > 1) {
-        const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
-        const tw = Math.max(6, ...rowTotals.map((t) => fmtNum(t).length))
-        barW = Math.max(BAR_WIDTH, Math.min(100, ctx.width - lw - tw - 10 - margin))
-      } else {
-        const maxVal = Math.max(1, ...nw)
-        const maxSuffix = numCols > 1 ? 3 + Math.max(0, ...d.columns.map((c) => c.length)) : 0
-        barW = Math.max(BAR_WIDTH, Math.min(100, ctx.width - lw - maxVal - maxSuffix - 8 - margin))
-      }
-    } else if (stacked() && numCols > 1) {
+    if (stacked() && numCols > 1) {
       const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
       const tw = Math.max(6, ...rowTotals.map((t) => fmtNum(t).length))
       barW = Math.max(BAR_WIDTH, Math.min(100, ctx.width - lw - tw - 10 - margin))
@@ -1694,21 +1683,8 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     const d = data()
     if (!d) return 0
     const l = layout()
-    const t = type()
     const s = stacked()
     const n = d.columns.length
-
-    if (t === "horizontal") {
-      const lw = Math.max(8, ...d.rows.map((r) => r.label.length))
-      if (s && n > 1) {
-        const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
-        const tw = Math.max(6, ...rowTotals.map((x) => fmtNum(x).length))
-        return 8 + lw + l.barW + tw
-      }
-      const maxVal = Math.max(1, ...l.nw)
-      const suffix = n > 1 ? 3 + Math.max(0, ...d.columns.map((c) => c.length)) : 0
-      return lw + suffix + l.barW + maxVal + 12
-    }
 
     if (s && n > 1) {
       const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
@@ -1766,25 +1742,19 @@ function Chart(props: ToolProps<typeof ChartTool>) {
           <For each={d.rows}>
             {(row, ri) => {
               const total = rowTotals[ri()]
-              const segs = row.values.map((v, i) => ({
-                w: Math.max(0, Math.round((v / globalMax) * barW)),
-                color: colors[i % colors.length],
-              }))
-              let used = segs.reduce((a, s) => a + s.w, 0)
-              if (used > barW) segs[segs.length - 1].w -= used - barW
-              used = segs.reduce((a, s) => a + s.w, 0)
-              const fill = barW - used
+              const sw = segSizes(row.values, globalMax, barW)
+              const used = sw.reduce((a, b) => a + b, 0)
               return (
                 <text>
                   <span style={{ fg: theme.textMuted }}>│ </span>
                   <span style={{ fg: theme.text }}>{padText(row.label, layout().lw)}</span>
                   <span style={{ fg: theme.textMuted }}> │ </span>
-                  <For each={segs}>
-                    {(seg) => (
-                      <span style={{ fg: seg.color }}>{"█".repeat(Math.max(0, seg.w))}</span>
+                  <For each={d.columns}>
+                    {(_, ci) => (
+                      <span style={{ fg: colors[ci() % colors.length] }}>{"█".repeat(sw[ci()])}</span>
                     )}
                   </For>
-                  <span>{" ".repeat(Math.max(0, fill))}</span>
+                  <span>{" ".repeat(barW - used)}</span>
                   <span style={{ fg: theme.textMuted }}> │ </span>
                   <span style={{ fg: theme.text }}>{padText(fmtNum(total), tw)}</span>
                   <span style={{ fg: theme.textMuted }}> │</span>
@@ -1860,91 +1830,6 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     )
   }
 
-  const horizontalBarChart = (d: { stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }) => {
-    const colors = CHART_COLORS(theme)
-    const { barW } = layout()
-    const lw = Math.max(8, ...d.rows.map((r) => r.label.length))
-    const globalMax = Math.max(1, ...d.maxes)
-
-    if (d.stacked && d.columns.length > 1) {
-      const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
-      const maxTotal = Math.max(1, ...rowTotals)
-
-      return (
-        <box>
-          <For each={d.rows}>
-            {(row) => {
-              const segs = row.values.map((v, i) => ({
-                w: Math.max(0, Math.round((v / maxTotal) * barW)),
-                color: colors[i % colors.length],
-              }))
-              let used = segs.reduce((a, s) => a + s.w, 0)
-              if (used > barW) segs[segs.length - 1].w -= used - barW
-              used = segs.reduce((a, s) => a + s.w, 0)
-              const fill = barW - used
-              return (
-                <text>
-                  <span style={{ fg: theme.textMuted }}>│ </span>
-                  <span style={{ fg: theme.text }}>{padText(row.label, lw)}</span>
-                  <span style={{ fg: theme.textMuted }}> │ </span>
-                  <For each={segs}>
-                    {(seg) => (
-                      <span style={{ fg: seg.color }}>{"█".repeat(Math.max(0, seg.w))}</span>
-                    )}
-                  </For>
-                  <span>{" ".repeat(Math.max(0, fill))}</span>
-                  <span style={{ fg: theme.textMuted }}> │ </span>
-                  <span style={{ fg: theme.text }}>{fmtNum(row.values.reduce((s, v) => s + (v ?? 0), 0))}</span>
-                </text>
-              )
-            }}
-          </For>
-          <box gap={1}>
-            <For each={d.columns}>
-              {(col, ci) => (
-                <text>
-                  <span style={{ fg: colors[ci() % colors.length] }}>█</span>
-                  <span style={{ fg: theme.text }}> {col}</span>
-                </text>
-              )}
-            </For>
-          </box>
-        </box>
-      )
-    }
-
-    return (
-      <box>
-        <For each={d.rows}>
-          {(row) => (
-            <>
-              <For each={d.columns}>
-                {(col, ci) => {
-                  const val = row.values[ci()] ?? 0
-                  const bar = renderBarDyn(val, globalMax, barW)
-                  const colSuffix = d.columns.length > 1 ? ` · ${col}` : ""
-                  return (
-                    <text>
-                      <span style={{ fg: theme.textMuted }}>│ </span>
-                      <span style={{ fg: theme.text }}>{padText(row.label + colSuffix, lw + colSuffix.length)}</span>
-                      <span style={{ fg: theme.textMuted }}> │ </span>
-                      <span style={{ fg: colors[ci() % colors.length] }}>{bar}</span>
-                      <span style={{ fg: theme.textMuted }}> │ </span>
-                      <span style={{ fg: theme.text }}>{fmtNum(val)}</span>
-                    </text>
-                  )
-                }}
-              </For>
-              <Show when={d.columns.length > 1}>
-                <text> </text>
-              </Show>
-            </>
-          )}
-        </For>
-      </box>
-    )
-  }
-
   return (
     <Show
       when={data()}
@@ -1955,9 +1840,8 @@ function Chart(props: ToolProps<typeof ChartTool>) {
       }
     >
       {(d) => {
-        const t = type()
         const s = stacked()
-        const title = d().title ?? (t === "bar" ? "Chart" : t + " chart")
+        const title = d().title ?? "Chart"
         const text = stripAnsi(props.output?.trim() ?? "")
         if (!fits() && text.length > 0) {
           return (
@@ -1969,7 +1853,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
             </BlockTool>
           )
         }
-        const dataBlock = t === "horizontal" ? horizontalBarChart({ ...d(), stacked: s }) : barChart({ ...d(), stacked: s })
+        const dataBlock = barChart({ ...d(), stacked: s })
         return (
           <BlockTool title={`# 📊 ${title}`} part={props.part}>
             {dataBlock}

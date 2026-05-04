@@ -55,6 +55,22 @@ describe("render bar", () => {
   })
 })
 
+describe("pad / alignment", () => {
+  test("unstacked bar rows share same visual width for value column", async () => {
+    const res = await exec({
+      columns: ["count"],
+      rows: [
+        { label: "a", values: [1] },
+        { label: "bbbbbbbbbbbb", values: [99999] },
+      ],
+    })
+    const rows = res.output.split("\n").filter((ln) => ln.includes("│ a ") || ln.includes("│ bbbbbbbbbbbb "))
+    expect(rows.length).toBe(2)
+    const vis = rows.map((ln) => ln.replace(/\x1b\[[0-9;]*m/g, ""))
+    expect(vis[0].length).toBe(vis[1].length)
+  })
+})
+
 describe("fmt", () => {
   test("formats integers", () => {
     expect(fmt(42)).toBe("42")
@@ -125,7 +141,6 @@ describe("ChartTool", () => {
 
   test("bar chart renders with colored output", async () => {
     const res = await exec({
-      type: "bar",
       columns: ["count"],
       rows: [
         { label: "a", values: [50] },
@@ -143,7 +158,6 @@ describe("ChartTool", () => {
 
   test("metadata maxes match per-column peaks", async () => {
     const res = await exec({
-      type: "bar",
       columns: ["x", "y"],
       rows: [
         { label: "p", values: [3, 40] },
@@ -153,34 +167,8 @@ describe("ChartTool", () => {
     expect(res.metadata.data.maxes).toEqual([10, 40])
   })
 
-  test("horizontal chart renders", async () => {
-    const res = await exec({
-      type: "horizontal",
-      columns: ["count"],
-      rows: [
-        { label: "a", values: [50] },
-        { label: "b", values: [100] },
-      ],
-    })
-    expect(res.output).toContain("a")
-    expect(res.output).toContain("b")
-    expect(res.title).toBe("horizontal chart")
-    expect(res.metadata.data.type).toBe("horizontal")
-  })
-
-  test("horizontal unstacked multi-column repeats label with col suffix", async () => {
-    const res = await exec({
-      type: "horizontal",
-      columns: ["u", "v"],
-      rows: [{ label: "row1", values: [5, 10] }],
-    })
-    expect(res.output).toContain("row1 · u")
-    expect(res.output).toContain("row1 · v")
-  })
-
   test("stacked bar keeps ANSI intact when rounding would overflow bar width", async () => {
     const res = await exec({
-      type: "bar",
       stacked: true,
       columns: ["a", "b", "c"],
       rows: [{ label: "x", values: [1, 1, 1] }],
@@ -189,20 +177,8 @@ describe("ChartTool", () => {
     expect(res.output.replace(/\x1b\[[0-9;]*m/g, "").includes("\x1b")).toBe(false)
   })
 
-  test("stacked horizontal keeps ANSI intact for overflow rounding", async () => {
-    const res = await exec({
-      type: "horizontal",
-      stacked: true,
-      columns: ["a", "b", "c"],
-      rows: [{ label: "x", values: [1, 1, 1] }],
-    })
-    expect(res.output.replace(/\x1b\[[0-9;]*m/g, "").includes("\x1b")).toBe(false)
-    expect(vis(res.output)).toContain("3")
-  })
-
   test("stacked bar chart combines columns", async () => {
     const res = await exec({
-      type: "bar",
       stacked: true,
       columns: ["ok", "err"],
       rows: [
@@ -216,31 +192,19 @@ describe("ChartTool", () => {
     expect(res.metadata.data.stacked).toBe(true)
   })
 
-  test("stacked horizontal chart combines columns", async () => {
-    const res = await exec({
-      type: "horizontal",
-      stacked: true,
-      columns: ["ok", "err"],
-      rows: [{ label: "web", values: [80, 20] }],
-    })
-    expect(res.output).toContain("web")
-    expect(res.metadata.data.stacked).toBe(true)
-  })
-
   test("custom title is used", async () => {
     const res = await exec({
-      type: "bar",
       title: "My Chart",
       columns: ["x"],
       rows: [{ label: "a", values: [1] }],
     })
     expect(res.title).toBe("My Chart")
-    expect(res.output.startsWith("My Chart")).toBe(true)
+    expect(res.output.startsWith("┌")).toBe(true)
+    expect(res.output.includes("My Chart")).toBe(false)
   })
 
   test("multiple columns use different colors in bar output", async () => {
     const res = await exec({
-      type: "bar",
       columns: ["a", "b"],
       rows: [{ label: "x", values: [10, 20] }],
     })
@@ -251,7 +215,6 @@ describe("ChartTool", () => {
 
   test("unstacked bar row has one colored bar cell per column", async () => {
     const res = await exec({
-      type: "bar",
       columns: ["c1", "c2"],
       rows: [{ label: "z", values: [100, 100] }],
     })
