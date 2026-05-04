@@ -1,4 +1,5 @@
 // Copyright (c) 2026-present, Elastic NV
+import { createHash } from "node:crypto"
 import path from "path"
 import { readdir, rm } from "fs/promises"
 import { Global } from "@/global"
@@ -10,9 +11,11 @@ import { KibanaGateway } from "./kibana-gateway"
 const log = Log.create({ service: "kibana-skills" })
 const ttlMs = 60 * 60 * 1000
 
-function slug(id: string) {
-  const s = id.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "")
-  return s.length > 0 ? s : "skill"
+function slug(raw: string) {
+  const t = raw.trim()
+  const s = t.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "")
+  if (s.length > 0 && s !== "." && s !== "..") return s
+  return `skill-${createHash("sha256").update(t).digest("hex").slice(0, 16)}`
 }
 
 function markdown(d: KibanaGateway.AgentBuilderSkillDetail) {
@@ -68,8 +71,9 @@ export namespace KibanaSkillsSync {
       return
     }
 
-    const root = syncRoot()
+    const root = path.resolve(syncRoot())
     const keep = new Set<string>()
+    let partial = false
     const size = 10
     for (let i = 0; i < list.length; i += size) {
       const pack = list.slice(i, i + size)
@@ -77,14 +81,26 @@ export namespace KibanaSkillsSync {
         pack.map(async (row) => {
           const d = await KibanaGateway.tryFetchAgentBuilderSkill(kb, key, row.id)
           if (!d) {
+            partial = true
             log.warn("skipped Kibana skill", { id: row.id })
             return
           }
           const id = slug(d.id)
+          const out = path.resolve(path.join(root, id, "SKILL.md"))
+          if (!Filesystem.contains(root, out)) {
+            partial = true
+            log.warn("rejected Kibana skill path", { id: row.id, slug: id })
+            return
+          }
           keep.add(id)
-          await Filesystem.write(path.join(root, id, "SKILL.md"), markdown(d))
+          await Filesystem.write(out, markdown(d))
         }),
       )
+    }
+
+    if (partial) {
+      log.warn("Kibana skills sync incomplete — keeping previous tree and stamp until all skills fetch")
+      return
     }
 
     if (await Filesystem.isDir(root)) {
