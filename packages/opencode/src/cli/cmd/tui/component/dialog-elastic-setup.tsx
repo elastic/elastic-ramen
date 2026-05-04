@@ -50,7 +50,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     setSaving(true)
     setError("")
 
-    await ElasticAuth.save(input).catch((e: Error) => {
+    const ctx = ElasticAuth.profileNameFromSetup(input.kibana_url, input.elasticsearch_url)
+    await ElasticAuth.save({ ...input, context: ctx }).catch((e: Error) => {
       setError("Failed to save config: " + e.message)
       setSaving(false)
     })

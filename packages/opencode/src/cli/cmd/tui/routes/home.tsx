@@ -19,6 +19,7 @@ import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
 import { useConnected } from "../component/dialog-model"
+import { useElasticProfile } from "../context/elastic-profile"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -40,6 +41,7 @@ export function Home() {
   })
 
   const connected = useConnected()
+  const elastic = useElasticProfile()
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
@@ -159,6 +161,11 @@ export function Home() {
       </box>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
         <text fg={theme.textMuted}>{directory()}</text>
+        <Show when={elastic.label()}>
+          <text fg={theme.textMuted}>
+            profile: <span style={{ fg: theme.text }}>{elastic.label()}</span>
+          </text>
+        </Show>
         <box gap={1} flexDirection="row" flexShrink={0}>
           <Show when={mcp()}>
             <text fg={theme.text}>
