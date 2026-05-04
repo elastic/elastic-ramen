@@ -33,6 +33,7 @@ import { TodoWriteTool } from "../../tool/todo"
 import { ChartTool } from "../../tool/chart"
 import { Locale } from "../../util/locale"
 import { stripAttachmentTags } from "../../util/attachment_tag"
+import stripAnsi from "strip-ansi"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -70,9 +71,10 @@ function block(info: Inline, output?: string) {
 
 function chart(info: ToolProps<typeof ChartTool>) {
   if (info.part.state.status !== "completed") return fallback(info.part)
+  const output = info.part.state.output
   block(
     { icon: "📊", title: info.part.state.title ?? "Chart" },
-    info.part.state.output,
+    process.stdout.isTTY ? output : output && stripAnsi(output),
   )
 }
 

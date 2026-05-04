@@ -1694,7 +1694,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     if (s && n > 1) {
       const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
       const tw = Math.max(6, ...rowTotals.map((x) => fmtNum(x).length))
-      return 8 + l.lw + l.barW + tw
+      return 10 + l.lw + l.barW + tw
     }
 
     return 4 + l.lw + d.columns.reduce((acc, _, i) => acc + 3 + l.cw[i], 0)
@@ -1736,7 +1736,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
           <text fg={theme.textMuted}>{headerBorder("┌", "┬", "┐")}</text>
           <text>
             <span style={{ fg: theme.textMuted }}>│ </span>
-            <span style={{ fg: theme.text }}>{padText(" ", layout().lw)}</span>
+            <span style={{ fg: theme.text, bold: true }}>{padText("Category", layout().lw)}</span>
             <span style={{ fg: theme.textMuted }}> │ </span>
             <span style={{ fg: theme.text, bold: true }}>{padText("Total", barW)}</span>
             <span style={{ fg: theme.textMuted }}> │ </span>

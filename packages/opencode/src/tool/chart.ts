@@ -141,6 +141,16 @@ export const chartParameters = z.object({
     )
     .min(1)
     .describe("Data rows with category labels and numerical values"),
+}).superRefine((d, ctx) => {
+  for (let i = 0; i < d.rows.length; i++) {
+    if (d.rows[i].values.length !== d.columns.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["rows", i, "values"],
+        message: `Row ${i} has ${d.rows[i].values.length} values, expected ${d.columns.length}`,
+      })
+    }
+  }
 })
 
 export const ChartTool = Tool.define("chart", {

@@ -223,4 +223,13 @@ describe("ChartTool", () => {
     const matches = rows[0].match(/\x1b\[3[0-9]m/g)
     expect(matches?.length).toBe(2)
   })
+
+  test("rejects rows whose values.length doesn't match columns", () => {
+    expect(() =>
+      chartParameters.parse({
+        columns: ["ok", "err"],
+        rows: [{ label: "web", values: [1, 2, 3] }],
+      }),
+    ).toThrow(/expected 2/)
+  })
 })
