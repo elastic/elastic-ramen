@@ -1,4 +1,5 @@
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import { stripAttachmentTags } from "@/util/attachment_tag"
 import { Locale } from "@/util/locale"
 
 export type TranscriptOptions = {
@@ -69,7 +70,7 @@ export function formatAssistantHeader(msg: AssistantMessage, includeMetadata: bo
 
 export function formatPart(part: Part, options: TranscriptOptions): string {
   if (part.type === "text" && !part.synthetic) {
-    return `${part.text}\n\n`
+    return `${stripAttachmentTags(part.text)}\n\n`
   }
 
   if (part.type === "reasoning") {

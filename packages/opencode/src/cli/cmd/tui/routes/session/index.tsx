@@ -35,6 +35,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { stripAttachmentTags } from "@/util/attachment_tag"
 import { resolveModelLabel } from "@/util/model-label"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
@@ -1464,15 +1465,16 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const body = createMemo(() => stripAttachmentTags(props.part.text.trim()))
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={body()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
               streaming={true}
-              content={props.part.text.trim()}
+              content={body()}
               conceal={ctx.conceal()}
             />
           </Match>
@@ -1482,7 +1484,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
-              content={props.part.text.trim()}
+              content={body()}
               conceal={ctx.conceal()}
               fg={theme.text}
             />
@@ -1662,16 +1664,19 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     const numCols = Math.max(1, d.columns.length)
     const margin = 8
 
-    let barW = BAR_WIDTH
+    // Shrink bars from ctx.width when needed; `fits` + stripped text handles true overflow.
+    let barW: number
 
     if (stacked() && numCols > 1) {
       const rowTotals = d.rows.map((r) => r.values.reduce((sum, v) => sum + (v ?? 0), 0))
       const tw = Math.max(6, ...rowTotals.map((t) => fmtNum(t).length))
-      barW = Math.max(BAR_WIDTH, Math.min(100, ctx.width - lw - tw - 10 - margin))
+      const room = ctx.width - lw - tw - 10 - margin
+      barW = Math.max(1, Math.min(100, room))
     } else {
       const totalNums = nw.reduce((a, b) => a + b, 0)
       const overhead = 4 + lw + numCols * 4 + totalNums + margin
-      barW = Math.max(BAR_WIDTH, Math.min(50, Math.floor((ctx.width - overhead) / numCols)))
+      const room = Math.floor((ctx.width - overhead) / numCols)
+      barW = Math.max(1, Math.min(50, room))
     }
 
     const cw = d.columns.map((col, i) => Math.max(col.length, barW + 1 + nw[i]))
