@@ -35,9 +35,13 @@ export namespace KibanaGateway {
     }
   }
 
+  /** Kibana origin + the elastic_ramen v1 prefix; trailing slash on origin is stripped. */
+  export function gatewayBaseUrl(kibanaUrl: string) {
+    return kibanaUrl.replace(/\/+$/, "") + "/internal/elastic_ramen/v1"
+  }
+
   export async function fetchConnectors(kibanaUrl: string, apiKey: string) {
-    const base = kibanaUrl.replace(/\/+$/, "")
-    const res = await fetch(`${base}/internal/elastic_ramen/v1/models`, {
+    const res = await fetch(`${gatewayBaseUrl(kibanaUrl)}/models`, {
       headers: authHeaders(apiKey),
     })
     if (!res.ok) return [] as { id: string; owned_by?: string }[]
@@ -81,9 +85,8 @@ export namespace KibanaGateway {
 
   /** Like `fetchConnectors`, but returns `undefined` when the request fails so callers can keep existing models. */
   export async function tryFetchConnectors(kibanaUrl: string, apiKey: string) {
-    const base = kibanaUrl.replace(/\/+$/, "")
     try {
-      const res = await fetch(`${base}/internal/elastic_ramen/v1/models`, {
+      const res = await fetch(`${gatewayBaseUrl(kibanaUrl)}/models`, {
         headers: authHeaders(apiKey),
       })
       if (!res.ok) return undefined
@@ -163,7 +166,7 @@ export namespace KibanaGateway {
 
   /** OpenAI-compatible provider block for `elastic_ramen.json`; merges inference connectors from GET …/v1/models. */
   export async function buildProvider(kibanaUrl: string, apiKey: string) {
-    const baseURL = kibanaUrl.replace(/\/+$/, "") + "/internal/elastic_ramen/v1"
+    const baseURL = gatewayBaseUrl(kibanaUrl)
     const [connectors, resolved] = await Promise.all([
       fetchConnectors(kibanaUrl, apiKey),
       tryFetchAgentBuilderDefaultConnectorId(kibanaUrl, apiKey),
