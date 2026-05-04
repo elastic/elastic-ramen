@@ -109,7 +109,11 @@ describe("KibanaGateway", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
-        if (!req.url.includes("/api/agent_builder/skills/x%2Fy")) return new Response("no", { status: 404 })
+        const path = new URL(req.url).pathname
+        const ok =
+          path.endsWith("/api/agent_builder/skills/x%2Fy") ||
+          path.endsWith("/api/agent_builder/skills/x/y")
+        if (!ok) return new Response("no", { status: 404 })
         return Response.json({
           id: "x/y",
           name: "N",

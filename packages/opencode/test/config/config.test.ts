@@ -810,7 +810,7 @@ test("resolves scoped npm plugins in config", async () => {
 
       const scopedEntry = pluginEntries.find((entry) => entry === expected)
       expect(scopedEntry).toBeDefined()
-      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+      expect(scopedEntry?.replace(/\\/g, "/").includes("/node_modules/@scope/plugin/")).toBe(true)
     },
   })
 })

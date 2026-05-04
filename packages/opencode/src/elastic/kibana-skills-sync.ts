@@ -54,6 +54,7 @@ export namespace KibanaSkillsSync {
    * so they load with other Ramen skills. Best-effort; logs on failure.
    */
   export async function sync(opts?: { force?: boolean }) {
+    if (process.env.OPENCODE_TEST_HOME) return
     const status = await ElasticAuth.check()
     if (!status.configured || !status.context?.kibana_url || !status.context.api_key) return
     const kb = status.context.kibana_url
