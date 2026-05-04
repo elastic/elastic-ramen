@@ -40,6 +40,100 @@ export namespace KibanaGateway {
     return kibanaUrl.replace(/\/+$/, "") + "/internal/elastic_ramen/v1"
   }
 
+  /** Public Agent Builder API root (`/api/agent_builder`), same as Kibana `publicApiPath`. */
+  export function agentBuilderApiRoot(kibanaUrl: string) {
+    return kibanaUrl.replace(/\/+$/, "") + "/api/agent_builder"
+  }
+
+  export type AgentBuilderSkillListItem = {
+    id: string
+    name: string
+    description: string
+  }
+
+  /** Full skill from GET /api/agent_builder/skills/{id} (public API body). */
+  export type AgentBuilderSkillDetail = AgentBuilderSkillListItem & {
+    content: string
+    referenced_content?: { name: string; relativePath: string; content: string }[]
+  }
+
+  /** List skills (built-in, user, and optionally plugin skills). */
+  export async function tryFetchAgentBuilderSkillList(
+    kibanaUrl: string,
+    apiKey: string,
+    opts?: { includePlugins?: boolean },
+  ) {
+    const include = opts?.includePlugins ?? true
+    const u = new URL(`${agentBuilderApiRoot(kibanaUrl)}/skills`)
+    u.searchParams.set("include_plugins", include ? "true" : "false")
+    try {
+      const res = await fetch(u, { headers: authHeaders(apiKey) })
+      if (!res.ok) return undefined
+      const json = (await res.json()) as { results?: unknown }
+      const rows = json.results
+      if (!Array.isArray(rows)) return undefined
+      const out: AgentBuilderSkillListItem[] = []
+      for (const row of rows) {
+        if (!row || typeof row !== "object") continue
+        const o = row as Record<string, unknown>
+        const id = o.id
+        const name = o.name
+        const description = o.description
+        if (typeof id !== "string" || id.length === 0) continue
+        if (typeof name !== "string" || typeof description !== "string") continue
+        out.push({ id, name, description })
+      }
+      return out
+    } catch {
+      return undefined
+    }
+  }
+
+  /** Full skill definition for local sync (markdown source). */
+  export async function tryFetchAgentBuilderSkill(
+    kibanaUrl: string,
+    apiKey: string,
+    skillId: string,
+  ) {
+    try {
+      const res = await fetch(
+        `${agentBuilderApiRoot(kibanaUrl)}/skills/${encodeURIComponent(skillId)}`,
+        { headers: authHeaders(apiKey) },
+      )
+      if (!res.ok) return undefined
+      const o = (await res.json()) as Record<string, unknown>
+      const id = o.id
+      const name = o.name
+      const description = o.description
+      const content = o.content
+      if (typeof id !== "string" || typeof name !== "string" || typeof description !== "string") return undefined
+      if (typeof content !== "string") return undefined
+      const ref = o.referenced_content
+      const referenced: AgentBuilderSkillDetail["referenced_content"] = []
+      if (Array.isArray(ref)) {
+        for (const r of ref) {
+          if (!r || typeof r !== "object") continue
+          const x = r as Record<string, unknown>
+          const n = x.name
+          const rel = x.relativePath
+          const c = x.content
+          if (typeof n === "string" && typeof rel === "string" && typeof c === "string") {
+            referenced.push({ name: n, relativePath: rel, content: c })
+          }
+        }
+      }
+      return {
+        id,
+        name,
+        description,
+        content,
+        referenced_content: referenced.length > 0 ? referenced : undefined,
+      } satisfies AgentBuilderSkillDetail
+    } catch {
+      return undefined
+    }
+  }
+
   export async function fetchConnectors(kibanaUrl: string, apiKey: string) {
     const res = await fetch(`${gatewayBaseUrl(kibanaUrl)}/models`, {
       headers: authHeaders(apiKey),
