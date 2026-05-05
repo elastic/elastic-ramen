@@ -154,9 +154,10 @@ export namespace Config {
         }
       }
 
+      const bootstrap = dir === Global.Path.config || dir === Flag.OPENCODE_CONFIG_DIR
       deps.push(
         iife(async () => {
-          const shouldInstall = await needsInstall(dir)
+          const shouldInstall = await needsInstall(dir, bootstrap)
           if (shouldInstall) await installDependencies(dir)
         }),
       )
@@ -311,7 +312,7 @@ export namespace Config {
     }
   }
 
-  export async function needsInstall(dir: string) {
+  export async function needsInstall(dir: string, bootstrap = false) {
     // Some config dirs may be read-only.
     // Installing deps there will fail; skip installation in that case.
     const writable = await isWritable(dir)
@@ -320,10 +321,11 @@ export namespace Config {
       return false
     }
 
-    // No package.json means no external dependencies declared — nothing to install.
     const pkg = path.join(dir, "package.json")
     const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return false
+    // Bootstrap-managed dirs (global config, OPENCODE_CONFIG_DIR) create package.json on first use.
+    // Project .elastic-ramen dirs without package.json have no declared deps to install.
+    if (!pkgExists) return bootstrap
 
     const nodeModules = path.join(dir, "node_modules")
     if (!existsSync(nodeModules)) return true
