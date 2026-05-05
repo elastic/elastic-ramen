@@ -9,29 +9,27 @@ import { ElasticAuth } from "./auth"
 import { KibanaGateway } from "./kibana-gateway"
 
 const log = Log.create({ service: "kibana-skills" })
-const ttlMs = 60 * 60 * 1000
+const TTL_MS = 60 * 60 * 1000
+const BATCH_SIZE = 10
 
 function slug(raw: string) {
-  const t = raw.trim()
-  const s = t.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "")
-  if (s.length > 0 && s !== "." && s !== "..") return s
-  return `skill-${createHash("sha256").update(t).digest("hex").slice(0, 16)}`
+  const trimmed = raw.trim()
+  const sanitized = trimmed.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "")
+  if (sanitized.length > 0 && sanitized !== "." && sanitized !== "..") return sanitized
+  return `skill-${createHash("sha256").update(trimmed).digest("hex").slice(0, 16)}`
 }
 
-function markdown(d: KibanaGateway.AgentBuilderSkillDetail) {
+function markdown(detail: KibanaGateway.AgentBuilderSkillDetail) {
   const lines = [
     "---",
-    `name: ${JSON.stringify(d.name)}`,
-    `description: ${JSON.stringify(d.description)}`,
+    `name: ${JSON.stringify(detail.name)}`,
+    `description: ${JSON.stringify(detail.description)}`,
     "---",
     "",
-    d.content,
+    detail.content,
   ]
-  const r = d.referenced_content
-  if (r?.length) {
-    for (const x of r) {
-      lines.push("", `## ${x.name}`, "", x.content)
-    }
+  for (const ref of detail.referenced_content) {
+    lines.push("", `## ${ref.name}`, "", ref.content)
   }
   return lines.join("\n")
 }
@@ -45,11 +43,11 @@ export namespace KibanaSkillsSync {
     return path.join(Global.Path.state, "kibana-skills-sync.json")
   }
 
-  async function fresh(key: string, force: boolean) {
+  async function fresh(cacheKey: string, force: boolean) {
     if (force) return true
-    const m = await Filesystem.readJson<{ k?: string; t?: number }>(stampPath()).catch(() => undefined)
-    if (!m || m.k !== key || typeof m.t !== "number") return true
-    return Date.now() - m.t > ttlMs
+    const stamp = await Filesystem.readJson<{ k?: string; t?: number }>(stampPath()).catch(() => undefined)
+    if (!stamp || stamp.k !== cacheKey || typeof stamp.t !== "number") return true
+    return Date.now() - stamp.t > TTL_MS
   }
 
   /**
@@ -60,12 +58,12 @@ export namespace KibanaSkillsSync {
     if (process.env.OPENCODE_TEST_HOME) return
     const status = await ElasticAuth.check()
     if (!status.configured || !status.context?.kibana_url || !status.context.api_key) return
-    const kb = status.context.kibana_url
-    const key = status.context.api_key
-    const stamp = `${status.name ?? "default"}|${kb}`
-    if (!(await fresh(stamp, opts?.force ?? false))) return
+    const kibanaUrl = status.context.kibana_url
+    const apiKey = status.context.api_key
+    const cacheKey = `${status.name ?? "default"}|${kibanaUrl}`
+    if (!(await fresh(cacheKey, opts?.force ?? false))) return
 
-    const list = await KibanaGateway.tryFetchAgentBuilderSkillList(kb, key, { includePlugins: true })
+    const list = await KibanaGateway.tryFetchAgentBuilderSkillList(kibanaUrl, apiKey, { includePlugins: true })
     if (list === undefined) {
       log.warn("could not list Kibana skills — check API key and Agent Builder access")
       return
@@ -74,26 +72,25 @@ export namespace KibanaSkillsSync {
     const root = path.resolve(syncRoot())
     const keep = new Set<string>()
     let partial = false
-    const size = 10
-    for (let i = 0; i < list.length; i += size) {
-      const pack = list.slice(i, i + size)
+    for (let i = 0; i < list.length; i += BATCH_SIZE) {
+      const batch = list.slice(i, i + BATCH_SIZE)
       await Promise.all(
-        pack.map(async (row) => {
-          const d = await KibanaGateway.tryFetchAgentBuilderSkill(kb, key, row.id)
-          if (!d) {
+        batch.map(async (row) => {
+          const detail = await KibanaGateway.tryFetchAgentBuilderSkill(kibanaUrl, apiKey, row.id)
+          if (!detail) {
             partial = true
             log.warn("skipped Kibana skill", { id: row.id })
             return
           }
-          const id = slug(d.id)
-          const out = path.resolve(path.join(root, id, "SKILL.md"))
-          if (!Filesystem.contains(root, out)) {
+          const id = slug(detail.id)
+          const dest = path.resolve(path.join(root, id, "SKILL.md"))
+          if (!Filesystem.contains(root, dest)) {
             partial = true
             log.warn("rejected Kibana skill path", { id: row.id, slug: id })
             return
           }
           keep.add(id)
-          await Filesystem.write(out, markdown(d))
+          await Filesystem.write(dest, markdown(detail))
         }),
       )
     }
@@ -110,6 +107,6 @@ export namespace KibanaSkillsSync {
       }
     }
 
-    await Filesystem.writeJson(stampPath(), { k: stamp, t: Date.now() })
+    await Filesystem.writeJson(stampPath(), { k: cacheKey, t: Date.now() })
   }
 }

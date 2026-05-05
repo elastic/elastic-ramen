@@ -14,6 +14,20 @@ const template = {
   limit: { context: 128000, output: 8192 },
 } as const
 
+/** GET → parsed JSON, or `undefined` on network error / non-2xx / invalid JSON. Callers do their own shape validation. */
+async function tryFetchJson<T = unknown>(
+  url: string | URL,
+  headers: Record<string, string>,
+): Promise<T | undefined> {
+  try {
+    const res = await fetch(url, { headers })
+    if (!res.ok) return undefined
+    return (await res.json()) as T
+  } catch {
+    return undefined
+  }
+}
+
 export namespace KibanaGateway {
   /** Inference connector ids look like `.anthropic-claude-4.5-haiku-chat_completion` — shorten for UI labels. */
   export function connectorDisplayName(id: string) {
@@ -54,7 +68,7 @@ export namespace KibanaGateway {
   /** Full skill from GET /api/agent_builder/skills/{id} (public API body). */
   export type AgentBuilderSkillDetail = AgentBuilderSkillListItem & {
     content: string
-    referenced_content?: { name: string; relativePath: string; content: string }[]
+    referenced_content: { name: string; relativePath: string; content: string }[]
   }
 
   /** List skills (built-in, user, and optionally plugin skills). */
@@ -64,29 +78,22 @@ export namespace KibanaGateway {
     opts?: { includePlugins?: boolean },
   ) {
     const include = opts?.includePlugins ?? true
-    const u = new URL(`${agentBuilderApiRoot(kibanaUrl)}/skills`)
-    u.searchParams.set("include_plugins", include ? "true" : "false")
-    try {
-      const res = await fetch(u, { headers: authHeaders(apiKey) })
-      if (!res.ok) return undefined
-      const json = (await res.json()) as { results?: unknown }
-      const rows = json.results
-      if (!Array.isArray(rows)) return undefined
-      const out: AgentBuilderSkillListItem[] = []
-      for (const row of rows) {
-        if (!row || typeof row !== "object") continue
-        const o = row as Record<string, unknown>
-        const id = o.id
-        const name = o.name
-        const description = o.description
-        if (typeof id !== "string" || id.length === 0) continue
-        if (typeof name !== "string" || typeof description !== "string") continue
-        out.push({ id, name, description })
-      }
-      return out
-    } catch {
-      return undefined
+    const url = new URL(`${agentBuilderApiRoot(kibanaUrl)}/skills`)
+    url.searchParams.set("include_plugins", include ? "true" : "false")
+    const json = await tryFetchJson<{ results?: unknown }>(url, authHeaders(apiKey))
+    if (!json || !Array.isArray(json.results)) return undefined
+    const out: AgentBuilderSkillListItem[] = []
+    for (const row of json.results) {
+      if (!row || typeof row !== "object") continue
+      const o = row as Record<string, unknown>
+      const id = o.id
+      const name = o.name
+      const description = o.description
+      if (typeof id !== "string" || id.length === 0) continue
+      if (typeof name !== "string" || typeof description !== "string") continue
+      out.push({ id, name, description })
     }
+    return out
   }
 
   /** Full skill definition for local sync (markdown source). */
@@ -95,43 +102,38 @@ export namespace KibanaGateway {
     apiKey: string,
     skillId: string,
   ) {
-    try {
-      const res = await fetch(
-        `${agentBuilderApiRoot(kibanaUrl)}/skills/${encodeURIComponent(skillId)}`,
-        { headers: authHeaders(apiKey) },
-      )
-      if (!res.ok) return undefined
-      const o = (await res.json()) as Record<string, unknown>
-      const id = o.id
-      const name = o.name
-      const description = o.description
-      const content = o.content
-      if (typeof id !== "string" || typeof name !== "string" || typeof description !== "string") return undefined
-      if (typeof content !== "string") return undefined
-      const ref = o.referenced_content
-      const referenced: AgentBuilderSkillDetail["referenced_content"] = []
-      if (Array.isArray(ref)) {
-        for (const r of ref) {
-          if (!r || typeof r !== "object") continue
-          const x = r as Record<string, unknown>
-          const n = x.name
-          const rel = x.relativePath
-          const c = x.content
-          if (typeof n === "string" && typeof rel === "string" && typeof c === "string") {
-            referenced.push({ name: n, relativePath: rel, content: c })
-          }
+    const json = await tryFetchJson<Record<string, unknown>>(
+      `${agentBuilderApiRoot(kibanaUrl)}/skills/${encodeURIComponent(skillId)}`,
+      authHeaders(apiKey),
+    )
+    if (!json) return undefined
+    const id = json.id
+    const name = json.name
+    const description = json.description
+    const content = json.content
+    if (typeof id !== "string" || typeof name !== "string" || typeof description !== "string") return undefined
+    if (typeof content !== "string") return undefined
+    const ref = json.referenced_content
+    const referenced: AgentBuilderSkillDetail["referenced_content"] = []
+    if (Array.isArray(ref)) {
+      for (const r of ref) {
+        if (!r || typeof r !== "object") continue
+        const x = r as Record<string, unknown>
+        const n = x.name
+        const rel = x.relativePath
+        const c = x.content
+        if (typeof n === "string" && typeof rel === "string" && typeof c === "string") {
+          referenced.push({ name: n, relativePath: rel, content: c })
         }
       }
-      return {
-        id,
-        name,
-        description,
-        content,
-        referenced_content: referenced.length > 0 ? referenced : undefined,
-      } satisfies AgentBuilderSkillDetail
-    } catch {
-      return undefined
     }
+    return {
+      id,
+      name,
+      description,
+      content,
+      referenced_content: referenced,
+    } satisfies AgentBuilderSkillDetail
   }
 
   export async function fetchConnectors(kibanaUrl: string, apiKey: string) {
@@ -161,44 +163,32 @@ export namespace KibanaGateway {
   export async function tryFetchAgentBuilderDefaultConnectorId(kibanaUrl: string, apiKey: string) {
     const base = kibanaUrl.replace(/\/+$/, "")
     const q = new URLSearchParams({ featureId: agentBuilderFeature })
-    try {
-      const res = await fetch(`${base}/internal/search_inference_endpoints/connectors?${q}`, {
-        headers: { ...authHeaders(apiKey), "elastic-api-version": "1" },
-      })
-      if (!res.ok) return undefined
-      const json = (await res.json()) as { connectors?: { connectorId?: string }[] }
-      const rows = json.connectors
-      if (!Array.isArray(rows) || rows.length === 0) return undefined
-      const id = rows[0]?.connectorId
-      if (typeof id !== "string" || id.length === 0) return undefined
-      return id
-    } catch {
-      return undefined
-    }
+    const json = await tryFetchJson<{ connectors?: { connectorId?: string }[] }>(
+      `${base}/internal/search_inference_endpoints/connectors?${q}`,
+      { ...authHeaders(apiKey), "elastic-api-version": "1" },
+    )
+    if (!json || !Array.isArray(json.connectors) || json.connectors.length === 0) return undefined
+    const id = json.connectors[0]?.connectorId
+    if (typeof id !== "string" || id.length === 0) return undefined
+    return id
   }
 
   /** Like `fetchConnectors`, but returns `undefined` when the request fails so callers can keep existing models. */
   export async function tryFetchConnectors(kibanaUrl: string, apiKey: string) {
-    try {
-      const res = await fetch(`${gatewayBaseUrl(kibanaUrl)}/models`, {
-        headers: authHeaders(apiKey),
+    const json = await tryFetchJson<{ data?: { id?: string; owned_by?: string }[] }>(
+      `${gatewayBaseUrl(kibanaUrl)}/models`,
+      authHeaders(apiKey),
+    )
+    if (!json || !Array.isArray(json.data)) return undefined
+    const out: { id: string; owned_by?: string }[] = []
+    for (const row of json.data) {
+      if (typeof row.id !== "string" || row.id.length === 0) continue
+      out.push({
+        id: row.id,
+        owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
       })
-      if (!res.ok) return undefined
-      const json = (await res.json()) as { data?: { id?: string; owned_by?: string }[] }
-      const rows = json.data
-      if (!Array.isArray(rows)) return undefined
-      const out: { id: string; owned_by?: string }[] = []
-      for (const row of rows) {
-        if (typeof row.id !== "string" || row.id.length === 0) continue
-        out.push({
-          id: row.id,
-          owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
-        })
-      }
-      return out
-    } catch {
-      return undefined
     }
+    return out
   }
 
   /**
