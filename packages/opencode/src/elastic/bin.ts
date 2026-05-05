@@ -3,6 +3,7 @@ import p from "path"
 import fs from "fs"
 import os from "os"
 import crypto from "crypto"
+import { which } from "@/util/which"
 
 declare const ELASTIC_CLI_B64: string
 
@@ -47,7 +48,12 @@ export namespace ElasticBin {
       return cached
     }
 
-    // Fallback: assume it's on PATH
+    const found = which("elastic" + ext)
+    if (found) {
+      cached = found
+      return cached
+    }
+
     cached = "elastic" + ext
     return cached
   }

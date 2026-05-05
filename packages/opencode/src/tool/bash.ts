@@ -13,6 +13,7 @@ import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import { ElasticBin } from "@/elastic/bin"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
@@ -164,13 +165,28 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
+      const patch = shellEnv.env as NodeJS.ProcessEnv
+      const elasticExe = await ElasticBin.resolve()
+      const elasticDir = path.isAbsolute(elasticExe) ? path.dirname(elasticExe) : ""
+      const sep = path.delimiter
+      const basePath = patch.PATH ?? patch.Path ?? process.env.PATH ?? process.env.Path ?? ""
+      const segments = basePath.split(sep).filter(Boolean)
+      const pathOut =
+        elasticDir && !segments.includes(elasticDir) ? elasticDir + sep + basePath : basePath
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...patch,
+      }
+      if (process.platform === "win32") {
+        env.PATH = pathOut
+        env.Path = pathOut
+      } else {
+        env.PATH = pathOut
+      }
       const proc = spawn(params.command, {
         shell,
         cwd,
-        env: {
-          ...process.env,
-          ...shellEnv.env,
-        },
+        env,
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
         windowsHide: process.platform === "win32",
