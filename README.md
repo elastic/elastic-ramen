@@ -233,7 +233,7 @@ Press `Tab` to cycle between agents, or use `@agent-name` in prompts.
 
 ## MCP Server (Elastic Agent Builder)
 
-The `eab` MCP tools connect to **Kibana's Agent Builder MCP HTTP endpoint** (`POST /api/agent_builder/mcp`) using the same API key and Kibana URL as your Elastic CLI profile. RamyN hydrates this at config load time; you do not run `elastic ab mcp proxy`.
+The `eab` MCP tools connect to **Kibana's Agent Builder MCP HTTP endpoint** (`POST /api/agent_builder/mcp`) using the same API key and Kibana URL as your Elastic CLI profile. RAMEN applies this at config load time; you do not run `elastic ab mcp proxy`.
 
 Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permission.eab_*: "allow"` in `elastic_ramen.json` (written during auth).
 

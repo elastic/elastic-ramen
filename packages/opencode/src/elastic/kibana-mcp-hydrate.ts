@@ -37,7 +37,7 @@ function ensureEabPermission(cfg: Target) {
 }
 
 /**
- * RamyN: wire the default `eab` MCP to Kibana's Agent Builder HTTP MCP endpoint using
+ * Wire the default `eab` MCP to Kibana's Agent Builder HTTP MCP endpoint using
  * credentials from the Elastic CLI profile (`~/.../elastic/config.yaml`), instead of
  * spawning `elastic ab mcp proxy`.
  */
