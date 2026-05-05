@@ -70,6 +70,7 @@ export namespace Agent {
       glob: "allow",
       list: "allow",
       lsp: "allow",
+      skill: "allow",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",

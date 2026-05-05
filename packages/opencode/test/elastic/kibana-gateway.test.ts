@@ -77,6 +77,66 @@ describe("KibanaGateway", () => {
     }
   })
 
+  test("tryFetchAgentBuilderSkillList maps results and includes include_plugins", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url)
+        if (!url.pathname.endsWith("/api/agent_builder/skills")) return new Response("no", { status: 404 })
+        expect(url.searchParams.get("include_plugins")).toBe("true")
+        expect(req.headers.get("elastic-api-version")).toBe("2023-10-31")
+        return Response.json({
+          results: [
+            { id: "a", name: "A", description: "d1" },
+            { id: "b", name: "B", description: "d2" },
+          ],
+        })
+      },
+    })
+    try {
+      const base = `http://127.0.0.1:${server.port}`
+      const list = await KibanaGateway.tryFetchAgentBuilderSkillList(base, "k", { includePlugins: true })
+      expect(list).toEqual([
+        { id: "a", name: "A", description: "d1" },
+        { id: "b", name: "B", description: "d2" },
+      ])
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("tryFetchAgentBuilderSkill returns detail with referenced_content", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const path = new URL(req.url).pathname
+        const ok =
+          path.endsWith("/api/agent_builder/skills/x%2Fy") ||
+          path.endsWith("/api/agent_builder/skills/x/y")
+        if (!ok) return new Response("no", { status: 404 })
+        return Response.json({
+          id: "x/y",
+          name: "N",
+          description: "D",
+          content: "# body",
+          referenced_content: [{ name: "r1", relativePath: "./r.md", content: "rc" }],
+        })
+      },
+    })
+    try {
+      const base = `http://127.0.0.1:${server.port}`
+      const d = await KibanaGateway.tryFetchAgentBuilderSkill(base, "k", "x/y")
+      expect(d?.content).toBe("# body")
+      expect(d?.referenced_content?.[0]?.content).toBe("rc")
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("tryFetchAgentBuilderSkillList returns undefined when fetch throws", async () => {
+    expect(await KibanaGateway.tryFetchAgentBuilderSkillList("http://127.0.0.1:1", "k")).toBeUndefined()
+  })
+
   test("tryFetchConnectors returns undefined when response not ok", async () => {
     const server = Bun.serve({ port: 0, fetch: () => new Response("", { status: 502 }) })
     try {
