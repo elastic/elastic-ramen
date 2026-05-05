@@ -761,6 +761,30 @@ function App() {
       },
     },
     {
+      title: "Sync Kibana skills",
+      value: "kibana.sync",
+      category: "Provider",
+      slash: {
+        name: "sync",
+        aliases: ["sync-skills"],
+      },
+      onSelect: async () => {
+        toast.show({ variant: "info", message: "Syncing Kibana skills...", duration: 10000 })
+        try {
+          await sdk.client.instance.dispose().catch(() => {})
+          await KibanaSkillsSync.sync({ force: true })
+          await sync.bootstrap()
+          toast.show({ variant: "success", message: "Kibana skills synced", duration: 3000 })
+        } catch (err) {
+          toast.show({
+            variant: "error",
+            message: `Sync failed: ${err instanceof Error ? err.message : String(err)}`,
+            duration: 8000,
+          })
+        }
+      },
+    },
+    {
       title: "Connect to Kibana",
       value: "kibana.connect",
       suggested: !connected(),
