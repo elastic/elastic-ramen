@@ -29,15 +29,17 @@ export namespace ElasticBin {
     if (typeof ELASTIC_CLI_B64 === "string" && ELASTIC_CLI_B64.length > 0) {
       fs.mkdirSync(cacheDir, { recursive: true })
       const hash = crypto.createHash("sha256").update(ELASTIC_CLI_B64).digest("hex").slice(0, 16)
-      const dest = p.join(cacheDir, `elastic-${hash}${ext}`)
-      if (!fs.existsSync(dest)) {
-        const tmp = `${dest}.tmp-${process.pid}`
+      // Versioned file keeps stale binary detection; stable name `elastic` is what goes on PATH.
+      const versioned = p.join(cacheDir, `elastic-${hash}${ext}`)
+      const stable = p.join(cacheDir, `elastic${ext}`)
+      if (!fs.existsSync(versioned)) {
+        const tmp = `${versioned}.tmp-${process.pid}`
         fs.writeFileSync(tmp, Buffer.from(ELASTIC_CLI_B64, "base64"), { mode: 0o755 })
-        fs.renameSync(tmp, dest)
+        fs.renameSync(tmp, versioned)
         try {
           for (const entry of fs.readdirSync(cacheDir)) {
-            if (entry === p.basename(dest)) continue
-            if (entry.startsWith("elastic-") || entry === "elastic" || entry === "elastic.exe") {
+            if (entry === p.basename(versioned) || entry === p.basename(stable)) continue
+            if (entry.startsWith("elastic-")) {
               fs.unlinkSync(p.join(cacheDir, entry))
             }
           }
@@ -45,7 +47,25 @@ export namespace ElasticBin {
           // best-effort cleanup of older versions
         }
       }
-      cached = dest
+      // Keep stable symlink / copy in sync so PATH lookup of `elastic` works.
+      try {
+        const needsUpdate = !fs.existsSync(stable) ||
+          (process.platform !== "win32"
+            ? fs.readlinkSync(stable) !== versioned
+            : fs.readFileSync(stable).toString("hex") !== fs.readFileSync(versioned).toString("hex").slice(0, 32))
+        if (needsUpdate) {
+          try { fs.unlinkSync(stable) } catch { /* ignore */ }
+          if (process.platform === "win32") {
+            fs.copyFileSync(versioned, stable)
+          } else {
+            fs.symlinkSync(versioned, stable)
+          }
+        }
+      } catch {
+        // If symlink fails, fall back to the versioned path — PATH tricks won't work
+        // but MCP and direct invocation via absolute path still will.
+      }
+      cached = stable
       return cached
     }
 
