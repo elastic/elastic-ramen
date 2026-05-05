@@ -35,6 +35,7 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { ElasticContextCommand } from "./cli/cmd/elastic-context"
+import { SyncCommand } from "./cli/cmd/sync"
 import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
@@ -224,6 +225,7 @@ let cli = yargs(hideBin(process.argv))
   .command(SessionCommand)
   .command(DbCommand)
   .command(ElasticContextCommand)
+  .command(SyncCommand)
 
 if (Installation.isLocal()) {
   cli = cli.command(WorkspaceServeCommand)
