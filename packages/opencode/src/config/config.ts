@@ -320,12 +320,13 @@ export namespace Config {
       return false
     }
 
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
-
+    // No package.json means no external dependencies declared — nothing to install.
     const pkg = path.join(dir, "package.json")
     const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
+    if (!pkgExists) return false
+
+    const nodeModules = path.join(dir, "node_modules")
+    if (!existsSync(nodeModules)) return true
 
     const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
     const dependencies = parsed?.dependencies ?? {}
