@@ -253,16 +253,7 @@ export namespace ElasticAuth {
     return undefined
   }
 
-  function ensureEab(json: Record<string, unknown>) {
-    if (!json.mcp) json.mcp = {}
-    const m = json.mcp as Record<string, unknown>
-    if (!m["eab"]) {
-      m["eab"] = {
-        type: "local",
-        command: ["elastic", "ab", "mcp", "proxy"],
-        enabled: true,
-      }
-    }
+  function ensureEabPermissions(json: Record<string, unknown>) {
     if (!json.permission) json.permission = {}
     const p = json.permission as Record<string, unknown>
     if (!p["eab_*"]) p["eab_*"] = "allow"
@@ -283,7 +274,8 @@ export namespace ElasticAuth {
 
   /**
    * Write `provider` (and optionally `model`) into the project's `elastic_ramen.json`,
-   * ensure the eab MCP entry, and clear any provider/model overrides under `.elastic-ramen/`.
+   * ensure `permission.eab_*` for Agent Builder MCP tools, and clear any provider/model overrides under `.elastic-ramen/`.
+   * The `eab` MCP target is applied at runtime from Kibana (`/api/agent_builder/mcp`); see {@link hydrateKibanaAgentBuilderMcp}.
    *
    * `preserveModelIfKibana` keeps an existing `kibana/<connector>` choice — but only if
    * `<connector>` exists in the new provider's models map (see {@link shouldKeepKibanaModel}).
@@ -297,7 +289,7 @@ export namespace ElasticAuth {
       const keep = (opts.preserveModelIfKibana ?? false) && shouldKeepKibanaModel(json.model, opts.provider)
       if (!keep) json.model = opts.model
     }
-    ensureEab(json)
+    ensureEabPermissions(json)
     await Filesystem.writeJson(cfg, json)
     for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
       const override = path.join(process.cwd(), ".elastic-ramen", name)

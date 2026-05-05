@@ -72,10 +72,9 @@ The CLI runs the prompt through the `run` command and exits.
 The auth flow writes:
 
 1. **Elastic credentials** in the elastic CLI config file (same path the Go CLI uses: macOS `~/Library/Application Support/elastic/config.yaml`, Linux `~/.config/elastic/config.yaml` or `$XDG_CONFIG_HOME/elastic/config.yaml`, Windows `%AppData%\elastic\config.yaml`) with `elasticsearch_url`, `kibana_url`, `api_key`
-2. **Provider + MCP + permissions** to `elastic_ramen.json` in the current working directory:
+2. **Provider + permissions** to `elastic_ramen.json` in the current working directory:
    - `provider.kibana` — Kibana LLM Gateway (OpenAI-compatible)
-   - `mcp.eab` — Elastic Agent Builder MCP server (`elastic ab mcp proxy`)
-   - `permission.eab_*: "allow"` — auto-allow MCP tools
+   - `permission.eab_*: "allow"` — auto-allow Agent Builder MCP tools (the `eab` MCP client is wired at runtime to Kibana's `/api/agent_builder/mcp` when your Elastic profile includes `kibana_url` and `api_key`; no `elastic ab mcp proxy` process)
 
 After saving, the TUI re-bootstraps to pick up the new config immediately.
 
@@ -234,9 +233,9 @@ Press `Tab` to cycle between agents, or use `@agent-name` in prompts.
 
 ## MCP Server (Elastic Agent Builder)
 
-The `eab` MCP server provides additional Elasticsearch capabilities (ES|QL queries, index operations, documentation search) through the `elastic ab mcp proxy` command. It is configured automatically during the auth flow.
+The `eab` MCP tools connect to **Kibana's Agent Builder MCP HTTP endpoint** (`POST /api/agent_builder/mcp`) using the same API key and Kibana URL as your Elastic CLI profile. RamyN hydrates this at config load time; you do not run `elastic ab mcp proxy`.
 
-Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permission.eab_*: "allow"` in `elastic_ramen.json`.
+Tools from the MCP server are prefixed with `eab_` and auto-allowed via `permission.eab_*: "allow"` in `elastic_ramen.json` (written during auth).
 
 ### Elastic CLI
 

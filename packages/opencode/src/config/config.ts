@@ -39,6 +39,7 @@ import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
+import { hydrateKibanaAgentBuilderMcp } from "@/elastic/kibana-mcp-hydrate"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -254,6 +255,8 @@ export namespace Config {
     }
 
     result.plugin = deduplicatePlugins(result.plugin ?? [])
+
+    await hydrateKibanaAgentBuilderMcp(result)
 
     return {
       config: result,

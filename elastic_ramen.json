@@ -1,17 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "eab": {
-      "type": "local",
-      "command": [
-        "elastic",
-        "ab",
-        "mcp",
-        "proxy"
-      ],
-      "enabled": true
-    }
-  },
   "permission": {
     "eab_*": "allow"
   },
