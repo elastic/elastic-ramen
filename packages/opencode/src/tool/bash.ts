@@ -183,14 +183,26 @@ export const BashTool = Tool.define("bash", async () => {
       } else {
         env.PATH = pathOut
       }
-      const proc = spawn(params.command, {
-        shell,
-        cwd,
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-        windowsHide: process.platform === "win32",
-      })
+      const proc = (() => {
+        if (process.platform === "win32") {
+          return spawn(params.command, {
+            shell,
+            cwd,
+            env,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: false,
+            windowsHide: true,
+          })
+        }
+        // Force PATH for this invocation. Some shells / runtimes do not reliably
+        // honor spawn({ env: { PATH } }) when `shell` is an absolute path (e.g. zsh).
+        return spawn("env", ["PATH=" + pathOut, shell, "-c", params.command], {
+          cwd,
+          env,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+        })
+      })()
 
       let output = ""
 
