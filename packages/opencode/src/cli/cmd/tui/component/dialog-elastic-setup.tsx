@@ -12,6 +12,7 @@ import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
+import open from "open"
 
 export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void; onEscape?: () => void }) {
   const dialog = useDialog()
@@ -30,7 +31,9 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   const base = () => (props.kibanaBase || kibanaUrl())?.replace(/\/+$/, "")
   const link = () => {
     if (!base()) return undefined
-    return base() + "/app/elasticRamen"
+    const target = base() + "/app/elasticRamen"
+    if (!cb) return target
+    return target + "?callback=" + encodeURIComponent(cb.url)
   }
   const settingsLink = () => {
     if (!base()) return undefined
@@ -153,6 +156,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   function startCallback(base: string) {
     cb?.stop()
     cb = ElasticCallback.start()
+    const target = base + "/app/elasticRamen?callback=" + encodeURIComponent(cb.url)
+    open(target).catch(() => {})
     cb.promise.then(async (payload) => {
       const parsed = payload as Record<string, any>
       const es = parsed.es_url || parsed.elasticsearch_url
@@ -183,16 +188,6 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   useKeyboard((evt) => {
     if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && props.onEscape) {
       props.onEscape()
-      evt.preventDefault()
-      evt.stopPropagation()
-      return
-    }
-    if (evt.name === "return") {
-      if (mode() === "manual-json") {
-        submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
-      } else if (mode() === "kibana-url") {
-        submitKibanaUrl()
-      }
       evt.preventDefault()
       evt.stopPropagation()
     }
@@ -231,6 +226,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.primary}
+          keyBindings={[{ name: "return", action: "submit" }]}
+          onSubmit={() => submitKibanaUrl()}
         />
 
         <Show when={error()}>
@@ -309,6 +306,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.primary}
+          keyBindings={[{ name: "return", action: "submit" }]}
+          onSubmit={() => submitManual().catch((e: Error) => setError("Setup failed: " + e.message))}
         />
 
         <Show when={error()}>
