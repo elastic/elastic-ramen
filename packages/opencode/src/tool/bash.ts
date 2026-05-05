@@ -166,13 +166,16 @@ export const BashTool = Tool.define("bash", async () => {
         { env: {} },
       )
       const patch = shellEnv.env as NodeJS.ProcessEnv
+      const dirEnv = process.env.ELASTIC_RAMEN_ELASTIC_DIR
       const elasticExe = await ElasticBin.resolve()
-      const elasticDir = path.isAbsolute(elasticExe) ? path.dirname(elasticExe) : ""
+      const fromExe = path.isAbsolute(elasticExe) ? path.normalize(path.dirname(elasticExe)) : ""
+      const elasticDir =
+        dirEnv && path.isAbsolute(dirEnv) ? path.normalize(dirEnv) : fromExe || ""
       const sep = path.delimiter
       const basePath = patch.PATH ?? patch.Path ?? process.env.PATH ?? process.env.Path ?? ""
       const segments = basePath.split(sep).filter(Boolean)
-      const pathOut =
-        elasticDir && !segments.includes(elasticDir) ? elasticDir + sep + basePath : basePath
+      const hasDir = elasticDir && segments.some((s) => path.normalize(s) === elasticDir)
+      const pathOut = elasticDir && !hasDir ? elasticDir + sep + basePath : basePath
       const env: NodeJS.ProcessEnv = {
         ...process.env,
         ...patch,

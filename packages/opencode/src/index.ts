@@ -96,8 +96,12 @@ let cli = yargs(hideBin(process.argv))
     const sep = path.delimiter
     const elasticBinDir = path.isAbsolute(elasticBinPath) ? path.dirname(elasticBinPath) : ""
     const cur = (process.env.PATH ?? "").split(sep).filter(Boolean)
-    if (elasticBinDir && !cur.includes(elasticBinDir)) {
+    if (elasticBinDir && !cur.some((s) => path.normalize(s) === path.normalize(elasticBinDir))) {
       process.env.PATH = elasticBinDir + sep + (process.env.PATH ?? "")
+    }
+    if (path.isAbsolute(elasticBinPath)) {
+      process.env.ELASTIC_RAMEN_ELASTIC = elasticBinPath
+      process.env.ELASTIC_RAMEN_ELASTIC_DIR = elasticBinDir
     }
 
     Log.Default.info("ramen", {

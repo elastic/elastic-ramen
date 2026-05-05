@@ -157,6 +157,21 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
+      {
+        const { ElasticBin } = await import("@/elastic/bin")
+        const ep = await ElasticBin.resolve()
+        if (path.isAbsolute(ep)) {
+          const d = path.dirname(ep)
+          process.env.ELASTIC_RAMEN_ELASTIC = ep
+          process.env.ELASTIC_RAMEN_ELASTIC_DIR = d
+          const sep = path.delimiter
+          const cur = (process.env.PATH ?? "").split(sep).filter(Boolean)
+          if (!cur.some((s) => path.normalize(s) === path.normalize(d))) {
+            process.env.PATH = d + sep + (process.env.PATH ?? "")
+          }
+        }
+      }
+
       const worker = new Worker(file, {
         env: Object.fromEntries(
           Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),

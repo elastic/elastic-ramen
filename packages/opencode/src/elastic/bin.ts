@@ -8,6 +8,7 @@ import { which } from "@/util/which"
 declare const ELASTIC_CLI_B64: string
 
 export namespace ElasticBin {
+  /** Resolved path cache. Prefer `process.env.ELASTIC_RAMEN_ELASTIC` / `ELASTIC_RAMEN_ELASTIC_DIR` when set by the main CLI so workers inherit the embedded binary location. */
   let cached: string | undefined
 
   export async function resolve(): Promise<string> {
