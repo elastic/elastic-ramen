@@ -80,28 +80,35 @@ export namespace KibanaSkillsSync {
     return Date.now() - stamp.lastSyncAt > TTL_MS
   }
 
+  /** Outcome of a sync attempt — callers (e.g. the `/sync` slash command) branch on `status`. */
+  export type Result =
+    | { status: "synced"; count: number }
+    | { status: "skipped"; reason: "test-env" | "no-profile" | "fresh" }
+    | { status: "failed"; reason: "list" | "partial" | "escape" }
+
   /**
    * Pull Agent Builder skills from Kibana into
    * `~/.config/elastic-ramen/skill/kibana/<profile>/<id>/SKILL.md`. Always overwrites local
    * content — admin's version is authoritative; users can edit locally for ad-hoc tinkering
-   * but their edits get replaced on the next sync. Best-effort; logs on failure.
+   * but their edits get replaced on the next sync. Best-effort; logs on failure and returns
+   * a structured `Result` so the caller can show an honest toast.
    */
-  export async function sync(opts?: { force?: boolean }) {
-    if (process.env.OPENCODE_TEST_HOME) return
+  export async function sync(opts?: { force?: boolean }): Promise<Result> {
+    if (process.env.OPENCODE_TEST_HOME) return { status: "skipped", reason: "test-env" }
     const a = await active()
-    if (!a) return
+    if (!a) return { status: "skipped", reason: "no-profile" }
     const { profile, context } = a
     const kibanaUrl = context.kibana_url!
     const apiKey = context.api_key!
     const force = opts?.force ?? false
 
     const stamp = await readStamp(profile)
-    if (!fresh(stamp, kibanaUrl, force)) return
+    if (!fresh(stamp, kibanaUrl, force)) return { status: "skipped", reason: "fresh" }
 
     const list = await KibanaGateway.tryFetchAgentBuilderSkillList(kibanaUrl, apiKey, { includePlugins: true })
     if (list === undefined) {
       log.warn("could not list Kibana skills — check API key and Agent Builder access")
-      return
+      return { status: "failed", reason: "list" }
     }
 
     const root = path.resolve(rootForProfile(profile))
@@ -111,7 +118,7 @@ export namespace KibanaSkillsSync {
       // branch should be unreachable. Bail if a future refactor breaks that invariant —
       // we never want the destructive readdir/rm below pointed at a path outside our tree.
       log.error("refusing sync — resolved root escaped sync base", { profile, root, base })
-      return
+      return { status: "failed", reason: "escape" }
     }
     const keep = new Set<string>()
     let partial = false
@@ -141,7 +148,7 @@ export namespace KibanaSkillsSync {
 
     if (partial) {
       log.warn("Kibana skills sync incomplete — keeping previous tree and stamp until all skills fetch")
-      return
+      return { status: "failed", reason: "partial" }
     }
 
     if (await Filesystem.isDir(root)) {
@@ -153,6 +160,7 @@ export namespace KibanaSkillsSync {
     }
 
     await Filesystem.writeJson(stampPath(profile), { lastSyncAt: Date.now(), kibanaUrl } satisfies Stamp)
+    return { status: "synced", count: keep.size }
   }
 
   /**

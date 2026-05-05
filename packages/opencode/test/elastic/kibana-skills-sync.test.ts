@@ -16,6 +16,15 @@ afterEach(async () => {
   await fs.rm(path.join(Global.Path.config, "skill"), { recursive: true, force: true })
 })
 
+describe("KibanaSkillsSync.sync", () => {
+  test("returns a structured result instead of silently bailing", async () => {
+    // bun:test preload sets OPENCODE_TEST_HOME so sync() always hits the test-env skip;
+    // the assertion proves callers can branch on Result rather than assuming success.
+    const result = await KibanaSkillsSync.sync({ force: true })
+    expect(result).toEqual({ status: "skipped", reason: "test-env" })
+  })
+})
+
 describe("KibanaSkillsSync.inactiveProfileFilter", () => {
   test("passes through non-kibana paths regardless of profile state", async () => {
     const filter = await KibanaSkillsSync.inactiveProfileFilter()

@@ -772,9 +772,31 @@ function App() {
         toast.show({ variant: "info", message: "Syncing Kibana skills...", duration: 10000 })
         try {
           await sdk.client.instance.dispose().catch(() => {})
-          await KibanaSkillsSync.sync({ force: true })
+          const result = await KibanaSkillsSync.sync({ force: true })
           await sync.bootstrap()
-          toast.show({ variant: "success", message: "Kibana skills synced", duration: 3000 })
+          if (result.status === "synced") {
+            toast.show({
+              variant: "success",
+              message: `${result.count} Kibana skill${result.count === 1 ? "" : "s"} synced`,
+              duration: 3000,
+            })
+          } else if (result.status === "skipped") {
+            const reason =
+              result.reason === "no-profile"
+                ? "No active Kibana profile — connect one with /profiles."
+                : result.reason === "fresh"
+                  ? "Kibana skills already up to date."
+                  : "Sync skipped."
+            toast.show({ variant: "info", message: reason, duration: 5000 })
+          } else {
+            const reason =
+              result.reason === "list"
+                ? "Could not list Kibana skills — check API key and Agent Builder access."
+                : result.reason === "partial"
+                  ? "Some Kibana skills could not be fetched — keeping previous tree."
+                  : "Refused unsafe sync path — see logs."
+            toast.show({ variant: "error", message: reason, duration: 8000 })
+          }
         } catch (err) {
           toast.show({
             variant: "error",
