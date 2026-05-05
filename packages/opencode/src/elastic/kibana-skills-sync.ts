@@ -38,11 +38,18 @@ function markdown(detail: KibanaGateway.AgentBuilderSkillDetail) {
 export namespace KibanaSkillsSync {
   type Stamp = { lastSyncAt: number; kibanaUrl?: string }
 
-  /** Resolved active profile + auth context, or `null` if no profile is configured. */
+  /**
+   * Resolved active profile + auth context, or `null` if no profile is configured.
+   *
+   * The profile name is canonicalised through `ElasticAuth.canon` before it leaves this
+   * function so all callers compose filesystem paths from a name guaranteed to match
+   * `[a-zA-Z0-9_-]+` — `current-context` in `~/.config/elastic/config.yaml` is user-editable
+   * and could otherwise carry path-traversal segments like `../../tmp/x`.
+   */
   async function active(): Promise<{ profile: string; context: NonNullable<ElasticAuth.Status["context"]> } | null> {
     const status = await ElasticAuth.check().catch(() => undefined)
     if (!status?.configured || !status.context?.kibana_url || !status.context.api_key) return null
-    return { profile: status.name ?? "default", context: status.context }
+    return { profile: ElasticAuth.canon(status.name), context: status.context }
   }
 
   function syncRoot() {
@@ -98,6 +105,14 @@ export namespace KibanaSkillsSync {
     }
 
     const root = path.resolve(rootForProfile(profile))
+    const base = path.resolve(syncRoot())
+    if (!Filesystem.contains(base, root)) {
+      // Belt-and-braces: `active()` already canonicalises the profile name, so this
+      // branch should be unreachable. Bail if a future refactor breaks that invariant —
+      // we never want the destructive readdir/rm below pointed at a path outside our tree.
+      log.error("refusing sync — resolved root escaped sync base", { profile, root, base })
+      return
+    }
     const keep = new Set<string>()
     let partial = false
 

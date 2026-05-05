@@ -18,6 +18,13 @@ describe("ElasticAuth.canon", () => {
   test("caps at 64 chars", () => {
     expect(ElasticAuth.canon("a".repeat(100))).toHaveLength(64)
   })
+
+  test("strips path-traversal segments — name flows into filesystem paths", () => {
+    expect(ElasticAuth.canon("../../tmp/x")).toBe("tmp_x")
+    expect(ElasticAuth.canon("..")).toBe("default")
+    expect(ElasticAuth.canon("/etc/passwd")).toBe("etc_passwd")
+    expect(ElasticAuth.canon("a/b\\c")).toBe("a_b_c")
+  })
 })
 
 describe("ElasticAuth.profileNameFromKibanaUrl", () => {
