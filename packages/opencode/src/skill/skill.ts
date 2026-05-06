@@ -16,6 +16,7 @@ import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import type { Agent } from "@/agent/agent"
 import { PermissionNext } from "@/permission/next"
+import { KibanaSkillsSync } from "@/elastic/kibana-skills-sync"
 
 // Injected at build time via Bun's define
 declare const ELASTIC_SKILLS_EMBEDDED: Record<string, string> | undefined
@@ -162,7 +163,7 @@ export namespace Skill {
       }
     }
 
-    // Scan .elastic-ramen/skill/ directories
+    const inactiveKibanaProfile = await KibanaSkillsSync.inactiveProfileFilter()
     for (const dir of await Config.directories()) {
       const matches = await Glob.scan(OPENCODE_SKILL_PATTERN, {
         cwd: dir,
@@ -171,6 +172,7 @@ export namespace Skill {
         symlink: true,
       })
       for (const match of matches) {
+        if (inactiveKibanaProfile(match)) continue
         await addSkill(match)
       }
     }
