@@ -1,6 +1,6 @@
 // Copyright (c) 2026-present, Elastic NV
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
-// and has been modified by Elastic NV. Changes: rebranded terminal title to RAMEN, replaced empty-provider dialog with Kibana ElasticSetup flow, added 503 storage-hint suppression for Kibana conversation sync
+// and has been modified by Elastic NV. Changes: rebranded terminal title to RAMEN, replaced empty-provider dialog with Kibana ElasticSetup flow, lazy 503 kickstart on first conversation sync
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
@@ -499,7 +499,6 @@ function App() {
     return result
   }
 
-  let shownStorageHint = false
   const prev = new Map<string, string>()
   createEffect(() => {
     if (!esReady()) return
@@ -511,16 +510,15 @@ function App() {
         const session = sync.session.get(sessionID)
         if (!session) continue
         const rounds = buildRounds(sessionID)
-        Handover.sync(sessionID, session.title, rounds).catch((err) => {
+        Handover.sync(sessionID, session.title, rounds, {
+          onKickstart: () =>
+            toast.show({
+              variant: "info",
+              message: "Initializing Agent Builder conversation storage…",
+              duration: 5000,
+            }),
+        }).catch((err) => {
           const msg = err instanceof Error ? err.message : String(err)
-          // 503 "not yet initialized" is expected when Agent Builder hasn't been used yet
-          if (msg.includes("503") && msg.includes("not yet initialized")) {
-            if (!shownStorageHint) {
-              shownStorageHint = true
-              toast.show({ variant: "info", message: "Conversation sync unavailable — start a conversation in the Agent Builder UI first to initialize storage.", duration: 8000 })
-            }
-            return
-          }
           toast.show({ variant: "error", message: `Kibana conversation sync failed: ${msg}`, duration: 5000 })
         })
       }

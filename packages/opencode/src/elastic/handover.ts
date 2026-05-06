@@ -1,5 +1,6 @@
 // Copyright (c) 2026-present, Elastic NV
 import { KibanaClient, type ConversationRound, type Conversation } from "./client"
+import { Bootstrap } from "./bootstrap"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
 
@@ -64,12 +65,34 @@ export namespace Handover {
     return stored
   }
 
-  export async function sync(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
+  export interface SyncOptions {
+    /** Called once if a 503 forces a kickstart. */
+    onKickstart?: () => void
+  }
+
+  export async function sync(
+    sessionID: string,
+    title: string,
+    conversationRounds: ConversationRound[],
+    opts?: SyncOptions,
+  ) {
     if (!conversationRounds.length) return
+    try {
+      await write(sessionID, title, conversationRounds)
+    } catch (err) {
+      if (!Bootstrap.isNotInitializedError(err)) throw err
+      log.info("storage not initialized, kickstarting")
+      opts?.onKickstart?.()
+      await Bootstrap.kickstart()
+      await write(sessionID, title, conversationRounds)
+    }
+  }
+
+  async function write(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
     const existing = await resolve(sessionID)
+    const api = conversations()
     if (existing) {
       log.info("updating elasticsearch conversation", { sessionID, conversationID: existing })
-      const api = conversations()
       await api.update(existing, {
         title: `RAMEN: ${title}`,
         conversation_rounds: conversationRounds,
@@ -77,7 +100,6 @@ export namespace Handover {
       return
     }
     log.info("creating elasticsearch conversation", { sessionID })
-    const api = conversations()
     const res = await api.create({
       agent_id: "elastic-ai-agent",
       title: `RAMEN: ${title}`,
