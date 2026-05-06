@@ -22,8 +22,9 @@ function parseSseBlock(block: string): string | undefined {
   return j.conversation_id
 }
 
-async function conversationIdFromSse(body: ReadableStream<Uint8Array>): Promise<string | undefined> {
+async function conversationIdFromSse(body: ReadableStream<Uint8Array>): Promise<{ id: string; close: () => void } | undefined> {
   const reader = body.getReader()
+  const close = () => reader.cancel().catch(() => {})
   const dec = new TextDecoder()
   let buf = ""
   const feed = (chunk: string) => {
@@ -41,20 +42,16 @@ async function conversationIdFromSse(body: ReadableStream<Uint8Array>): Promise<
       const { done, value } = await reader.read()
       if (value) {
         const id = feed(dec.decode(value, { stream: true }))
-        if (id) {
-          reader.cancel().catch(() => {})
-          return id
-        }
+        if (id) return { id, close }
       }
       if (done) break
     }
     const id = feed(dec.decode())
-    if (id) {
-      reader.cancel().catch(() => {})
-      return id
-    }
+    if (id) return { id, close }
+    close()
     return undefined
   } catch {
+    close()
     return undefined
   }
 }
@@ -122,8 +119,9 @@ export namespace Handover {
 
   /**
    * Start a dummy async converse so Agent Builder persists storage, read the new
-   * conversation id from the first SSE lifecycle event, cancel the stream, then delete
-   * that scratch conversation so nothing is left in the UI. Mitigates 503 "not yet
+   * conversation id from the first SSE lifecycle event, then delete that scratch
+   * conversation. The async stream is closed only after DELETE so the session is
+   * not torn down prematurely on slow Kibana hosts. Mitigates 503 "not yet
    * initialized" when Agent Builder has never been used in this deployment.
    */
   export async function kickstart() {
@@ -132,7 +130,7 @@ export namespace Handover {
     const base = auth.context.kibana_url.replace(/\/$/, "")
     const key = auth.context.api_key
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 15_000)
+    const timer = setTimeout(() => ctrl.abort(), 60_000)
     const h = {
       "kbn-xsrf": "true",
       "x-elastic-internal-origin": "kibana",
@@ -140,23 +138,31 @@ export namespace Handover {
       "Content-Type": "application/json",
       Authorization: `ApiKey ${key}`,
     } as const
-    const res = await fetch(`${base}/api/agent_builder/converse/async`, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: h,
-      body: JSON.stringify({
-        agent_id: "elastic-ai-agent",
-        input: "Test conversation for making sure everything works.",
-      }),
-    }).finally(() => clearTimeout(timer))
-    if (!res.ok || !res.body) return
-    const temp = await conversationIdFromSse(res.body)
-    if (!temp) return
-    const del = await fetch(`${base}/api/agent_builder/conversations/${encodeURIComponent(temp)}`, {
-      method: "DELETE",
-      headers: h,
-    })
-    if (!del.ok) log.warn("kickstart could not delete scratch conversation", { status: del.status })
+    try {
+      const res = await fetch(`${base}/api/agent_builder/converse/async`, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: h,
+        body: JSON.stringify({
+          agent_id: "elastic-ai-agent",
+          input: "Test conversation for making sure everything works.",
+        }),
+      })
+      if (!res.ok || !res.body) return
+      const hit = await conversationIdFromSse(res.body)
+      if (!hit) return
+      try {
+        const del = await fetch(`${base}/api/agent_builder/conversations/${encodeURIComponent(hit.id)}`, {
+          method: "DELETE",
+          headers: h,
+        })
+        if (!del.ok) log.warn("kickstart could not delete scratch conversation", { status: del.status })
+      } finally {
+        hit.close()
+      }
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   export async function sync(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
