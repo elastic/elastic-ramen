@@ -30,7 +30,9 @@ export namespace Bootstrap {
       if (!res.body) throw new Error("kickstart: empty response body")
       const id = await readConversationId(res.body)
       if (!id) throw new Error("kickstart: SSE stream ended without a conversation id; storage may still be uninitialized")
-      await KibanaClient.agentBuilder()
+      // Fire-and-forget: best-effort cleanup, must not block the sync retry
+      // path. Worst case we leak one scratch conversation in Kibana.
+      void KibanaClient.agentBuilder()
         .conversations.del(id)
         .catch((err) => log.warn("could not delete scratch conversation", { id, error: String(err) }))
     } finally {
