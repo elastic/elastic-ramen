@@ -4,15 +4,9 @@ import { Sse } from "./sse"
 import { Log } from "@/util/log"
 
 /**
- * Forces Agent Builder conversation storage to initialize.
- *
- * Storage is created lazily by Kibana the first time anyone uses Agent Builder.
- * Until then, `POST /internal/elastic_ramen/conversations` returns 503 "not yet
- * initialized". Callers run `kickstart()` only when they observe that 503.
- *
- * One concurrent kickstart per process: parallel callers share the same
- * in-flight promise so we don't burn two LLM rounds. Once it resolves, the
- * slot clears — a subsequent 503 (storage genuinely not ready) can retry.
+ * Forces Agent Builder conversation storage to initialize by running one
+ * converse round and deleting the scratch conversation. Used as recovery
+ * when a sync fails with 503 "not yet initialized".
  */
 export namespace Bootstrap {
   const log = Log.create({ service: "bootstrap" })
@@ -20,29 +14,12 @@ export namespace Bootstrap {
   const PROBE_INPUT = "Initialization probe — please ignore."
   const TIMEOUT_MS = 30_000
 
-  let inflight: Promise<void> | undefined
-
-  export interface Options {
-    /** Called once when a kickstart actually starts (skipped if dedup'd). */
-    onStart?: () => void
-  }
-
   export function isNotInitializedError(err: unknown): boolean {
     const msg = err instanceof Error ? err.message : String(err)
     return msg.includes("503") && msg.includes("not yet initialized")
   }
 
-  export function kickstart(opts?: Options): Promise<void> {
-    if (!inflight) {
-      opts?.onStart?.()
-      inflight = run().finally(() => {
-        inflight = undefined
-      })
-    }
-    return inflight
-  }
-
-  async function run() {
+  export async function kickstart() {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
     try {

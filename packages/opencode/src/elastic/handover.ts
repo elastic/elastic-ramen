@@ -82,7 +82,8 @@ export namespace Handover {
     } catch (err) {
       if (!Bootstrap.isNotInitializedError(err)) throw err
       log.info("storage not initialized, kickstarting")
-      await Bootstrap.kickstart({ onStart: opts?.onKickstart })
+      opts?.onKickstart?.()
+      await Bootstrap.kickstart()
       await write(sessionID, title, conversationRounds)
     }
   }
