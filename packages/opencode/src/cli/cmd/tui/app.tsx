@@ -1,6 +1,6 @@
 // Copyright (c) 2026-present, Elastic NV
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
-// and has been modified by Elastic NV. Changes: rebranded terminal title to RAMEN, replaced empty-provider dialog with Kibana ElasticSetup flow, added 503 storage-hint suppression for Kibana conversation sync
+// and has been modified by Elastic NV. Changes: rebranded terminal title to RAMEN, replaced empty-provider dialog with Kibana ElasticSetup flow, ensure Agent Builder conversation storage on esReady
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
@@ -47,6 +47,7 @@ import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
+import { Bootstrap } from "@/elastic/bootstrap"
 import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
@@ -499,7 +500,6 @@ function App() {
     return result
   }
 
-  let shownStorageHint = false
   const prev = new Map<string, string>()
   createEffect(() => {
     if (!esReady()) return
@@ -513,14 +513,6 @@ function App() {
         const rounds = buildRounds(sessionID)
         Handover.sync(sessionID, session.title, rounds).catch((err) => {
           const msg = err instanceof Error ? err.message : String(err)
-          // 503 "not yet initialized" is expected when Agent Builder hasn't been used yet
-          if (msg.includes("503") && msg.includes("not yet initialized")) {
-            if (!shownStorageHint) {
-              shownStorageHint = true
-              toast.show({ variant: "info", message: "Conversation sync unavailable — start a conversation in the Agent Builder UI first to initialize storage.", duration: 8000 })
-            }
-            return
-          }
           toast.show({ variant: "error", message: `Kibana conversation sync failed: ${msg}`, duration: 5000 })
         })
       }
@@ -550,6 +542,19 @@ function App() {
     const key = status.context?.api_key
     if (url && key) restartAlerts(url, key)
     if (url && key) setEsReady(true)
+    if (status.context?.kibana_url) {
+      void Bootstrap.ensureStorage({
+        onKickstart: () =>
+          toast.show({
+            variant: "info",
+            message: "Initializing Agent Builder conversation storage…",
+            duration: 5000,
+          }),
+      }).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        toast.show({ variant: "error", message: `Conversation sync setup failed: ${msg}`, duration: 5000 })
+      })
+    }
   })
 
   // When no provider is configured, auto-trigger the setup flow

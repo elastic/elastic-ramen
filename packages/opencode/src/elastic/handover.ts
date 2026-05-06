@@ -1,5 +1,6 @@
 // Copyright (c) 2026-present, Elastic NV
 import { KibanaClient, type ConversationRound, type Conversation } from "./client"
+import { Bootstrap } from "./bootstrap"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
 
@@ -66,6 +67,7 @@ export namespace Handover {
 
   export async function sync(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
     if (!conversationRounds.length) return
+    await Bootstrap.ensureStorage()
     const existing = await resolve(sessionID)
     if (existing) {
       log.info("updating elasticsearch conversation", { sessionID, conversationID: existing })

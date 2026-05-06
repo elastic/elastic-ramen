@@ -52,27 +52,42 @@ export namespace KibanaClient {
     return { base: url.replace(/\/$/, ""), key }
   }
 
-  async function request<T = unknown>(endpoint: string, opts?: { method?: string; body?: unknown }): Promise<T> {
-    const { base, key } = await resolve()
+  function headers(key: string): Record<string, string> {
+    return {
+      "kbn-xsrf": "true",
+      "x-elastic-internal-origin": "kibana",
+      "elastic-api-version": "2023-10-31",
+      "Content-Type": "application/json",
+      Authorization: `ApiKey ${key}`,
+    }
+  }
 
+  async function send(endpoint: string, opts?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<Response> {
+    const { base, key } = await resolve()
     // base already includes any Kibana base path (e.g. http://host:5603/mypath)
     // endpoint is an API path like /api/workflows or /s/{space}/api/...
     const res = await fetch(`${base}${endpoint}`, {
       method: opts?.method ?? "GET",
-      headers: {
-        "kbn-xsrf": "true",
-        "x-elastic-internal-origin": "kibana",
-        "elastic-api-version": "2023-10-31",
-        "Content-Type": "application/json",
-        Authorization: `ApiKey ${key}`,
-      },
+      headers: headers(key),
       body: opts?.body ? JSON.stringify(opts.body) : undefined,
+      signal: opts?.signal,
     })
     if (!res.ok) {
       const text = await res.text().catch(() => "")
       throw new Error(`Kibana ${res.status}: ${text}`)
     }
+    return res
+  }
+
+  async function request<T = unknown>(endpoint: string, opts?: { method?: string; body?: unknown }): Promise<T> {
+    const res = await send(endpoint, opts)
+    if (res.status === 204) return undefined as T
     return res.json() as Promise<T>
+  }
+
+  /** Variant of `request` that returns the raw Response so callers can stream the body (e.g. SSE). */
+  async function requestStream(endpoint: string, opts?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<Response> {
+    return send(endpoint, opts)
   }
 
   // Workflows
@@ -190,6 +205,26 @@ export namespace KibanaClient {
       },
       del(id: string) {
         return request(api("/api/agent_builder/agents", `/${id}`, space), { method: "DELETE" })
+      },
+    }
+  }
+
+  // Agent Builder (native endpoints — distinct from the elastic_ramen pass-through)
+
+  export function agentBuilder(space?: string) {
+    return {
+      /** Streams an SSE response. Caller is responsible for consuming `res.body`. */
+      converseAsync(body: { agent_id: string; input: string }, opts?: { signal?: AbortSignal }) {
+        return requestStream(api("/api/agent_builder/converse/async", "", space), {
+          method: "POST",
+          body,
+          signal: opts?.signal,
+        })
+      },
+      conversations: {
+        del(id: string) {
+          return request(api("/api/agent_builder/conversations", `/${encodeURIComponent(id)}`, space), { method: "DELETE" })
+        },
       },
     }
   }
