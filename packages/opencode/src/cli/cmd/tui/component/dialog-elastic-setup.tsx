@@ -272,7 +272,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         </text>
 
         <Show when={link()}>
-          <Link href={link()!} fg={theme.primary} wrapMode="char"><b>Open onboarding page</b></Link>
+          <text fg={theme.textMuted}>Click here to open onboarding page: </text>
+          <Link href={link()!} fg={theme.primary} wrapMode="char">{link()!}</Link>
         </Show>
 
         <Show when={error()}>

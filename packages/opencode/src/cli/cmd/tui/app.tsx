@@ -53,6 +53,7 @@ import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaContext } from "@tui/component/dialog-kibana-context"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
 import { ElasticProfileProvider, useElasticProfile } from "@tui/context/elastic-profile"
+import { KibanaSkillsSync } from "@/elastic/kibana-skills-sync"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -409,6 +410,7 @@ function App() {
       })
 
     await sdk.client.instance.dispose().catch(() => {})
+    await KibanaSkillsSync.sync({ force: true }).catch((err) => stepFail("Kibana skills sync failed", err))
     try {
       await sync.bootstrap()
     } catch (err) {
