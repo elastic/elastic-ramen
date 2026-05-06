@@ -4,22 +4,40 @@ import { ElasticAuth } from "./auth"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
 
-function parseSseBlock(block: string): string | undefined {
+/** Kibana SSE wraps chat payloads as `{"data":{...}}` on the `data:` line. */
+function chatPayloadConversationId(j: unknown): string | undefined {
+  if (!j || typeof j !== "object") return
+  const o = j as Record<string, unknown>
+  if (typeof o.conversation_id === "string") return o.conversation_id
+  const inner = o.data
+  if (!inner || typeof inner !== "object") return
+  const d = inner as Record<string, unknown>
+  if (typeof d.conversation_id === "string") return d.conversation_id
+  const nested = d.data
+  if (nested && typeof nested === "object") {
+    const c = (nested as Record<string, unknown>).conversation_id
+    if (typeof c === "string") return c
+  }
+  return
+}
+
+/** After `round_complete`, persistence emits this — DELETE must wait until then. */
+function parsePersistedConversationSseBlock(block: string): string | undefined {
   let ev = ""
   const lines: string[] = []
   for (const ln of block.split("\n")) {
     if (ln.startsWith("event:")) ev = ln.slice(6).trim()
     if (ln.startsWith("data:")) lines.push(ln.slice(5).trimStart())
   }
-  if (ev !== "conversation_id_set" && ev !== "conversation_created") return
+  if (ev !== "conversation_created" && ev !== "conversation_updated") return
   if (!lines.length) return
-  let j: { conversation_id?: string }
+  let parsed: unknown
   try {
-    j = JSON.parse(lines.join("\n")) as { conversation_id?: string }
+    parsed = JSON.parse(lines.join("\n"))
   } catch {
     return
   }
-  return j.conversation_id
+  return chatPayloadConversationId(parsed)
 }
 
 async function conversationIdFromSse(body: ReadableStream<Uint8Array>): Promise<{ id: string; close: () => void } | undefined> {
@@ -32,7 +50,7 @@ async function conversationIdFromSse(body: ReadableStream<Uint8Array>): Promise<
     while (true) {
       const i = buf.indexOf("\n\n")
       if (i === -1) return undefined
-      const id = parseSseBlock(buf.slice(0, i))
+      const id = parsePersistedConversationSseBlock(buf.slice(0, i))
       buf = buf.slice(i + 2)
       if (id) return id
     }
@@ -118,10 +136,10 @@ export namespace Handover {
   }
 
   /**
-   * Start a dummy async converse so Agent Builder persists storage, read the new
-   * conversation id from the first SSE lifecycle event, then delete that scratch
-   * conversation. The async stream is closed only after DELETE so the session is
-   * not torn down prematurely on slow Kibana hosts. Mitigates 503 "not yet
+   * Run async converse until Kibana persists the conversation (`conversation_created`
+   * / `conversation_updated` in SSE), then DELETE it. Waits for persistence — not
+   * `conversation_id_set`, which fires before the document exists. Parses nested
+   * `data: {"data":{"conversation_id":...}}` wire encoding. Mitigates 503 "not yet
    * initialized" when Agent Builder has never been used in this deployment.
    */
   export async function kickstart() {
@@ -130,7 +148,7 @@ export namespace Handover {
     const base = auth.context.kibana_url.replace(/\/$/, "")
     const key = auth.context.api_key
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 60_000)
+    const timer = setTimeout(() => ctrl.abort(), 120_000)
     const h = {
       "kbn-xsrf": "true",
       "x-elastic-internal-origin": "kibana",
