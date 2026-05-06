@@ -11,6 +11,7 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
+import { createSessionProfileFilter } from "../util/session-profile-filter"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -33,11 +34,14 @@ export function DialogSessionList() {
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
   const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const matchesProfile = createSessionProfileFilter(sessions)
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
+    const matches = matchesProfile()
     return sessions()
       .filter((x) => x.parentID === undefined)
+      .filter((x) => matches(x.id))
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
         const date = new Date(x.time.updated)

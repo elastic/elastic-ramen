@@ -37,6 +37,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { SessionProfile } from "@/elastic/session-profile"
 
 export type PromptProps = {
   sessionID?: string
@@ -559,6 +560,7 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+      await SessionProfile.stamp(sessionID)
     }
 
     const messageID = MessageID.ascending()

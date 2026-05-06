@@ -34,6 +34,7 @@ import { ChartTool } from "../../tool/chart"
 import { Locale } from "../../util/locale"
 import { stripAttachmentTags } from "../../util/attachment_tag"
 import stripAnsi from "strip-ansi"
+import { SessionProfile } from "../../elastic/session-profile"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -394,10 +395,16 @@ export const RunCommand = cmd({
     }
 
     async function session(sdk: OpencodeClient) {
-      const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
+      const roots = args.continue
+        ? await SessionProfile.filter((await sdk.session.list()).data?.filter((s) => !s.parentID) ?? [])
+        : []
+      const exact = args.session ? await SessionProfile.filter([{ id: args.session }]) : []
+      if (args.session && !exact.length) return undefined
+      const baseID = args.continue ? roots[0]?.id : args.session
 
       if (baseID && args.fork) {
         const forked = await sdk.session.fork({ sessionID: baseID })
+        if (forked.data?.id) await SessionProfile.stamp(forked.data.id)
         return forked.data?.id
       }
 
@@ -405,6 +412,7 @@ export const RunCommand = cmd({
 
       const name = title()
       const result = await sdk.session.create({ title: name, permission: rules })
+      if (result.data?.id) await SessionProfile.stamp(result.data.id)
       return result.data?.id
     }
 

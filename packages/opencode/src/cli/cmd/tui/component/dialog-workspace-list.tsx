@@ -9,6 +9,7 @@ import { useToast } from "../ui/toast"
 import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { SessionProfile } from "@/elastic/session-profile"
 
 async function openWorkspace(input: {
   dialog: ReturnType<typeof useDialog>
@@ -34,8 +35,8 @@ async function openWorkspace(input: {
     directory: input.sync.data.path.directory || input.sdk.directory,
     experimental_workspaceID: input.workspaceID,
   })
-  const listed = input.forceCreate ? undefined : await client.session.list({ roots: true, limit: 1 })
-  const session = listed?.data?.[0]
+  const listed = input.forceCreate ? undefined : await client.session.list({ roots: true })
+  const session = (listed?.data ? await SessionProfile.filter(listed.data) : [])[0]
   if (session?.id) {
     cacheSession(session)
     input.route.navigate({
@@ -68,6 +69,7 @@ async function openWorkspace(input: {
     }
     created = result.data
   }
+  await SessionProfile.stamp(created.id)
   cacheSession(created)
   input.route.navigate({
     type: "session",
