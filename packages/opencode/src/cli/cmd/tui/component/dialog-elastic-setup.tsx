@@ -13,7 +13,7 @@ import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
 
-export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => void; onEscape?: () => void }) {
+export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => Promise<void>; onEscape?: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
@@ -63,15 +63,15 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       text: "",
       code: 1,
     }))
-    setSaving(false)
 
     if (health.code !== 0 && health.text?.includes("error")) {
+      setSaving(false)
       setError("Saved, but could not connect. Check your credentials and try again.")
       return
     }
 
+    await props.onComplete().finally(() => setSaving(false))
     dialog.clear()
-    props.onComplete()
   }
 
   async function submitManual() {

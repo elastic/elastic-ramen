@@ -540,7 +540,6 @@ function App() {
           kibanaBase={args.kibanaBase}
           onEscape={() => exit()}
           onComplete={async () => {
-            dialog.clear()
             await reloadKibanaIntegration()
           }}
         />
@@ -564,7 +563,6 @@ function App() {
             kibanaBase={args.kibanaBase}
             onEscape={() => exit()}
             onComplete={async () => {
-              dialog.clear()
               await reloadKibanaIntegration()
             }}
           />
@@ -773,7 +771,6 @@ function App() {
           <DialogElasticSetup
             kibanaBase={args.kibanaBase}
             onComplete={async () => {
-              dialog.clear()
               await reloadKibanaIntegration({ resetSession: true })
             }}
           />
