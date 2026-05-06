@@ -1,5 +1,6 @@
 // Copyright (c) 2026-present, Elastic NV
 import { KibanaClient, type ConversationRound, type Conversation } from "./client"
+import { ElasticAuth } from "./auth"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
 
@@ -62,6 +63,33 @@ export namespace Handover {
     const stored = await Storage.read<string>(["kibana_link", sessionID]).catch(() => undefined)
     if (stored) mapping.set(sessionID, stored)
     return stored
+  }
+
+  /**
+   * Fire a dummy converse request to initialize Agent Builder storage, then abort it.
+   * This is a workaround for the 503 "not yet initialized" error that occurs when no
+   * conversation has ever been started in the Agent Builder UI.
+   */
+  export async function kickstart() {
+    const auth = await ElasticAuth.check()
+    if (!auth.configured || !auth.context?.kibana_url || !auth.context.api_key) return
+    const ctrl = new AbortController()
+    const req = fetch(`${auth.context.kibana_url.replace(/\/$/, "")}/api/agent_builder/converse`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "kbn-xsrf": "true",
+        "x-elastic-internal-origin": "kibana",
+        "elastic-api-version": "2023-10-31",
+        "Content-Type": "application/json",
+        Authorization: `ApiKey ${auth.context.api_key}`,
+      },
+      body: JSON.stringify({ input: "Test conversation for making sure everything works." }),
+    })
+    // Give Kibana time to receive and start processing (initializing storage) before aborting
+    await new Promise((r) => setTimeout(r, 300))
+    ctrl.abort()
+    await req.catch(() => {})
   }
 
   export async function sync(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
