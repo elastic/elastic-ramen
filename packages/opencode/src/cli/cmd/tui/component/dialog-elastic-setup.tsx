@@ -12,12 +12,14 @@ import { ElasticBin } from "@/elastic/bin"
 import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Process } from "@/util/process"
+import { Spinner } from "./spinner"
 
 export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => Promise<void>; onEscape?: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
   const [saving, setSaving] = createSignal(false)
+  const [step, setStep] = createSignal("")
   const [mode, setMode] = createSignal<"kibana-url" | "kibana-callback" | "manual-json">(
     props.kibanaBase ? "kibana-callback" : "kibana-url",
   )
@@ -49,6 +51,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
     setSaving(true)
     setError("")
+    setStep("Saving credentials…")
 
     const ctx = ElasticAuth.profileNameFromSetup(input.kibana_url, input.elasticsearch_url)
     await ElasticAuth.save({ ...input, context: ctx }).catch((e: Error) => {
@@ -58,6 +61,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
     if (error()) return
 
+    setStep("Verifying connection…")
     const bin = await ElasticBin.resolve()
     const health = await Process.text([bin, "es", "cluster", "health"], { nothrow: true }).catch(() => ({
       text: "",
@@ -70,6 +74,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       return
     }
 
+    setStep("Starting session…")
     await props.onComplete().finally(() => setSaving(false))
     dialog.clear()
   }
@@ -218,8 +223,15 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         </text>
       </box>
 
+      {/* Full-panel connecting state — shown across all modes */}
+      <Show when={saving()}>
+        <box flexDirection="column" gap={1} paddingTop={1} paddingBottom={1}>
+          <Spinner color={theme.primary}>{step()}</Spinner>
+        </box>
+      </Show>
+
       {/* Step 1: Ask for Kibana URL if not passed via --kibana-base */}
-      <Show when={mode() === "kibana-url"}>
+      <Show when={!saving() && mode() === "kibana-url"}>
         <text fg={theme.textMuted}>
           {"Enter your Kibana URL to connect:"}
         </text>
@@ -260,7 +272,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       </Show>
 
       {/* Step 2: Waiting for Kibana callback */}
-      <Show when={mode() === "kibana-callback"}>
+      <Show when={!saving() && mode() === "kibana-callback"}>
         <box flexDirection="row" gap={0}>
           <text fg={theme.textMuted}>Requires </text>
           <text fg={theme.text}>elasticRamen:enabled</text>
@@ -280,9 +292,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <text fg={"#ff6b6b"}>{error()}</text>
         </Show>
 
-        <Show when={!saving()} fallback={<text fg={theme.textMuted}>connecting...</text>}>
-          <text fg={theme.textMuted}>Waiting for Kibana...</text>
-        </Show>
+        <text fg={theme.textMuted}>Waiting for Kibana...</text>
 
         <box paddingTop={1}>
           <text
@@ -298,7 +308,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       </Show>
 
       {/* Manual JSON paste mode */}
-      <Show when={mode() === "manual-json"}>
+      <Show when={!saving() && mode() === "manual-json"}>
         <text fg={theme.textMuted}>
           {"Paste the JSON from the Kibana onboarding page:"}
         </text>
@@ -317,11 +327,9 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         </Show>
 
         <box paddingBottom={1}>
-          <Show when={!saving()} fallback={<text fg={theme.textMuted}>connecting...</text>}>
-            <text fg={theme.text}>
-              enter <span style={{ fg: theme.textMuted }}>connect</span>
-            </text>
-          </Show>
+          <text fg={theme.text}>
+            enter <span style={{ fg: theme.textMuted }}>connect</span>
+          </text>
         </box>
       </Show>
     </box>
