@@ -774,7 +774,7 @@ function App() {
             kibanaBase={args.kibanaBase}
             onComplete={async () => {
               dialog.clear()
-              await reloadKibanaIntegration()
+              await reloadKibanaIntegration({ resetSession: true })
             }}
           />
         ))
