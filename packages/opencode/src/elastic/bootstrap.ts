@@ -1,6 +1,5 @@
 // Copyright (c) 2026-present, Elastic NV
 import { KibanaClient } from "./client"
-import { ElasticAuth } from "./auth"
 import { Sse } from "./sse"
 import { Log } from "@/util/log"
 
@@ -13,11 +12,10 @@ import { Log } from "@/util/log"
  * Strategy:
  *   1. Probe the list endpoint. 200 ⇒ storage already exists, done.
  *   2. Only on 503 fall through to a converse round and DELETE the scratch
- *      conversation. This is the only path that costs an LLM turn, and it
- *      runs at most once per Kibana URL per process.
+ *      conversation. This is the only path that costs an LLM turn.
  *
- * Single-flight per Kibana URL: concurrent callers share the same promise.
- * On failure the cached promise is cleared so the next caller can retry.
+ * The result is memoized for the process; on failure the cache is cleared so
+ * a later caller can retry. Call `reset()` after a profile switch.
  */
 export namespace Bootstrap {
   const log = Log.create({ service: "bootstrap" })
@@ -25,25 +23,26 @@ export namespace Bootstrap {
   const PROBE_INPUT = "Initialization probe — please ignore."
   const KICKSTART_TIMEOUT_MS = 30_000
 
-  const inflight = new Map<string, Promise<void>>()
+  let cached: Promise<void> | undefined
 
   export interface Options {
     /** Called once if the LLM-cost kickstart path is about to run. */
     onKickstart?: () => void
   }
 
-  export async function ensureStorage(opts?: Options): Promise<void> {
-    const auth = await ElasticAuth.check()
-    if (!auth.configured || !auth.context?.kibana_url) return
-    const url = auth.context.kibana_url
-    const existing = inflight.get(url)
-    if (existing) return existing
-    const p = run(opts).catch((err) => {
-      inflight.delete(url)
-      throw err
-    })
-    inflight.set(url, p)
-    return p
+  export function ensureStorage(opts?: Options): Promise<void> {
+    if (!cached) {
+      cached = run(opts).catch((err) => {
+        cached = undefined
+        throw err
+      })
+    }
+    return cached
+  }
+
+  /** Drop the memoized result. Call after switching Kibana profiles. */
+  export function reset() {
+    cached = undefined
   }
 
   async function run(opts?: Options) {

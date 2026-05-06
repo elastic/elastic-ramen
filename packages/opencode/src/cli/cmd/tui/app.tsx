@@ -411,6 +411,7 @@ function App() {
       })
 
     await sdk.client.instance.dispose().catch(() => {})
+    Bootstrap.reset()
     await KibanaSkillsSync.sync({ force: true }).catch((err) => stepFail("Kibana skills sync failed", err))
     try {
       await sync.bootstrap()
