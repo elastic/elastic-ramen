@@ -27,12 +27,9 @@ export namespace Bootstrap {
         { agent_id: AGENT_ID, input: PROBE_INPUT },
         { signal: ctrl.signal },
       )
-      if (!res.body) return
+      if (!res.body) throw new Error("kickstart: empty response body")
       const id = await readConversationId(res.body)
-      if (!id) {
-        log.warn("kickstart finished without a conversation id")
-        return
-      }
+      if (!id) throw new Error("kickstart: SSE stream ended without a conversation id; storage may still be uninitialized")
       await KibanaClient.agentBuilder()
         .conversations.del(id)
         .catch((err) => log.warn("could not delete scratch conversation", { id, error: String(err) }))
