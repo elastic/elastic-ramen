@@ -4,68 +4,47 @@ import { Sse } from "./sse"
 import { Log } from "@/util/log"
 
 /**
- * Ensures Kibana's Agent Builder conversation storage is initialized.
+ * Forces Agent Builder conversation storage to initialize.
  *
- * Without this, the first `POST /internal/elastic_ramen/conversations` returns
- * 503 "not yet initialized" until someone opens Agent Builder in the Kibana UI.
+ * Storage is created lazily by Kibana the first time anyone uses Agent Builder.
+ * Until then, `POST /internal/elastic_ramen/conversations` returns 503 "not yet
+ * initialized". Callers run `kickstart()` only when they observe that 503.
  *
- * Strategy:
- *   1. Probe the list endpoint. 200 ⇒ storage already exists, done.
- *   2. Only on 503 fall through to a converse round and DELETE the scratch
- *      conversation. This is the only path that costs an LLM turn.
- *
- * The result is memoized for the process; on failure the cache is cleared so
- * a later caller can retry. Call `reset()` after a profile switch.
+ * One concurrent kickstart per process: parallel callers share the same
+ * in-flight promise so we don't burn two LLM rounds. Once it resolves, the
+ * slot clears — a subsequent 503 (storage genuinely not ready) can retry.
  */
 export namespace Bootstrap {
   const log = Log.create({ service: "bootstrap" })
   const AGENT_ID = "elastic-ai-agent"
   const PROBE_INPUT = "Initialization probe — please ignore."
-  const KICKSTART_TIMEOUT_MS = 30_000
+  const TIMEOUT_MS = 30_000
 
-  let cached: Promise<void> | undefined
+  let inflight: Promise<void> | undefined
 
   export interface Options {
-    /** Called once if the LLM-cost kickstart path is about to run. */
-    onKickstart?: () => void
+    /** Called once when a kickstart actually starts (skipped if dedup'd). */
+    onStart?: () => void
   }
 
-  export function ensureStorage(opts?: Options): Promise<void> {
-    if (!cached) {
-      cached = run(opts).catch((err) => {
-        cached = undefined
-        throw err
+  export function isNotInitializedError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err)
+    return msg.includes("503") && msg.includes("not yet initialized")
+  }
+
+  export function kickstart(opts?: Options): Promise<void> {
+    if (!inflight) {
+      opts?.onStart?.()
+      inflight = run().finally(() => {
+        inflight = undefined
       })
     }
-    return cached
+    return inflight
   }
 
-  /** Drop the memoized result. Call after switching Kibana profiles. */
-  export function reset() {
-    cached = undefined
-  }
-
-  async function run(opts?: Options) {
-    if (await probe()) return
-    opts?.onKickstart?.()
-    await kickstart()
-  }
-
-  /** Returns true if storage is already initialized; false on the documented 503. */
-  async function probe(): Promise<boolean> {
-    try {
-      await KibanaClient.conversations().list({ agent_id: AGENT_ID })
-      return true
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes("503") && msg.includes("not yet initialized")) return false
-      throw err
-    }
-  }
-
-  async function kickstart() {
+  async function run() {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), KICKSTART_TIMEOUT_MS)
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
     try {
       const res = await KibanaClient.agentBuilder().converseAsync(
         { agent_id: AGENT_ID, input: PROBE_INPUT },

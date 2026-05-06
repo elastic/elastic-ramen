@@ -1,6 +1,6 @@
 // Copyright (c) 2026-present, Elastic NV
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
-// and has been modified by Elastic NV. Changes: rebranded terminal title to RAMEN, replaced empty-provider dialog with Kibana ElasticSetup flow, ensure Agent Builder conversation storage on esReady
+// and has been modified by Elastic NV. Changes: rebranded terminal title to RAMEN, replaced empty-provider dialog with Kibana ElasticSetup flow, lazy 503 kickstart on first conversation sync
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
@@ -47,7 +47,6 @@ import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
-import { Bootstrap } from "@/elastic/bootstrap"
 import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
@@ -411,7 +410,6 @@ function App() {
       })
 
     await sdk.client.instance.dispose().catch(() => {})
-    Bootstrap.reset()
     await KibanaSkillsSync.sync({ force: true }).catch((err) => stepFail("Kibana skills sync failed", err))
     try {
       await sync.bootstrap()
@@ -512,7 +510,14 @@ function App() {
         const session = sync.session.get(sessionID)
         if (!session) continue
         const rounds = buildRounds(sessionID)
-        Handover.sync(sessionID, session.title, rounds).catch((err) => {
+        Handover.sync(sessionID, session.title, rounds, {
+          onKickstart: () =>
+            toast.show({
+              variant: "info",
+              message: "Initializing Agent Builder conversation storage…",
+              duration: 5000,
+            }),
+        }).catch((err) => {
           const msg = err instanceof Error ? err.message : String(err)
           toast.show({ variant: "error", message: `Kibana conversation sync failed: ${msg}`, duration: 5000 })
         })
@@ -543,19 +548,6 @@ function App() {
     const key = status.context?.api_key
     if (url && key) restartAlerts(url, key)
     if (url && key) setEsReady(true)
-    if (status.context?.kibana_url) {
-      void Bootstrap.ensureStorage({
-        onKickstart: () =>
-          toast.show({
-            variant: "info",
-            message: "Initializing Agent Builder conversation storage…",
-            duration: 5000,
-          }),
-      }).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err)
-        toast.show({ variant: "error", message: `Conversation sync setup failed: ${msg}`, duration: 5000 })
-      })
-    }
   })
 
   // When no provider is configured, auto-trigger the setup flow
