@@ -513,7 +513,7 @@ function App() {
         Handover.sync(sessionID, session.title, rounds).catch((err) => {
           const msg = err instanceof Error ? err.message : String(err)
           // 503 "not yet initialized" means Agent Builder storage hasn't been set up yet.
-          // Kick off a dummy converse request to initialize it, then retry once.
+          // Kick off async converse, drop the scratch conversation id from SSE, delete it, then retry once.
           if (msg.includes("503") && msg.includes("not yet initialized")) {
             Handover.kickstart()
               .then(() => Handover.sync(sessionID, session.title, rounds))

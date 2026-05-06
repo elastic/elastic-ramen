@@ -4,6 +4,61 @@ import { ElasticAuth } from "./auth"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
 
+function parseSseBlock(block: string): string | undefined {
+  let ev = ""
+  const lines: string[] = []
+  for (const ln of block.split("\n")) {
+    if (ln.startsWith("event:")) ev = ln.slice(6).trim()
+    if (ln.startsWith("data:")) lines.push(ln.slice(5).trimStart())
+  }
+  if (ev !== "conversation_id_set" && ev !== "conversation_created") return
+  if (!lines.length) return
+  let j: { conversation_id?: string }
+  try {
+    j = JSON.parse(lines.join("\n")) as { conversation_id?: string }
+  } catch {
+    return
+  }
+  return j.conversation_id
+}
+
+async function conversationIdFromSse(body: ReadableStream<Uint8Array>): Promise<string | undefined> {
+  const reader = body.getReader()
+  const dec = new TextDecoder()
+  let buf = ""
+  const feed = (chunk: string) => {
+    buf += chunk.replace(/\r\n/g, "\n")
+    while (true) {
+      const i = buf.indexOf("\n\n")
+      if (i === -1) return undefined
+      const id = parseSseBlock(buf.slice(0, i))
+      buf = buf.slice(i + 2)
+      if (id) return id
+    }
+  }
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (value) {
+        const id = feed(dec.decode(value, { stream: true }))
+        if (id) {
+          reader.cancel().catch(() => {})
+          return id
+        }
+      }
+      if (done) break
+    }
+    const id = feed(dec.decode())
+    if (id) {
+      reader.cancel().catch(() => {})
+      return id
+    }
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
 export namespace Handover {
   const log = Log.create({ service: "handover" })
 
@@ -66,30 +121,42 @@ export namespace Handover {
   }
 
   /**
-   * Fire a dummy converse request to initialize Agent Builder storage, then abort it.
-   * This is a workaround for the 503 "not yet initialized" error that occurs when no
-   * conversation has ever been started in the Agent Builder UI.
+   * Start a dummy async converse so Agent Builder persists storage, read the new
+   * conversation id from the first SSE lifecycle event, cancel the stream, then delete
+   * that scratch conversation so nothing is left in the UI. Mitigates 503 "not yet
+   * initialized" when Agent Builder has never been used in this deployment.
    */
   export async function kickstart() {
     const auth = await ElasticAuth.check()
     if (!auth.configured || !auth.context?.kibana_url || !auth.context.api_key) return
+    const base = auth.context.kibana_url.replace(/\/$/, "")
+    const key = auth.context.api_key
     const ctrl = new AbortController()
-    const req = fetch(`${auth.context.kibana_url.replace(/\/$/, "")}/api/agent_builder/converse`, {
+    const timer = setTimeout(() => ctrl.abort(), 15_000)
+    const h = {
+      "kbn-xsrf": "true",
+      "x-elastic-internal-origin": "kibana",
+      "elastic-api-version": "2023-10-31",
+      "Content-Type": "application/json",
+      Authorization: `ApiKey ${key}`,
+    } as const
+    const res = await fetch(`${base}/api/agent_builder/converse/async`, {
       method: "POST",
       signal: ctrl.signal,
-      headers: {
-        "kbn-xsrf": "true",
-        "x-elastic-internal-origin": "kibana",
-        "elastic-api-version": "2023-10-31",
-        "Content-Type": "application/json",
-        Authorization: `ApiKey ${auth.context.api_key}`,
-      },
-      body: JSON.stringify({ input: "Test conversation for making sure everything works." }),
+      headers: h,
+      body: JSON.stringify({
+        agent_id: "elastic-ai-agent",
+        input: "Test conversation for making sure everything works.",
+      }),
+    }).finally(() => clearTimeout(timer))
+    if (!res.ok || !res.body) return
+    const temp = await conversationIdFromSse(res.body)
+    if (!temp) return
+    const del = await fetch(`${base}/api/agent_builder/conversations/${encodeURIComponent(temp)}`, {
+      method: "DELETE",
+      headers: h,
     })
-    // Give Kibana time to receive and start processing (initializing storage) before aborting
-    await new Promise((r) => setTimeout(r, 300))
-    ctrl.abort()
-    await req.catch(() => {})
+    if (!del.ok) log.warn("kickstart could not delete scratch conversation", { status: del.status })
   }
 
   export async function sync(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
