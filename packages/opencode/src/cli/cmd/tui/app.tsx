@@ -362,6 +362,7 @@ function App() {
   const [esReady, setEsReady] = createSignal(false)
 
   /**
+   * Best-effort reload of Kibana-dependent runtime after auth changes (setup, profile switch).
    * Each subsystem (bootstrap, MCP, profile label) fails independently with a toast;
    * this function never throws, so callers can rely on disk state and runtime state being aligned
    * by the time it returns. Anything still broken surfaces as a toast.
