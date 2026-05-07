@@ -3,6 +3,14 @@ import { Tool } from "./tool"
 
 export const EIGHTHS = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
 export const BAR_WIDTH = 20
+export const AREA_HEIGHT = 6
+/** Braille dot bitmasks indexed by [row 0-3][col 0-1]. Row 0 is top, row 3 is bottom. */
+export const BRAILLE_DOTS = [
+  [0x01, 0x08],
+  [0x02, 0x10],
+  [0x04, 0x20],
+  [0x40, 0x80],
+]
 
 const ANSI_COLORS = ["\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[31m"]
 const ANSI_RESET = "\x1b[0m"
@@ -61,6 +69,57 @@ export function ansiStack(values: number[], globalMax: number, width: number): s
   return out
 }
 
+/**
+ * Build the braille grid for an area chart.
+ * vals[seriesIdx][dataIdx]; returns bit patterns and dominant series per cell.
+ */
+export function areaGrid(
+  vals: number[][],
+  max: number,
+  stacked: boolean,
+  width: number,
+): { bits: number[][]; dom: number[][] } {
+  const H = AREA_HEIGHT
+  const LEVELS = H * 4
+  const n = vals[0]?.length ?? 0
+  const S = vals.length
+  const bits = Array.from({ length: H }, () => new Array(width).fill(0))
+  const dom = Array.from({ length: H }, () => new Array(width).fill(-1))
+  for (let di = 0; di < n; di++) {
+    const cx = Math.floor(di / 2)
+    if (cx >= width) break
+    const dcol = di % 2
+    let base = 0
+    for (let si = 0; si < S; si++) {
+      const v = vals[si][di] ?? 0
+      const top = stacked ? base + v : v
+      const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
+      const fillBase = stacked ? Math.round((base / max) * LEVELS) : 0
+      for (let lev = fillBase; lev < fillTop; lev++) {
+        const cy = H - 1 - Math.floor(lev / 4)
+        const row = 3 - (lev % 4)
+        bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
+        dom[cy][cx] = si
+      }
+      if (stacked) base += v
+    }
+  }
+  return { bits, dom }
+}
+
+function brailleArea(vals: number[][], max: number, stacked: boolean, width: number): string[] {
+  const { bits, dom } = areaGrid(vals, max, stacked, width)
+  return bits.map((row, cy) =>
+    row
+      .map((b, cx) => {
+        const ch = String.fromCharCode(0x2800 + b)
+        const s = dom[cy][cx]
+        return s >= 0 ? colorFor(s) + ch + ANSI_RESET : ch
+      })
+      .join(""),
+  )
+}
+
 function barChart(params: {
   title?: string
   columns: string[]
@@ -108,8 +167,9 @@ function barChart(params: {
     lines.push("")
     lines.push(legend)
   } else {
+    const hdr = params.columns.map((c, i) => colorFor(i) + c + ANSI_RESET)
     lines.push(border("┌", "┬", "┐"))
-    lines.push(rowLine("Category", params.columns))
+    lines.push(rowLine("Category", hdr))
     lines.push(border("├", "┼", "┤"))
     lines.push(
       ...params.rows.map((r, ri) =>
@@ -120,12 +180,57 @@ function barChart(params: {
       ),
     )
     lines.push(border("└", "┴", "┘"))
+    if (params.columns.length > 1) {
+      lines.push("")
+      lines.push(params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  "))
+    }
   }
 
   return { lines, maxes }
 }
 
+function areaChart(params: {
+  title?: string
+  columns: string[]
+  rows: { label: string; values: number[] }[]
+  stacked?: boolean
+}): { lines: string[]; maxes: number[] } {
+  const n = params.rows.length
+  const S = params.columns.length
+  const doStack = !!(params.stacked && S > 1)
+  const vals = params.columns.map((_, si) => params.rows.map((r) => r.values[si] ?? 0))
+  const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
+  const max = doStack
+    ? Math.max(1, ...params.rows.map((r) => r.values.reduce((a, b) => a + (b ?? 0), 0)))
+    : Math.max(1, ...vals.flat())
+  const W = Math.min(40, Math.max(10, Math.ceil(n / 2)))
+  const lines: string[] = []
+  if (params.title) {
+    lines.push(params.title)
+    lines.push("")
+  }
+  lines.push("┌" + "─".repeat(W) + "┐")
+  for (const row of brailleArea(vals, max, doStack, W)) {
+    lines.push("│" + row + "│")
+  }
+  lines.push("└" + "─".repeat(W) + "┘")
+  if (n > 0) {
+    const first = params.rows[0].label
+    const last = params.rows[n - 1].label
+    lines.push(" " + first + " ".repeat(Math.max(0, W - first.length - last.length)) + last)
+  }
+  if (S > 1) {
+    lines.push("")
+    lines.push(params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  "))
+  }
+  return { lines, maxes }
+}
+
 export const chartParameters = z.object({
+  type: z
+    .enum(["bar", "area"])
+    .default("bar")
+    .describe("Chart type: bar for tabular bar chart, area for braille horizontal area chart"),
   stacked: z
     .boolean()
     .default(false)
@@ -155,7 +260,7 @@ export const chartParameters = z.object({
 
 export const ChartTool = Tool.define("chart", {
   description: [
-    "Render tabular data as an inline bar chart in the ramen terminal UI.",
+    "Render tabular data as an inline chart in the ramen terminal UI.",
     "Call this automatically whenever you have ES|QL query results or any other",
     "tabular data with numeric columns worth visualizing — do not wait to be asked.",
     "",
@@ -165,33 +270,43 @@ export const ChartTool = Tool.define("chart", {
     "IMPORTANT: after rendering the chart, do NOT repeat the same data in text.",
     "The chart is the answer. Avoid statements like 'as you can see, X is 42 and Y is 99'.",
     "",
-    "Layout: table with one horizontal magnitude bar per numeric cell (category × column).",
+    "Chart types:",
+    "  bar  — table with one horizontal magnitude bar per numeric cell (category × column). Default.",
+    "  area — braille-based horizontal area chart. Use for time series or sequential data.",
     "",
     "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
-    "Unstacked (default) shows columns side-by-side per row for comparison.",
+    "Unstacked (default) shows independent bars/areas for comparison.",
     "",
     "Example — ES|QL result {rows: [{category:'web', count:120, p99:340}, ...]}:",
-    '  stacked: false',
+    '  type: "bar", stacked: false',
     '  columns: ["count", "p99_ms"]',
     "  rows: [",
     '    { label: "web",   values: [120, 340] },',
     '    { label: "db",    values: [45,  890] }',
     "  ]",
+    "",
+    "Example — time series (ES|QL STATS by @timestamp):",
+    '  type: "area"',
+    '  columns: ["count"]',
+    "  rows: [",
+    '    { label: "00:00", values: [120] },',
+    '    { label: "01:00", values: [85]  },',
+    "    ...",
+    "  ]",
   ].join("\n"),
   parameters: chartParameters,
   async execute(params) {
     const stacked = params.stacked
-    const result = barChart({ ...params, stacked })
-
+    const result = params.type === "area" ? areaChart({ ...params, stacked }) : barChart({ ...params, stacked })
     const lines = result.lines
     const t = params.title
     const body = t && lines[0] === t ? lines.slice(lines[1] === "" ? 2 : 1) : lines
 
     return {
-      title: params.title ?? "bar chart",
+      title: params.title ?? (params.type === "area" ? "area chart" : "bar chart"),
       metadata: {
         data: {
-          type: "bar" as const,
+          type: params.type as "bar" | "area",
           stacked,
           title: params.title,
           columns: params.columns,

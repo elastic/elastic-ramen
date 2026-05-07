@@ -51,7 +51,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
-import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum, segSizes } from "@/tool/chart"
+import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum, segSizes, areaGrid, AREA_HEIGHT } from "@/tool/chart"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -1649,7 +1649,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
   const { theme } = useTheme()
   const ctx = use()
   const data = createMemo(() => props.metadata.data as
-    | { type?: string; stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
+    | { type?: "bar" | "area"; stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[]; maxes: number[] }
     | undefined)
 
   const stacked = createMemo(() => data()?.stacked ?? false)
@@ -1687,6 +1687,10 @@ function Chart(props: ToolProps<typeof ChartTool>) {
   const need = createMemo(() => {
     const d = data()
     if (!d) return 0
+    if (d.type === "area") {
+      const W = Math.min(40, Math.max(10, Math.ceil(d.rows.length / 2)))
+      return W + 2
+    }
     const l = layout()
     const s = stacked()
     const n = d.columns.length
@@ -1835,6 +1839,60 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     )
   }
 
+  const areaChartBlock = (d: { stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[] }) => {
+    const colors = CHART_COLORS(theme)
+    const n = d.rows.length
+    const S = d.columns.length
+    const doStack = !!(d.stacked && S > 1)
+    const vals = d.columns.map((_, si) => d.rows.map((r) => r.values[si] ?? 0))
+    const max = doStack
+      ? Math.max(1, ...d.rows.map((r) => r.values.reduce((a, b) => a + (b ?? 0), 0)))
+      : Math.max(1, ...vals.flat())
+    const W = Math.min(40, Math.max(10, Math.ceil(n / 2)))
+    const { bits, dom } = areaGrid(vals, max, doStack, W)
+    const first = n > 0 ? d.rows[0].label : ""
+    const last = n > 0 ? d.rows[n - 1].label : ""
+    return (
+      <box>
+        <text fg={theme.textMuted}>{"┌" + "─".repeat(W) + "┐"}</text>
+        <For each={bits}>
+          {(rowBits, cy) => (
+            <text>
+              <span style={{ fg: theme.textMuted }}>│</span>
+              {rowBits.map((b, cx) => {
+                const s = dom[cy()][cx]
+                return (
+                  <span style={{ fg: s >= 0 ? colors[s % colors.length] : theme.textMuted }}>
+                    {String.fromCharCode(0x2800 + b)}
+                  </span>
+                )
+              })}
+              <span style={{ fg: theme.textMuted }}>│</span>
+            </text>
+          )}
+        </For>
+        <text fg={theme.textMuted}>{"└" + "─".repeat(W) + "┘"}</text>
+        {n > 0 && (
+          <text fg={theme.textMuted}>
+            {" " + first + " ".repeat(Math.max(0, W - first.length - last.length)) + last}
+          </text>
+        )}
+        {S > 1 && (
+          <box gap={1}>
+            <For each={d.columns}>
+              {(col, ci) => (
+                <text>
+                  <span style={{ fg: colors[ci() % colors.length] }}>█</span>
+                  <span style={{ fg: theme.text }}> {col}</span>
+                </text>
+              )}
+            </For>
+          </box>
+        )}
+      </box>
+    )
+  }
+
   return (
     <Show
       when={data()}
@@ -1858,7 +1916,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
             </BlockTool>
           )
         }
-        const dataBlock = barChart({ ...d(), stacked: s })
+        const dataBlock = d().type === "area" ? areaChartBlock({ ...d(), stacked: s }) : barChart({ ...d(), stacked: s })
         return (
           <BlockTool title={`# 📊 ${title}`} part={props.part}>
             {dataBlock}
