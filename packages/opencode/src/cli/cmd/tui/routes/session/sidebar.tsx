@@ -7,13 +7,13 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { computeContextInfo } from "@/cli/cmd/tui/util/sidebar"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -43,17 +43,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       ).length,
   )
 
-  const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
-    if (!last) return
-    const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
-    return {
-      tokens: total.toLocaleString(),
-      percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
-    }
-  })
+  const context = createMemo(() => computeContextInfo(messages(), sync.data.provider))
 
   const directory = useDirectory()
   const kv = useKV()
@@ -99,7 +89,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
-
             </box>
             <Show when={mcpEntries().length > 0}>
               <box>
