@@ -1,6 +1,5 @@
 // Copyright (c) 2026-present, Elastic NV
 import { ElasticAuth } from "./auth"
-import { runCommand } from "@elastic/cli/runner"
 import type { ResolvedConfig } from "@elastic/cli/config/types"
 
 export namespace ElasticCli {
@@ -26,6 +25,7 @@ export namespace ElasticCli {
   export async function run(argv: string[]): Promise<{ output: string; code: number }> {
     const status = await ElasticAuth.check()
     if (!status.configured || !status.context) return { output: "elastic CLI: not configured", code: 1 }
+    const { runCommand } = await import("@elastic/cli/runner")
     return runCommand(argv, cfg(status.context))
   }
 }
