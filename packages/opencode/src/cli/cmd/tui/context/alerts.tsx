@@ -5,14 +5,21 @@ import type { ElasticAlerts } from "@/elastic/alerts"
 function init() {
   const [store, set] = createStore({
     alerts: [] as ElasticAlerts.Alert[],
+    kibanaUrl: undefined as string | undefined,
   })
 
   return {
     get alerts() {
       return store.alerts
     },
+    get kibanaUrl() {
+      return store.kibanaUrl
+    },
     set(alerts: ElasticAlerts.Alert[]) {
       set("alerts", alerts)
+    },
+    setKibanaUrl(url: string | undefined) {
+      set("kibanaUrl", url)
     },
   }
 }

@@ -376,6 +376,7 @@ function App() {
     alertPoller = ElasticAlerts.poller(url, key)
       .on((fresh, all) => {
         alertsCtx.set(all)
+        alertsCtx.setKibanaUrl(url)
         if (fresh.length === 1) {
           toast.show({
             variant: "warning",
@@ -443,6 +444,7 @@ function App() {
         alertPoller?.stop()
         alertPoller = undefined
         alertsCtx.set([])
+        alertsCtx.setKibanaUrl(undefined)
       }
     } catch (err) {
       stepFail("Alerts reload failed", err)
