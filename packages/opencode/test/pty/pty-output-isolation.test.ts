@@ -4,6 +4,17 @@ import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
 import { setTimeout as sleep } from "node:timers/promises"
 
+/** `cat` is not a reliable binary on Windows; use the test runner to copy stdin to stdout. */
+function ptyCat() {
+  if (process.platform === "win32") {
+    return {
+      command: process.execPath,
+      args: ["-e", "process.stdin.on('data', (d) => process.stdout.write(d))"],
+    }
+  }
+  return { command: "cat", args: [] as string[] }
+}
+
 describe("pty", () => {
   test("does not leak output when websocket objects are reused", async () => {
     await using dir = await tmpdir({ git: true })
@@ -11,8 +22,8 @@ describe("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
-        const b = await Pty.create({ command: "cat", title: "b" })
+        const a = await Pty.create({ ...ptyCat(), title: "a" })
+        const b = await Pty.create({ ...ptyCat(), title: "b" })
         try {
           const outA: string[] = []
           const outB: string[] = []
@@ -61,7 +72,7 @@ describe("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
+        const a = await Pty.create({ ...ptyCat(), title: "a" })
         try {
           const outA: string[] = []
           const outB: string[] = []
@@ -105,7 +116,7 @@ describe("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
+        const a = await Pty.create({ ...ptyCat(), title: "a" })
         try {
           const out: string[] = []
 
