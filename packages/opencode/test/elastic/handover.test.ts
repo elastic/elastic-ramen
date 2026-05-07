@@ -104,7 +104,7 @@ describe("Handover.sync", () => {
     expect(updateAttempts).toBe(1)
     expect(createPayload?.title).toBe("RAMEN: my title")
     // After the recovery, the link points at the fresh conversation in the active cluster.
-    expect(await Handover.resolve(id)).toBe("fresh-conv-id")
+    expect((await Handover.resolve(id))?.conversationID).toBe("fresh-conv-id")
     await SessionProfile.remove(id)
   })
 

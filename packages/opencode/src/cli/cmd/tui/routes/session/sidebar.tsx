@@ -2,7 +2,7 @@
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
 // and has been modified by Elastic NV. Changes: rebranded free-models sidebar text from Elastic Console to RAMEN
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -14,6 +14,9 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 import { computeContextInfo } from "@/cli/cmd/tui/util/sidebar"
+import { Handover } from "@/elastic/handover"
+import { ElasticAuth } from "@/elastic/auth"
+import { Link } from "../../ui/link"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -44,6 +47,15 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
 
   const context = createMemo(() => computeContextInfo(messages(), sync.data.provider))
+
+  const [agentBuilderLink] = createResource(
+    () => props.sessionID,
+    async (id) => {
+      const [link, status] = await Promise.all([Handover.resolve(id), ElasticAuth.check()])
+      if (!link || !status.context?.kibana_url) return undefined
+      return Handover.url(status.context.kibana_url, link)
+    },
+  )
 
   const directory = useDirectory()
   const kv = useKV()
@@ -81,6 +93,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </text>
               <Show when={session().share?.url}>
                 <text fg={theme.textMuted}>{session().share!.url}</text>
+              </Show>
+              <Show when={context()?.isKibana && agentBuilderLink()}>
+                <Link href={agentBuilderLink()!} fg={theme.textMuted} wrapMode="none">
+                  ↗ View in Kibana
+                </Link>
               </Show>
             </box>
             <box>
