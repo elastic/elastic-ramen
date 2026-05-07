@@ -12,9 +12,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      - name: Install CLI dependencies
+        run: bun install
+        working-directory: packages/cli
 
       - name: Run typecheck
         run: bun typecheck
