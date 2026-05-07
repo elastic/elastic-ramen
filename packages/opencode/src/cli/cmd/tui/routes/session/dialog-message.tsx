@@ -4,6 +4,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
+import { SessionProfile } from "@/elastic/session-profile"
 import type { PromptInfo } from "@tui/component/prompt/history"
 
 export function DialogMessage(props: {
@@ -80,6 +81,8 @@ export function DialogMessage(props: {
               sessionID: props.sessionID,
               messageID: props.messageID,
             })
+            if (!result.data?.id) return
+            await SessionProfile.stamp(result.data.id)
             const initialPrompt = (() => {
               const msg = message()
               if (!msg) return undefined
@@ -96,7 +99,7 @@ export function DialogMessage(props: {
               )
             })()
             route.navigate({
-              sessionID: result.data!.id,
+              sessionID: result.data.id,
               type: "session",
               initialPrompt,
             })

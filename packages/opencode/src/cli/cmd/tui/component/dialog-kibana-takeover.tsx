@@ -7,6 +7,7 @@ import { useToast } from "../ui/toast"
 import { createSignal, createMemo, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Handover } from "@/elastic/handover"
+import { SessionProfile } from "@/elastic/session-profile"
 import type { ConversationSummary } from "@/elastic/client"
 
 export function DialogKibanaTakeover() {
@@ -57,6 +58,7 @@ export function DialogKibanaTakeover() {
             return
           }
           const sessionID = res.data.id
+          await SessionProfile.stamp(sessionID)
           Handover.link(sessionID, option.value)
           await sdk.client.session.update({ sessionID, title: `Kibana: ${conv.title}` }).catch(() => {})
 

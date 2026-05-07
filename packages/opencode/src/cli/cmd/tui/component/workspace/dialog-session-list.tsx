@@ -12,6 +12,7 @@ import { useKV } from "../../context/kv"
 import { createDebouncedSignal } from "../../util/signal"
 import { Spinner } from "../spinner"
 import { useToast } from "../../ui/toast"
+import { createSessionProfileFilter } from "../../util/session-profile-filter"
 
 export function DialogSessionList(props: { workspaceID?: string; localOnly?: boolean } = {}) {
   const dialog = useDialog()
@@ -53,8 +54,11 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
     return sync.data.session
   })
 
+  const matchesProfile = createSessionProfileFilter(sessions)
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
+    const matches = matchesProfile()
     return sessions()
       .filter((x) => {
         if (x.parentID !== undefined) return false
@@ -63,6 +67,7 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
         if (props.localOnly) return !x.workspaceID
         return true
       })
+      .filter((x) => matches(x.id))
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
         const date = new Date(x.time.updated)

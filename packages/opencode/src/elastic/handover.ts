@@ -3,9 +3,24 @@ import { KibanaClient, type ConversationRound, type Conversation } from "./clien
 import { Bootstrap } from "./bootstrap"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
+import { SessionProfile } from "./session-profile"
 
 export namespace Handover {
   const log = Log.create({ service: "handover" })
+
+  /**
+   * Kibana client throws `Error("Kibana <status>: …")` from `client.ts:77`.
+   * Match the prefix to detect a stale conversation ID after the user switches
+   * profiles on a legacy session whose `kibana_link` was issued by another cluster.
+   */
+  function isNotFound(err: unknown): boolean {
+    return err instanceof Error && err.message.startsWith("Kibana 404")
+  }
+
+  function unlink(sessionID: string) {
+    mapping.delete(sessionID)
+    Storage.remove(["kibana_link", sessionID]).catch(() => {})
+  }
 
   function conversations() {
     return KibanaClient.conversations()
@@ -68,6 +83,8 @@ export namespace Handover {
   export interface SyncOptions {
     /** Called once if a 503 forces a kickstart. */
     onKickstart?: () => void
+    /** Called when a session is stamped to a different active Elastic profile. */
+    onProfileMismatch?: (info: { stamp: string; active: string }) => void
   }
 
   export async function sync(
@@ -78,26 +95,47 @@ export namespace Handover {
   ) {
     if (!conversationRounds.length) return
     try {
-      await write(sessionID, title, conversationRounds)
+      await write(sessionID, title, conversationRounds, opts)
     } catch (err) {
       if (!Bootstrap.isNotInitializedError(err)) throw err
       log.info("storage not initialized, kickstarting")
       opts?.onKickstart?.()
       await Bootstrap.kickstart()
-      await write(sessionID, title, conversationRounds)
+      await write(sessionID, title, conversationRounds, opts)
     }
   }
 
-  async function write(sessionID: string, title: string, conversationRounds: ConversationRound[]) {
+  async function write(sessionID: string, title: string, conversationRounds: ConversationRound[], opts?: SyncOptions) {
+    // Bind legacy (pre-stamp) sessions to whichever profile is active right now,
+    // and refuse to write if the session belongs to a different profile —
+    // entry points like `--session=<id>` or `/sessions` selection on a legacy
+    // session can otherwise route a write to the wrong cluster.
+    const stamp = await SessionProfile.ensureStamp(sessionID)
+    const active = await SessionProfile.active()
+    if (stamp && active && stamp !== active) {
+      log.info("skipping conversation sync — session belongs to another profile", { sessionID, stamp, active })
+      opts?.onProfileMismatch?.({ stamp, active })
+      return
+    }
+
     const existing = await resolve(sessionID)
     const api = conversations()
     if (existing) {
       log.info("updating elasticsearch conversation", { sessionID, conversationID: existing })
-      await api.update(existing, {
-        title: `RAMEN: ${title}`,
-        conversation_rounds: conversationRounds,
-      })
-      return
+      try {
+        await api.update(existing, {
+          title: `RAMEN: ${title}`,
+          conversation_rounds: conversationRounds,
+        })
+        return
+      } catch (err) {
+        if (!isNotFound(err)) throw err
+        // Stale link: the conversation lived in another cluster (legacy session
+        // first synced before stamping shipped) or was deleted server-side.
+        // Drop the link and fall through to create a fresh conversation here.
+        log.info("kibana_link stale, recreating conversation", { sessionID, conversationID: existing })
+        unlink(sessionID)
+      }
     }
     log.info("creating elasticsearch conversation", { sessionID })
     const res = await api.create({

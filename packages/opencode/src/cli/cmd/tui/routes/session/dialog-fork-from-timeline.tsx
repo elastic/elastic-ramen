@@ -6,6 +6,7 @@ import { Locale } from "@/util/locale"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
+import { SessionProfile } from "@/elastic/session-profile"
 import type { PromptInfo } from "@tui/component/prompt/history"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
@@ -36,6 +37,8 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             sessionID: props.sessionID,
             messageID: message.id,
           })
+          if (!forked.data?.id) return
+          await SessionProfile.stamp(forked.data.id)
           const parts = sync.data.part[message.id] ?? []
           const initialPrompt = parts.reduce(
             (agg, part) => {
@@ -48,7 +51,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             { input: "", parts: [] as PromptInfo["parts"] },
           )
           route.navigate({
-            sessionID: forked.data!.id,
+            sessionID: forked.data.id,
             type: "session",
             initialPrompt,
           })

@@ -47,6 +47,7 @@ import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
+import { SessionProfile } from "@/elastic/session-profile"
 import type { ConversationRound } from "@/elastic/client"
 import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
@@ -315,9 +316,16 @@ function App() {
       }
       // Handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {
-        route.navigate({
-          type: "session",
-          sessionID: args.sessionID,
+        const id = args.sessionID
+        void SessionProfile.filter([{ id }]).then((sessions) => {
+          if (!sessions.length) {
+            toast.show({ message: "Session belongs to another Elastic profile", variant: "error" })
+            return
+          }
+          route.navigate({
+            type: "session",
+            sessionID: id,
+          })
         })
       }
     })
@@ -327,14 +335,16 @@ function App() {
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
     if (continued || sync.status === "loading" || !args.continue) return
-    const match = sync.data.session
-      .toSorted((a, b) => b.time.updated - a.time.updated)
-      .find((x) => x.parentID === undefined)?.id
-    if (match) {
-      continued = true
+    continued = true
+    void SessionProfile.filter(
+      sync.data.session.filter((x) => x.parentID === undefined).toSorted((a, b) => b.time.updated - a.time.updated),
+    ).then((sessions) => {
+      const match = sessions[0]?.id
+      if (!match) return
       if (args.fork) {
-        sdk.client.session.fork({ sessionID: match }).then((result) => {
+        sdk.client.session.fork({ sessionID: match }).then(async (result) => {
           if (result.data?.id) {
+            await SessionProfile.stamp(result.data.id)
             route.navigate({ type: "session", sessionID: result.data.id })
           } else {
             toast.show({ message: "Failed to fork session", variant: "error" })
@@ -343,7 +353,7 @@ function App() {
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
-    }
+    })
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking
@@ -353,12 +363,20 @@ function App() {
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
     forked = true
-    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
-      if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
-      } else {
-        toast.show({ message: "Failed to fork session", variant: "error" })
+    const id = args.sessionID
+    void SessionProfile.filter([{ id }]).then((sessions) => {
+      if (!sessions.length) {
+        toast.show({ message: "Session belongs to another Elastic profile", variant: "error" })
+        return
       }
+      sdk.client.session.fork({ sessionID: id }).then(async (result) => {
+        if (result.data?.id) {
+          await SessionProfile.stamp(result.data.id)
+          route.navigate({ type: "session", sessionID: result.data.id })
+        } else {
+          toast.show({ message: "Failed to fork session", variant: "error" })
+        }
+      })
     })
   })
 
@@ -515,6 +533,12 @@ function App() {
             toast.show({
               variant: "info",
               message: "Initializing Agent Builder conversation storage…",
+              duration: 5000,
+            }),
+          onProfileMismatch: () =>
+            toast.show({
+              variant: "warning",
+              message: "Kibana sync skipped: session belongs to another Elastic profile.",
               duration: 5000,
             }),
         }).catch((err) => {
