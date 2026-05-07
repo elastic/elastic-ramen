@@ -45,10 +45,8 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
-import { ElasticAlerts } from "@/elastic/alerts"
 import { Handover } from "@/elastic/handover"
 import type { ConversationRound } from "@/elastic/client"
-import { AlertsProvider, useAlerts } from "@tui/context/alerts"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaContext } from "@tui/component/dialog-kibana-context"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
@@ -171,11 +169,9 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <AlertsProvider>
-                                                <ElasticProfileProvider>
-                                                  <App />
-                                                </ElasticProfileProvider>
-                                              </AlertsProvider>
+                                              <ElasticProfileProvider>
+                                                <App />
+                                              </ElasticProfileProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
@@ -362,42 +358,11 @@ function App() {
     })
   })
 
-  // Alert polling for connected Kibana instance
-  const alertsCtx = useAlerts()
   const elasticProfile = useElasticProfile()
-  let alertPoller: ReturnType<typeof ElasticAlerts.poller> | undefined
-
   const [esReady, setEsReady] = createSignal(false)
 
-  function restartAlerts(url: string, key: string) {
-    alertPoller?.stop()
-    alertPoller = undefined
-    alertsCtx.set([])
-    alertPoller = ElasticAlerts.poller(url, key)
-      .on((fresh, all) => {
-        alertsCtx.set(all)
-        if (fresh.length === 1) {
-          toast.show({
-            variant: "warning",
-            title: "Active Alert",
-            message: fresh[0].name,
-            duration: 8000,
-          })
-        } else if (fresh.length > 1) {
-          toast.show({
-            variant: "warning",
-            title: `${fresh.length} Active Alerts`,
-            message: fresh.map((a) => `• ${a.name}`).join("\n"),
-            duration: 10000,
-          })
-        }
-      })
-      .start()
-  }
-
   /**
-   * Best-effort reload of Kibana-dependent runtime after auth changes (setup, profile switch).
-   * Each subsystem (bootstrap, MCP, alerts, profile label) fails independently with a toast;
+   * Each subsystem (bootstrap, MCP, profile label) fails independently with a toast;
    * this function never throws, so callers can rely on disk state and runtime state being aligned
    * by the time it returns. Anything still broken surfaces as a toast.
    */
@@ -435,17 +400,6 @@ function App() {
       }
     } catch (err) {
       stepFail("MCP connect failed", err)
-    }
-    try {
-      const creds = await ElasticAlerts.resolve()
-      if (creds) restartAlerts(creds.url, creds.key)
-      else {
-        alertPoller?.stop()
-        alertPoller = undefined
-        alertsCtx.set([])
-      }
-    } catch (err) {
-      stepFail("Alerts reload failed", err)
     }
     try {
       await elasticProfile.refresh()
@@ -525,10 +479,6 @@ function App() {
     }
   })
 
-  onCleanup(() => {
-    alertPoller?.stop()
-  })
-
   // Check elastic auth on mount; show setup dialog if not configured or if --kibana-base was passed
   onMount(async () => {
     const status = await ElasticAuth.check()
@@ -546,7 +496,6 @@ function App() {
     }
     const url = status.context?.elasticsearch_url
     const key = status.context?.api_key
-    if (url && key) restartAlerts(url, key)
     if (url && key) setEsReady(true)
   })
 
