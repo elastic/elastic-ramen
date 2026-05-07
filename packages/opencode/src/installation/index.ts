@@ -2,6 +2,8 @@
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
 // and has been modified by Elastic NV. Changes: rebranded to elastic-ramen — install script URL, npm package (@elastic/ramen), GitHub releases repo, user-agent — and narrowed supported install methods to curl/npm/bun.
 import { BusEvent } from "@/bus/bus-event"
+import fs from "fs"
+import os from "os"
 import path from "path"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
@@ -103,8 +105,16 @@ export namespace Installation {
         command: () => text(["npm", "list", "-g", "--depth=0"]),
       },
       {
+        name: "pnpm" as const,
+        command: () => text(["pnpm", "list", "-g", "--depth=0"]),
+      },
+      {
         name: "bun" as const,
         command: () => text(["bun", "pm", "ls", "-g"]),
+      },
+      {
+        name: "yarn" as const,
+        command: () => text(["yarn", "global", "list"]),
       },
     ]
 
@@ -122,6 +132,11 @@ export namespace Installation {
         return check.name
       }
     }
+
+    // Fallback: detect a curl install on disk even when invoked from a different
+    // binary (e.g. running `bun run` from source while a release lives at the
+    // canonical curl path).
+    if (fs.existsSync(path.join(os.homedir(), ".elastic-ramen", "bin", "elastic-ramen"))) return "curl"
 
     return "unknown"
   }
@@ -142,8 +157,14 @@ export namespace Installation {
       case "npm":
         result = await Process.run(["npm", "install", "-g", `@elastic/ramen@${target}`], { nothrow: true })
         break
+      case "pnpm":
+        result = await Process.run(["pnpm", "install", "-g", `@elastic/ramen@${target}`], { nothrow: true })
+        break
       case "bun":
         result = await Process.run(["bun", "install", "-g", `@elastic/ramen@${target}`], { nothrow: true })
+        break
+      case "yarn":
+        result = await Process.run(["yarn", "global", "add", `@elastic/ramen@${target}`], { nothrow: true })
         break
       default:
         throw new Error(`Unknown method: ${method}`)
@@ -169,7 +190,7 @@ export namespace Installation {
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
-    if (detectedMethod === "npm" || detectedMethod === "bun") {
+    if (detectedMethod === "npm" || detectedMethod === "pnpm" || detectedMethod === "bun" || detectedMethod === "yarn") {
       const registry = await iife(async () => {
         const r = (await text(["npm", "config", "get", "registry"])).trim()
         const reg = r || "https://registry.npmjs.org"

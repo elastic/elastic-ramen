@@ -133,7 +133,9 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
   if (method !== "curl" && method !== "unknown") {
     const cmds: Record<string, string> = {
       npm: "npm uninstall -g @elastic/ramen",
+      pnpm: "pnpm uninstall -g @elastic/ramen",
       bun: "bun remove -g @elastic/ramen",
+      yarn: "yarn global remove @elastic/ramen",
     }
     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
@@ -179,7 +181,9 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
   if (method !== "curl" && method !== "unknown") {
     const cmds: Record<string, string[]> = {
       npm: ["npm", "uninstall", "-g", "@elastic/ramen"],
+      pnpm: ["pnpm", "uninstall", "-g", "@elastic/ramen"],
       bun: ["bun", "remove", "-g", "@elastic/ramen"],
+      yarn: ["yarn", "global", "remove", "@elastic/ramen"],
     }
 
     const cmd = cmds[method]
