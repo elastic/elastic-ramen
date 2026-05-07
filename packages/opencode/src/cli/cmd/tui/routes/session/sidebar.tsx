@@ -16,6 +16,7 @@ import { TodoItem } from "../../component/todo-item"
 import { computeContextInfo } from "@/cli/cmd/tui/util/sidebar"
 import { Handover } from "@/elastic/handover"
 import { ElasticAuth } from "@/elastic/auth"
+import { SessionProfile } from "@/elastic/session-profile"
 import { Link } from "../../ui/link"
 import { kibanaLinkVersion } from "../../util/kibana-link"
 
@@ -52,8 +53,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const [agentBuilderLink] = createResource(
     () => [props.sessionID, kibanaLinkVersion()] as const,
     async ([id]) => {
-      const [link, status] = await Promise.all([Handover.resolve(id), ElasticAuth.check()])
+      const [link, status, stamp] = await Promise.all([
+        Handover.resolve(id),
+        ElasticAuth.check(),
+        SessionProfile.get(id),
+      ])
       if (!link || !status.context?.kibana_url) return undefined
+      // Don't link across profiles: the conversation lives in the cluster
+      // the session was stamped under, but kibana_url here is the active
+      // profile's. Mismatch → URL would 404 in the wrong cluster.
+      const active = status.name ? ElasticAuth.canon(status.name) : undefined
+      if (!SessionProfile.matches(stamp, active)) return undefined
       return Handover.url(status.context.kibana_url, link)
     },
   )
