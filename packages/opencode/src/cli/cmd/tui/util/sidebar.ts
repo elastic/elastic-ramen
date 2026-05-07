@@ -1,5 +1,4 @@
-import type { Message, Provider } from "@opencode-ai/sdk/v2"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Provider } from "@opencode-ai/sdk/v2"
 
 export function computeContextInfo(messages: Message[], providers: Provider[]) {
   const last = messages.findLast(
