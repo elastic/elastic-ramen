@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { z } from "zod"
-import { ChartTool, chartParameters, render, fmt, ansiStack, segSizes, BAR_WIDTH, EIGHTHS, areaGrid, AREA_HEIGHT, BRAILLE_DOTS } from "../../src/tool/chart"
+import { ChartTool, chartParameters, render, fmt, ansiStack, segSizes, BAR_WIDTH, EIGHTHS, areaGrid, AREA_HEIGHT, BRAILLE_DOTS, areaWidth } from "../../src/tool/chart"
 
 function vis(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "")
@@ -372,5 +372,22 @@ describe("areaGrid", () => {
   test("data beyond width is ignored", () => {
     const { bits } = areaGrid([Array.from({ length: 100 }, (_, i) => i)], 99, false, 5)
     expect(bits[0].length).toBe(5)
+  })
+})
+
+describe("areaWidth", () => {
+  test("minimum is 10", () => {
+    expect(areaWidth(1)).toBe(10)
+    expect(areaWidth(0)).toBe(10)
+  })
+
+  test("maximum is 40", () => {
+    expect(areaWidth(1000)).toBe(40)
+  })
+
+  test("ceil(n/2) for mid-range n", () => {
+    expect(areaWidth(20)).toBe(10)
+    expect(areaWidth(21)).toBe(11)
+    expect(areaWidth(40)).toBe(20)
   })
 })

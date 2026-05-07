@@ -4,13 +4,18 @@ import { Tool } from "./tool"
 export const EIGHTHS = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
 export const BAR_WIDTH = 20
 export const AREA_HEIGHT = 6
-/** Braille dot bitmasks indexed by [row 0-3][col 0-1]. Row 0 is top, row 3 is bottom. */
+/** Braille dot bitmasks indexed by [row 0-3][col 0-1]. Row 0 is the topmost dot, row 3 the bottommost. */
 export const BRAILLE_DOTS = [
   [0x01, 0x08],
   [0x02, 0x10],
   [0x04, 0x20],
   [0x40, 0x80],
 ]
+
+/** Width in braille chars for an area chart with `n` data points. */
+export function areaWidth(n: number): number {
+  return Math.min(40, Math.max(10, Math.ceil(n / 2)))
+}
 
 const ANSI_COLORS = ["\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[31m"]
 const ANSI_RESET = "\x1b[0m"
@@ -203,7 +208,7 @@ function areaChart(params: {
   const max = doStack
     ? Math.max(1, ...params.rows.map((r) => r.values.reduce((a, b) => a + (b ?? 0), 0)))
     : Math.max(1, ...vals.flat())
-  const W = Math.min(40, Math.max(10, Math.ceil(n / 2)))
+  const W = areaWidth(n)
   const lines: string[] = []
   if (params.title) {
     lines.push(params.title)
