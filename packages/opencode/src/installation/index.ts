@@ -1,7 +1,9 @@
 // Copyright (c) 2026-present, Elastic NV
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
-// and has been modified by Elastic NV. Changes: updated install script URL to elastic.co and user-agent string from elastic-console to ramen
+// and has been modified by Elastic NV. Changes: rebranded to elastic-ramen — install script URL, npm package (@elastic/ramen), GitHub releases repo, user-agent — and narrowed supported install methods to curl/npm/bun.
 import { BusEvent } from "@/bus/bus-event"
+import fs from "fs"
+import os from "os"
 import path from "path"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
@@ -28,7 +30,7 @@ export namespace Installation {
   }
 
   async function upgradeCurl(target: string) {
-    const body = await fetch("https://elastic.co/install").then((res) => {
+    const body = await fetch("https://raw.githubusercontent.com/elastic/elastic-ramen/dev/install").then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.text()
     })
@@ -95,17 +97,12 @@ export namespace Installation {
 
   export async function method() {
     if (process.execPath.includes(path.join(".elastic-ramen", "bin"))) return "curl"
-    if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
 
     const checks = [
       {
         name: "npm" as const,
         command: () => text(["npm", "list", "-g", "--depth=0"]),
-      },
-      {
-        name: "yarn" as const,
-        command: () => text(["yarn", "global", "list"]),
       },
       {
         name: "pnpm" as const,
@@ -116,16 +113,8 @@ export namespace Installation {
         command: () => text(["bun", "pm", "ls", "-g"]),
       },
       {
-        name: "brew" as const,
-        command: () => text(["brew", "list", "--formula", "opencode"]),
-      },
-      {
-        name: "scoop" as const,
-        command: () => text(["scoop", "list", "opencode"]),
-      },
-      {
-        name: "choco" as const,
-        command: () => text(["choco", "list", "--limit-output", "opencode"]),
+        name: "yarn" as const,
+        command: () => text(["yarn", "global", "list"]),
       },
     ]
 
@@ -139,12 +128,15 @@ export namespace Installation {
 
     for (const check of checks) {
       const output = await check.command()
-      const installedName =
-        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-      if (output.includes(installedName)) {
+      if (output.includes("@elastic/ramen")) {
         return check.name
       }
     }
+
+    // Fallback: detect a curl install on disk even when invoked from a different
+    // binary (e.g. running `bun run` from source while a release lives at the
+    // canonical curl path).
+    if (fs.existsSync(path.join(os.homedir(), ".elastic-ramen", "bin", "elastic-ramen"))) return "curl"
 
     return "unknown"
   }
@@ -156,14 +148,6 @@ export namespace Installation {
     }),
   )
 
-  async function getBrewFormula() {
-    const tapFormula = await text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
-    if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
-    const coreFormula = await text(["brew", "list", "--formula", "opencode"])
-    if (coreFormula.includes("opencode")) return "opencode"
-    return "opencode"
-  }
-
   export async function upgrade(method: Method, target: string) {
     let result: Awaited<ReturnType<typeof upgradeCurl>> | undefined
     switch (method) {
@@ -171,58 +155,23 @@ export namespace Installation {
         result = await upgradeCurl(target)
         break
       case "npm":
-        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["npm", "install", "-g", `@elastic/ramen@${target}`], { nothrow: true })
         break
       case "pnpm":
-        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["pnpm", "install", "-g", `@elastic/ramen@${target}`], { nothrow: true })
         break
       case "bun":
-        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["bun", "install", "-g", `@elastic/ramen@${target}`], { nothrow: true })
         break
-      case "brew": {
-        const formula = await getBrewFormula()
-        const env = {
-          HOMEBREW_NO_AUTO_UPDATE: "1",
-          ...process.env,
-        }
-        if (formula.includes("/")) {
-          const tap = await Process.run(["brew", "tap", "anomalyco/tap"], { env, nothrow: true })
-          if (tap.code !== 0) {
-            result = tap
-            break
-          }
-          const repo = await Process.text(["brew", "--repo", "anomalyco/tap"], { env, nothrow: true })
-          if (repo.code !== 0) {
-            result = repo
-            break
-          }
-          const dir = repo.text.trim()
-          if (dir) {
-            const pull = await Process.run(["git", "pull", "--ff-only"], { cwd: dir, env, nothrow: true })
-            if (pull.code !== 0) {
-              result = pull
-              break
-            }
-          }
-        }
-        result = await Process.run(["brew", "upgrade", formula], { env, nothrow: true })
-        break
-      }
-
-      case "choco":
-        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true })
-        break
-      case "scoop":
-        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true })
+      case "yarn":
+        result = await Process.run(["yarn", "global", "add", `@elastic/ramen@${target}`], { nothrow: true })
         break
       default:
         throw new Error(`Unknown method: ${method}`)
     }
     if (!result || result.code !== 0) {
-      const stderr =
-        method === "choco" ? "not running from an elevated command shell" : result?.stderr.toString("utf8") || ""
       throw new UpgradeFailedError({
-        stderr: stderr,
+        stderr: result?.stderr.toString("utf8") || "",
       })
     }
     log.info("upgraded", {
@@ -241,31 +190,14 @@ export namespace Installation {
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
-    if (detectedMethod === "brew") {
-      const formula = await getBrewFormula()
-      if (formula.includes("/")) {
-        const infoJson = await text(["brew", "info", "--json=v2", formula])
-        const info = JSON.parse(infoJson)
-        const version = info.formulae?.[0]?.versions?.stable
-        if (!version) throw new Error(`Could not detect version for tap formula: ${formula}`)
-        return version
-      }
-      return fetch("https://formulae.brew.sh/api/formula/opencode.json")
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
-        })
-        .then((data: any) => data.versions.stable)
-    }
-
-    if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
+    if (detectedMethod === "npm" || detectedMethod === "pnpm" || detectedMethod === "bun" || detectedMethod === "yarn") {
       const registry = await iife(async () => {
         const r = (await text(["npm", "config", "get", "registry"])).trim()
         const reg = r || "https://registry.npmjs.org"
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
-      const channel = CHANNEL
-      return fetch(`${registry}/opencode-ai/${channel}`)
+      const channel = CHANNEL === "local" ? "latest" : CHANNEL
+      return fetch(`${registry}/@elastic%2Framen/${channel}`)
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
@@ -273,30 +205,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    if (detectedMethod === "choco") {
-      return fetch(
-        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
-        { headers: { Accept: "application/json;odata=verbose" } },
-      )
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
-        })
-        .then((data: any) => data.d.results[0].Version)
-    }
-
-    if (detectedMethod === "scoop") {
-      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json", {
-        headers: { Accept: "application/json" },
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
-        })
-        .then((data: any) => data.version)
-    }
-
-    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
+    return fetch("https://api.github.com/repos/elastic/elastic-ramen/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()
