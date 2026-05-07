@@ -375,19 +375,62 @@ describe("areaGrid", () => {
   })
 })
 
-describe("areaWidth", () => {
-  test("minimum is 10", () => {
-    expect(areaWidth(1)).toBe(10)
-    expect(areaWidth(0)).toBe(10)
+describe("ES|QL auto-extraction", () => {
+  function ctxWithEsql(columns: { name: string; type: string }[], values: unknown[][]) {
+    return {
+      ...ctx,
+      messages: [
+        {
+          info: { id: "msg_1", sessionID: "ses_test", role: "assistant", time: { created: 0 }, agent: "build", model: { providerID: "x", modelID: "y" } },
+          parts: [
+            {
+              type: "tool",
+              id: "p1",
+              sessionID: "ses_test",
+              messageID: "msg_1",
+              callID: "c1",
+              tool: "esql_query",
+              state: { status: "completed", input: {}, output: JSON.stringify({ columns, values }), title: "esql", metadata: {}, time: { start: 0, end: 1 } },
+            },
+          ],
+        },
+      ],
+    } as any
+  }
+
+  test("auto-extracts numeric columns from last ES|QL result", async () => {
+    const tool = await ChartTool.init()
+    const result = await tool.execute(
+      chartParameters.parse({ type: "bar", title: "auto" }),
+      ctxWithEsql(
+        [{ name: "service", type: "keyword" }, { name: "count", type: "long" }],
+        [["web", 120], ["db", 45]],
+      ),
+    )
+    expect(result.metadata.data.columns).toEqual(["count"])
+    expect(result.metadata.data.rows[0].label).toBe("web")
+    expect(result.metadata.data.rows[0].values).toEqual([120])
   })
 
-  test("maximum is 40", () => {
-    expect(areaWidth(1000)).toBe(40)
+  test("throws when no ES|QL result and no data provided", async () => {
+    const tool = await ChartTool.init()
+    expect(tool.execute(chartParameters.parse({ type: "bar" }), ctx as any)).rejects.toThrow("No ES|QL result")
+  })
+})
+
+describe("areaWidth", () => {
+  test("minimum is 20", () => {
+    expect(areaWidth(1)).toBe(20)
+    expect(areaWidth(0)).toBe(20)
+  })
+
+  test("maximum is 80", () => {
+    expect(areaWidth(1000)).toBe(80)
   })
 
   test("ceil(n/2) for mid-range n", () => {
-    expect(areaWidth(20)).toBe(10)
-    expect(areaWidth(21)).toBe(11)
     expect(areaWidth(40)).toBe(20)
+    expect(areaWidth(42)).toBe(21)
+    expect(areaWidth(80)).toBe(40)
   })
 })

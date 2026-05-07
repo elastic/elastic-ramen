@@ -1,9 +1,10 @@
 import z from "zod"
 import { Tool } from "./tool"
+import type { MessageV2 } from "../session/message-v2"
 
 export const EIGHTHS = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
 export const BAR_WIDTH = 20
-export const AREA_HEIGHT = 6
+export const AREA_HEIGHT = 12
 /** Braille dot bitmasks indexed by [row 0-3][col 0-1]. Row 0 is the topmost dot, row 3 the bottommost. */
 export const BRAILLE_DOTS = [
   [0x01, 0x08],
@@ -14,7 +15,7 @@ export const BRAILLE_DOTS = [
 
 /** Width in braille chars for an area chart with `n` data points. */
 export function areaWidth(n: number): number {
-  return Math.min(40, Math.max(10, Math.ceil(n / 2)))
+  return Math.min(80, Math.max(20, Math.ceil(n / 2)))
 }
 
 const ANSI_COLORS = ["\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[31m"]
@@ -231,6 +232,37 @@ function areaChart(params: {
   return { lines, maxes }
 }
 
+const NUMERIC_ESQL = new Set([
+  "long", "integer", "double", "float", "unsigned_long", "byte", "short", "half_float", "scaled_float",
+])
+
+type EsqlResult = { columns: { name: string; type: string }[]; values: unknown[][] }
+
+function lastEsqlResult(messages: MessageV2.WithParts[]): EsqlResult | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    for (let j = msg.parts.length - 1; j >= 0; j--) {
+      const part = msg.parts[j]
+      if (part.type !== "tool" || part.state.status !== "completed") continue
+      try {
+        const data = JSON.parse(part.state.output)
+        if (Array.isArray(data?.columns) && Array.isArray(data?.values)) return data as EsqlResult
+      } catch {}
+    }
+  }
+}
+
+function esqlToChart(data: EsqlResult): { columns: string[]; rows: { label: string; values: number[] }[] } {
+  const labelIdx = data.columns.findIndex((c) => !NUMERIC_ESQL.has(c.type))
+  const valueIdxs = data.columns.flatMap((c, i) => (NUMERIC_ESQL.has(c.type) ? [i] : []))
+  const columns = valueIdxs.map((i) => data.columns[i].name)
+  const rows = data.values.map((row, ri) => ({
+    label: labelIdx >= 0 ? String(row[labelIdx]) : String(ri),
+    values: valueIdxs.map((i) => Number(row[i]) || 0),
+  }))
+  return { columns, rows }
+}
+
 export const chartParameters = z.object({
   type: z
     .enum(["bar", "area"])
@@ -241,7 +273,7 @@ export const chartParameters = z.object({
     .default(false)
     .describe("When true and there are multiple columns, stack their values into one bar per row"),
   title: z.string().optional().describe("Optional chart title"),
-  columns: z.array(z.string()).describe("Headers for the numerical value columns"),
+  columns: z.array(z.string()).optional().describe("Headers for the numerical value columns. Omit to reuse the last ES|QL result automatically."),
   rows: z
     .array(
       z.object({
@@ -250,8 +282,10 @@ export const chartParameters = z.object({
       }),
     )
     .min(1)
-    .describe("Data rows with category labels and numerical values"),
+    .optional()
+    .describe("Data rows with category labels and numerical values. Omit to reuse the last ES|QL result automatically."),
 }).superRefine((d, ctx) => {
+  if (!d.rows || !d.columns) return
   for (let i = 0; i < d.rows.length; i++) {
     if (d.rows[i].values.length !== d.columns.length) {
       ctx.addIssue({
@@ -275,6 +309,10 @@ export const ChartTool = Tool.define("chart", {
     "IMPORTANT: after rendering the chart, do NOT repeat the same data in text.",
     "The chart is the answer. Avoid statements like 'as you can see, X is 42 and Y is 99'.",
     "",
+    "AUTO-EXTRACTION: if you omit both `columns` and `rows`, the tool automatically",
+    "reads the most recent ES|QL query result from the conversation and builds the chart",
+    "from it. Prefer this — just call chart with type/title/stacked after an ES|QL query.",
+    "",
     "Chart types:",
     "  bar  — table with one horizontal magnitude bar per numeric cell (category × column). Default.",
     "  area — braille-based horizontal area chart. Use for time series or sequential data.",
@@ -282,27 +320,25 @@ export const ChartTool = Tool.define("chart", {
     "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
     "Unstacked (default) shows independent bars/areas for comparison.",
     "",
-    "Example — ES|QL result {rows: [{category:'web', count:120, p99:340}, ...]}:",
-    '  type: "bar", stacked: false',
-    '  columns: ["count", "p99_ms"]',
-    "  rows: [",
-    '    { label: "web",   values: [120, 340] },',
-    '    { label: "db",    values: [45,  890] }',
-    "  ]",
+    "Example — after an ES|QL query, just call:",
+    '  { type: "area", title: "Request rate over time" }',
     "",
-    "Example — time series (ES|QL STATS by @timestamp):",
-    '  type: "area"',
-    '  columns: ["count"]',
-    "  rows: [",
-    '    { label: "00:00", values: [120] },',
-    '    { label: "01:00", values: [85]  },',
-    "    ...",
-    "  ]",
+    "Example — manual data:",
+    '  type: "bar", columns: ["count", "p99_ms"]',
+    "  rows: [{ label: \"web\", values: [120, 340] }, ...]",
   ].join("\n"),
   parameters: chartParameters,
-  async execute(params) {
+  async execute(params, ctx) {
+    let { columns, rows } = params
+    if (!columns || !rows) {
+      const esql = lastEsqlResult(ctx.messages)
+      if (!esql) throw new Error("No ES|QL result found in conversation. Provide columns and rows explicitly.")
+      const derived = esqlToChart(esql)
+      columns = derived.columns
+      rows = derived.rows
+    }
     const stacked = params.stacked
-    const result = params.type === "area" ? areaChart({ ...params, stacked }) : barChart({ ...params, stacked })
+    const result = params.type === "area" ? areaChart({ ...params, columns, rows, stacked }) : barChart({ ...params, columns, rows, stacked })
     const lines = result.lines
     const t = params.title
     const body = t && lines[0] === t ? lines.slice(lines[1] === "" ? 2 : 1) : lines
@@ -314,8 +350,8 @@ export const ChartTool = Tool.define("chart", {
           type: params.type as "bar" | "area",
           stacked,
           title: params.title,
-          columns: params.columns,
-          rows: params.rows,
+          columns,
+          rows,
           maxes: result.maxes,
         },
       },
