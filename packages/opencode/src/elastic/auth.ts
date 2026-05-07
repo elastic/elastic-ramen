@@ -342,13 +342,18 @@ export namespace ElasticAuth {
 
   /**
    * Write `provider` (and optionally `model`) into the global `elastic_ramen.json`,
-   * ensure the eab MCP entry, and strip any leftover provider/model from project-local
-   * configs so global is the single source of truth.
+   * ensure the eab MCP entry when Kibana credentials are known, and strip any leftover
+   * provider/model from project-local configs so global is the single source of truth.
    *
    * `preserveModelIfKibana` keeps an existing `kibana/<connector>` choice — but only if
    * `<connector>` exists in the new provider's models map (see {@link shouldKeepKibanaModel}).
    */
-  async function writeGlobalConfig(opts: { provider: unknown; model?: string; preserveModelIfKibana?: boolean }) {
+  async function writeGlobalConfig(opts: {
+    provider: unknown
+    model?: string
+    preserveModelIfKibana?: boolean
+    kibana?: { url: string; apiKey: string }
+  }) {
     const cfg = Config.globalConfigFile()
     const existing = (await readConfigFile(cfg)) ?? {}
 
@@ -360,14 +365,29 @@ export namespace ElasticAuth {
       if (!keep) patches.push({ path: ["model"], value: opts.model })
     }
 
-    // Add eab/permission only when missing — preserves any user customizations to those subtrees.
     const mcp = existing.mcp as Record<string, unknown> | undefined
-    if (!mcp || !mcp.eab) {
+    const eab = mcp?.eab as Record<string, unknown> | undefined
+    const hadEab = !!(eab && typeof eab === "object")
+    const legacy =
+      hadEab &&
+      eab!.type === "local" &&
+      Array.isArray(eab!.command) &&
+      (eab!.command as unknown[])[0] === "elastic"
+
+    if (legacy) patches.push({ path: ["mcp", "eab"], value: undefined })
+
+    const eabMissing = !hadEab || legacy
+    if (opts.kibana && eabMissing) {
       patches.push({
         path: ["mcp", "eab"],
-        value: { type: "local", command: ["elastic", "ab", "mcp", "proxy"], enabled: true },
+        value: {
+          type: "remote",
+          url: opts.kibana.url.replace(/\/+$/, "") + "/api/agent_builder/mcp",
+          headers: { Authorization: "ApiKey " + opts.kibana.apiKey },
+        },
       })
     }
+
     const permission = existing.permission as Record<string, unknown> | undefined
     if (!permission || !permission["eab_*"]) {
       patches.push({ path: ["permission", "eab_*"], value: "allow" })
@@ -388,7 +408,9 @@ export namespace ElasticAuth {
       provider = await KibanaGateway.buildProvider(ctx.kibana_url, ctx.api_key)
     }
     await Bun.write(filepath(), toYaml({ current: currentName, contexts }), { mode: 0o600 } as any)
-    if (provider) await writeGlobalConfig({ provider, model: "kibana/default", preserveModelIfKibana: true })
+    const kibana = ctx?.kibana_url && ctx.api_key ? { url: ctx.kibana_url, apiKey: ctx.api_key } : undefined
+    if (provider)
+      await writeGlobalConfig({ provider, model: "kibana/default", preserveModelIfKibana: true, kibana })
   }
 
   export async function setCurrent(name: string) {
@@ -465,6 +487,9 @@ export namespace ElasticAuth {
     const yaml = toYaml({ current, contexts: merged })
     await Bun.write(fp, yaml, { mode: 0o600 } as any)
 
-    if (input.provider) await writeGlobalConfig({ provider: input.provider, model: input.model })
+    if (input.provider) {
+      const kibana = input.kibana_url && input.api_key ? { url: input.kibana_url, apiKey: input.api_key } : undefined
+      await writeGlobalConfig({ provider: input.provider, model: input.model, kibana })
+    }
   }
 }

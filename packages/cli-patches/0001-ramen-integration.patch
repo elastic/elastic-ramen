@@ -1,0 +1,335 @@
+diff --git a/src/config/commands.ts b/src/config/commands.ts
+index f1b2187a3..fd405c929 100644
+--- a/src/config/commands.ts
++++ b/src/config/commands.ts
+@@ -472,8 +472,10 @@ async function editInEditor (name: string, original: RawContext): Promise<RawCon
+     await writeFile(path, header + body, { encoding: 'utf-8', mode: 0o600 })
+     const exitCode = await new Promise<number>((resolve, reject) => {
+       const child = spawn(editor, [path], { stdio: 'inherit', shell: true })
+-      child.on('exit', code => resolve(code ?? 0))
+-      child.on('error', reject)
++      // eslint-disable-next-line @typescript-eslint/no-explicit-any
++      ;(child as any).on('exit', (code: number | null) => resolve(code ?? 0))
++      // eslint-disable-next-line @typescript-eslint/no-explicit-any
++      ;(child as any).on('error', reject)
+     })
+     if (exitCode !== 0) return null
+     const content = await readFile(path, 'utf-8')
+diff --git a/src/docs/chat.ts b/src/docs/chat.ts
+index e73d18a0a..76cdd8ccc 100644
+--- a/src/docs/chat.ts
++++ b/src/docs/chat.ts
+@@ -85,7 +85,8 @@ export function createChatCommand (deps: ChatDeps = defaultDeps): OpaqueCommandH
+         await new Promise<void>((resolve) => {
+           const prompt = (): void => {
+             process.stderr.write('\nAsk a follow-up (or press Enter to quit): ')
+-            rl.once('line', async (answer) => {
++            // eslint-disable-next-line @typescript-eslint/no-explicit-any
++            ;(rl as any).once('line', async (answer: string) => {
+               const followUp = answer.trim()
+               if (followUp === '') {
+                 rl.close()
+@@ -97,7 +98,8 @@ export function createChatCommand (deps: ChatDeps = defaultDeps): OpaqueCommandH
+             })
+           }
+           prompt()
+-          rl.on('close', resolve)
++          // eslint-disable-next-line @typescript-eslint/no-explicit-any
++          ;(rl as any).on('close', resolve)
+         })
+       }
+ 
+diff --git a/src/docs/search.ts b/src/docs/search.ts
+index 5bbb9f750..101b2b476 100644
+--- a/src/docs/search.ts
++++ b/src/docs/search.ts
+@@ -47,7 +47,7 @@ export function createSearchCommand (deps: SearchDeps = defaultDeps): OpaqueComm
+           total: resp.totalResults,
+           page: resp.pageNumber,
+           pageCount: resp.pageCount,
+-        }
++        } as JsonValue
+       } catch (err) {
+         return {
+           error: {
+diff --git a/src/factory.ts b/src/factory.ts
+index 144fff198..65cef467a 100644
+--- a/src/factory.ts
++++ b/src/factory.ts
+@@ -14,6 +14,7 @@ import type { SchemaArgDefinition } from './lib/schema-args.ts'
+ import { simplifyZodIssues, formatIssuesText } from './lib/zod-error.ts'
+ import { renderText, formatHandlerError } from './output.ts'
+ import { pickFields, parseFieldList, applyTemplate } from './lib/output-transform.ts'
++import { write, writeErr } from './io.ts'
+ 
+ /** pre-built schema for coercing string → number, reused per option invocation */
+ const numberSchema = z.coerce.number()
+@@ -696,7 +697,7 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+       const dotPath = (parts.length > 1 ? parts.slice(1) : parts).join('.')
+       if (!isCommandAllowed(dotPath, resolvedConfig.commands)) {
+         if (jsonFormat === true) {
+-          process.stderr.write(JSON.stringify({
++          writeErr(JSON.stringify({
+             error: {
+               code: 'command_blocked',
+               message: `command "${dotPath}" is not allowed by the current policy`,
+@@ -748,7 +749,7 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+       } else {
+         const issues = simplifyZodIssues(result.error.issues)
+         if (jsonFormat === true) {
+-          process.stderr.write(JSON.stringify({
++          writeErr(JSON.stringify({
+             error: {
+               code: 'input_validation_failed',
+               message: `Input validation failed with ${issues.length} issue(s)`,
+@@ -763,9 +764,9 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+     }
+     if (allRaw['dryRun'] === true) {
+       if (jsonFormat) {
+-        process.stdout.write(JSON.stringify({ success: true }) + '\n')
++        write(JSON.stringify({ success: true }) + '\n')
+       } else {
+-        process.stdout.write('dry run: inputs valid, no action performed\n')
++        write('dry run: inputs valid, no action performed\n')
+       }
+       return
+     }
+@@ -773,9 +774,9 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+     assert(handlerResult !== undefined, `command ${JSON.stringify(config.name)}: handler must return a JsonValue`)
+     if (isErrorResult(handlerResult)) {
+       if (jsonFormat === true) {
+-        process.stderr.write(JSON.stringify(handlerResult) + '\n')
++        writeErr(JSON.stringify(handlerResult) + '\n')
+       } else {
+-        process.stderr.write(`Error: ${formatHandlerError(handlerResult)}\n`)
++        writeErr(`Error: ${formatHandlerError(handlerResult)}\n`)
+       }
+       process.exitCode = 1
+     } else {
+@@ -786,13 +787,13 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+         output = pickFields(output, parseFieldList(fieldsRaw))
+       }
+       if (templateRaw != null) {
+-        process.stdout.write(applyTemplate(output, templateRaw))
++        write(applyTemplate(output, templateRaw))
+       } else if (jsonFormat === true) {
+-        process.stdout.write(JSON.stringify(output) + '\n')
++        write(JSON.stringify(output) + '\n')
+       } else if (config.formatOutput !== undefined) {
+-        process.stdout.write(config.formatOutput(output, parsed))
++        write(config.formatOutput(output, parsed))
+       } else {
+-        process.stdout.write(renderText(output))
++        write(renderText(output))
+       }
+     }
+   })
+diff --git a/src/io.ts b/src/io.ts
+new file mode 100644
+index 000000000..8bf3e0f1a
+--- /dev/null
++++ b/src/io.ts
+@@ -0,0 +1,39 @@
++/*
++ * Copyright Elasticsearch B.V. and contributors
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * Module-level I/O writers.
++ *
++ * Commands in factory.ts use `io.write` / `io.writeErr` instead of
++ * `process.stdout.write` / `process.stderr.write` directly. This lets the
++ * programmatic runner swap the writers for in-process output capture without
++ * relying on monkey-patching the process streams (which is unreliable in Bun's
++ * TUI context).
++ */
++
++let _out: (s: string) => void = (s) => { process.stdout.write(s) }
++let _err: (s: string) => void = (s) => { process.stderr.write(s) }
++
++/** Write to the current stdout writer. */
++export function write(s: string) { _out(s) }
++
++/** Write to the current stderr writer. */
++export function writeErr(s: string) { _err(s) }
++
++/**
++ * Redirect all writes to an internal buffer.
++ * Returns a `restore` function that resets the writers and returns the captured string.
++ */
++export function capture(): () => string {
++  let buf = ''
++  const prev = { out: _out, err: _err }
++  _out = (s) => { buf += s }
++  _err = (s) => { buf += s }
++  return () => {
++    _out = prev.out
++    _err = prev.err
++    return buf
++  }
++}
+diff --git a/src/lib/meta.ts b/src/lib/meta.ts
+index d033c21d3..a7170d214 100644
+--- a/src/lib/meta.ts
++++ b/src/lib/meta.ts
+@@ -4,12 +4,9 @@
+  */
+ 
+ import os from 'node:os'
+-import { createRequire } from 'node:module'
+-
+-const require = createRequire(import.meta.url)
+-const cliVersion: string = (require('../../package.json') as { version: string }).version
+-const transportVersion: string = (require('@elastic/transport/package.json') as { version: string }).version
+-const undiciVersion: string = (require('undici/package.json') as { version: string }).version
++import { version as cliVersion } from '../../package.json'
++import { version as transportVersion } from '@elastic/transport/package.json'
++import { version as undiciVersion } from 'undici/package.json'
+ 
+ /**
+  * Converts a semver string to the format required by the x-elastic-client-meta spec.
+diff --git a/src/lib/transport.ts b/src/lib/transport.ts
+index 195436480..d2fb8070a 100644
+--- a/src/lib/transport.ts
++++ b/src/lib/transport.ts
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { Transport, WeightedConnectionPool, UndiciConnection } from '@elastic/transport'
++import { Transport, WeightedConnectionPool, HttpConnection } from '@elastic/transport'
+ import type { ApiKeyAuth } from '@elastic/transport'
+ import { getResolvedConfig } from '../config/store.ts'
+ import { clientHeaders } from './meta.ts'
+@@ -58,7 +58,7 @@ export function getTransport (): Transport {
+   // auth into the connection's Authorization header at instantiation time via prepareHeaders().
+   // Setting pool.auth after addConnection() has no effect on the already-created connection.
+   const pool = new WeightedConnectionPool({
+-    Connection: UndiciConnection,
++    Connection: HttpConnection,
+     ...(transportAuth != null && { auth: transportAuth })
+   })
+   pool.addConnection(url)
+diff --git a/src/runner.ts b/src/runner.ts
+new file mode 100644
+index 000000000..63d4021fc
+--- /dev/null
++++ b/src/runner.ts
+@@ -0,0 +1,116 @@
++/*
++ * Copyright Elasticsearch B.V. and contributors
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * Programmatic runner for the elastic CLI.
++ *
++ * Allows callers to invoke any elastic CLI command in-process without spawning
++ * a subprocess. The caller supplies a pre-built ResolvedConfig so that file
++ * discovery and secret resolution are bypassed entirely.
++ *
++ * stdout is captured and returned as a string; the process stream is never
++ * written to. stderr errors from Commander are also captured.
++ */
++
++import { Command } from 'commander'
++import { setResolvedConfig } from './config/store.ts'
++import { defineGroup } from './factory.ts'
++import { capture, write, writeErr } from './io.ts'
++import { _testResetTransport } from './lib/transport.ts'
++import type { ResolvedConfig } from './config/types.ts'
++
++export type RunResult = { output: string; code: number }
++
++/**
++ * Run an elastic CLI command in-process.
++ *
++ * @param argv - Arguments after the program name, e.g. `['stack', 'es', 'cluster', 'health', '--json']`.
++ *               The shorthands `es` and `kb` are auto-redirected to `stack es` / `stack kb`.
++ * @param config - Pre-resolved configuration (credentials + context).  Bypasses `.elasticrc` loading.
++ * @returns Captured stdout and exit code.
++ */
++export async function runCommand(argv: string[], config: ResolvedConfig): Promise<RunResult> {
++  setResolvedConfig(config)
++  _testResetTransport()
++
++  // Normalise deprecated shorthands: elastic es → elastic stack es, elastic kb → elastic stack kb
++  const args = argv[0] === 'es' || argv[0] === 'kb' ? ['stack', ...argv] : [...argv]
++
++  const program = new Command('elastic')
++    .option('--json', 'output as JSON')
++    .option('--output-fields <list>', 'comma-separated list of fields to include in output')
++    .option('--output-template <string>', 'Mustache-like template for custom text output')
++    .option('--use-context <name>', 'override the active context')
++    .exitOverride()
++    .configureOutput({
++      writeOut: write,
++      writeErr: writeErr,
++    })
++
++  const first = args[0]
++  const second = args[1]
++  const esSet = new Set(['es', 'elasticsearch'])
++  const kbSet = new Set(['kb', 'kibana'])
++
++  // Fake argv that the register sniffers expect: ['node', 'elastic', ...actual args]
++  const fakeArgv = ['node', 'elastic', ...args]
++
++  if (first === 'stack') {
++    const children = []
++    if (second == null || esSet.has(second)) {
++      const { registerEsCommandsLazy } = await import('./es/register.ts')
++      const g = await registerEsCommandsLazy({ argv: fakeArgv })
++      g.alias('elasticsearch')
++      children.push(g)
++    } else {
++      children.push(defineGroup({ name: 'es', description: 'Interact with Elasticsearch' }))
++    }
++    if (second == null || kbSet.has(second)) {
++      const { registerKbCommandsLazy } = await import('./kb/register.ts')
++      const g = await registerKbCommandsLazy({ argv: fakeArgv })
++      g.alias('kibana')
++      children.push(g)
++    } else {
++      children.push(defineGroup({ name: 'kb', description: 'Interact with Kibana' }))
++    }
++    program.addCommand(defineGroup({ name: 'stack', description: 'Interact with Elastic Stack' }, ...children))
++  } else if (first === 'cloud') {
++    const { registerCloudCommands } = await import('./cloud/register.ts')
++    program.addCommand(registerCloudCommands())
++  } else if (first === 'docs') {
++    const { registerDocsCommands } = await import('./docs/register.ts')
++    program.addCommand(registerDocsCommands())
++  } else if (first === 'config') {
++    const { registerConfigCommands } = await import('./config/commands.ts')
++    program.addCommand(registerConfigCommands())
++  } else {
++    program.addCommand(defineGroup({ name: 'stack', description: 'Interact with Elastic Stack' }))
++    program.addCommand(defineGroup({ name: 'cloud', description: 'Manage Elastic Cloud' }))
++    program.addCommand(defineGroup({ name: 'docs', description: 'Search Elastic documentation' }))
++  }
++
++  // Apply exitOverride + configureOutput recursively so errors from any
++  // subcommand always route through io.write/io.writeErr and never reach
++  // the real process streams (which would corrupt the TUI).
++  function wire(cmd: Command) {
++    cmd.exitOverride().configureOutput({ writeOut: write, writeErr: writeErr })
++    for (const sub of cmd.commands) wire(sub)
++  }
++  wire(program)
++
++  const restore = capture()
++  let code = 0
++  try {
++    await program.parseAsync(fakeArgv)
++  } catch (e: unknown) {
++    const err = e as { code?: string; exitCode?: number; message?: string }
++    if (err.code !== 'commander.helpDisplayed' && err.code !== 'commander.version') {
++      code = err.exitCode ?? 1
++    }
++  } finally {
++    const output = restore()
++    return { output, code }
++  }
++}

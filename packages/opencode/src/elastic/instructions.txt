@@ -44,26 +44,19 @@ Additional capabilities are available through the eab MCP server, including ES|Q
 
 ## Elastic CLI
 
-The `elastic` CLI is available on PATH and can be used via the bash tool. It uses the same Elastic config (context, credentials) as the rest of the console. Key commands:
+The `elastic_cli` tool runs elastic CLI commands directly. It injects credentials automatically and does not require the bash tool. Key commands:
 
-- `elastic es query "<ESQL>"` -- run an ES|QL query directly
-- `elastic es raw <method> <path> [-d '<body>']` -- make raw Elasticsearch HTTP requests
-- `elastic es indices list` -- list indices
-- `elastic es data-streams list` -- list data streams
-- `elastic es cluster health` -- check cluster health
-- `elastic es cluster info` -- get cluster info
-- `elastic kb raw <method> <path> [-d '<body>']` -- make raw Kibana HTTP requests
-- `elastic kb dashboard list` -- list Kibana dashboards
-- `elastic docs search "<query>"` -- search Elastic documentation
-- `elastic docs read <url>` -- read an Elastic docs page
-- `elastic slos list` -- list SLOs
-- `elastic slos list-definitions` -- list SLO definitions
-- `elastic agent-builder agents list` -- list Agent Builder agents
-- `elastic agent-builder tools list` -- list Agent Builder tools
+- `es cluster health --json` -- check cluster health
+- `es cluster info --json` -- get cluster info
+- `es indices list --json` -- list indices
+- `stack es raw /_cat/indices?v` -- raw Elasticsearch HTTP request
+- `stack kb raw /api/status` -- raw Kibana HTTP request
+- `docs search "<query>"` -- search Elastic documentation
+- `docs read <url>` -- read an Elastic docs page
 
-Use `--format json` for machine-readable output. Use `elastic <command> --help` for full options.
+Use `--json` for machine-readable output. Use the `elastic-cli-usage` skill for full syntax reference including raw request examples.
 
-The elastic CLI is useful as a fallback when MCP tools are unavailable or for operations not covered by the native Kibana tools.
+Prefer MCP tools and native `kibana_*` tools over `elastic_cli` when they cover the operation.
 
 ## RCA Workflow
 

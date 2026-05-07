@@ -62,7 +62,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
     proc.stderr?.on("data", (chunk) => {
       output += chunk.toString()
     })
-    proc.on("exit", (code) => {
+    ;(proc as unknown as NodeJS.EventEmitter).on("exit", (code: number | null) => {
       clearTimeout(id)
       let msg = `Server exited with code ${code}`
       if (output.trim()) {
@@ -70,7 +70,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
       }
       reject(new Error(msg))
     })
-    proc.on("error", (error) => {
+    ;(proc as unknown as NodeJS.EventEmitter).on("error", (error: Error) => {
       clearTimeout(id)
       reject(error)
     })

@@ -26,7 +26,6 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { ElasticAuth } from "@/elastic/auth"
-import { ElasticBin } from "@/elastic/bin"
 import open from "open"
 
 export namespace MCP {
@@ -394,6 +393,16 @@ export namespace MCP {
       }
     }
 
+    // Skip legacy local `elastic ab mcp proxy` entries written by older ramen versions.
+    // The Go binary no longer ships; eab is now a Kibana-hosted remote MCP endpoint.
+    if (mcp.type === "local" && mcp.command[0] === "elastic" && mcp.command[1] === "ab") {
+      log.info("skipping legacy elastic ab mcp proxy entry", { key })
+      return {
+        mcpClient: undefined,
+        status: { status: "disabled" as const },
+      }
+    }
+
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined
@@ -509,16 +518,7 @@ export namespace MCP {
     }
 
     if (mcp.type === "local") {
-      let [cmd, ...args] = mcp.command
-      // Resolve the elastic CLI binary via ElasticBin so it works even when not on PATH
-      if (cmd === "elastic") {
-        try {
-          cmd = await ElasticBin.resolve()
-          log.info("resolved elastic CLI binary", { key, path: cmd })
-        } catch (err) {
-          log.error("failed to resolve elastic CLI binary", { key, error: err instanceof Error ? err.message : String(err) })
-        }
-      }
+      const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
         stderr: "pipe",
@@ -950,11 +950,12 @@ export namespace MCP {
       await new Promise<void>((resolve, reject) => {
         // Give the process a moment to fail if it's going to
         const timeout = setTimeout(() => resolve(), 500)
-        subprocess.on("error", (error) => {
+        const proc = subprocess as unknown as NodeJS.EventEmitter
+        proc.on("error", (error) => {
           clearTimeout(timeout)
           reject(error)
         })
-        subprocess.on("exit", (code) => {
+        proc.on("exit", (code: number | null) => {
           if (code !== null && code !== 0) {
             clearTimeout(timeout)
             reject(new Error(`Browser open failed with exit code ${code}`))
