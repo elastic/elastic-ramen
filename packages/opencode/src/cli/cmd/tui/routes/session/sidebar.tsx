@@ -17,6 +17,7 @@ import { computeContextInfo } from "@/cli/cmd/tui/util/sidebar"
 import { Handover } from "@/elastic/handover"
 import { ElasticAuth } from "@/elastic/auth"
 import { Link } from "../../ui/link"
+import { kibanaLinkVersion } from "../../util/kibana-link"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -49,8 +50,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const context = createMemo(() => computeContextInfo(messages(), sync.data.provider))
 
   const [agentBuilderLink] = createResource(
-    () => props.sessionID,
-    async (id) => {
+    () => [props.sessionID, kibanaLinkVersion()] as const,
+    async ([id]) => {
       const [link, status] = await Promise.all([Handover.resolve(id), ElasticAuth.check()])
       if (!link || !status.context?.kibana_url) return undefined
       return Handover.url(status.context.kibana_url, link)
