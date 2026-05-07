@@ -69,8 +69,7 @@ export function Header() {
   const context = createMemo(() => {
     const i = info()
     if (!i) return
-    if (i.isKibana || i.percentage === null) return i.tokens
-    return `${i.tokens}  ${i.percentage}%`
+    return i.percentage !== null ? `${i.tokens}  ${i.percentage}%` : i.tokens
   })
 
   const isKibana = createMemo(() => info()?.isKibana ?? false)
