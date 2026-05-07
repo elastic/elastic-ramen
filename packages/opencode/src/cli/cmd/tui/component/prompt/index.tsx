@@ -59,8 +59,14 @@ export type PromptRef = {
   submit(): void
 }
 
-const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
-const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
+const PLACEHOLDERS = [
+  "Investigate k8s pod crashlooping in production",
+  "Triage Observability alert spike from logs",
+  "Rollback faulty terraform deployment",
+  "Review service degradation using Elasticsearch logs",
+  "Validate data stream lifecycle configuration",
+]
+const SHELL_PLACEHOLDERS = ["kubectl get pods", "terraform plan", "kubectl logs"]
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
