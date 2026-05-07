@@ -4,11 +4,12 @@ import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
+import type { Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Flag } from "@/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
+import { computeContextInfo } from "@/cli/cmd/tui/util/sidebar"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -19,12 +20,17 @@ const Title = (props: { session: Accessor<Session> }) => {
   )
 }
 
-const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
+const ContextInfo = (props: {
+  context: Accessor<string | undefined>
+  cost: Accessor<string>
+  isKibana: Accessor<boolean>
+}) => {
   const { theme } = useTheme()
   return (
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()})
+        {props.context()}
+        {!props.isKibana() && ` (${props.cost()})`}
       </text>
     </Show>
   )
@@ -58,18 +64,15 @@ export function Header() {
     }).format(total)
   })
 
+  const info = createMemo(() => computeContextInfo(messages(), sync.data.provider))
+
   const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
-    if (!last) return
-    const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
-    let result = total.toLocaleString()
-    if (model?.limit.context) {
-      result += "  " + Math.round((total / model.limit.context) * 100) + "%"
-    }
-    return result
+    const i = info()
+    if (!i) return
+    return i.percentage !== null ? `${i.tokens}  ${i.percentage}%` : i.tokens
   })
+
+  const isKibana = createMemo(() => info()?.isKibana ?? false)
 
   const workspace = createMemo(() => {
     const id = session()?.workspaceID
@@ -116,7 +119,7 @@ export function Header() {
                   </text>
                 )}
 
-                <ContextInfo context={context} cost={cost} />
+                <ContextInfo context={context} cost={cost} isKibana={isKibana} />
               </box>
               <box flexDirection="row" gap={2}>
                 <box
@@ -162,7 +165,7 @@ export function Header() {
               ) : (
                 <Title session={session} />
               )}
-              <ContextInfo context={context} cost={cost} />
+              <ContextInfo context={context} cost={cost} isKibana={isKibana} />
             </box>
           </Match>
         </Switch>
