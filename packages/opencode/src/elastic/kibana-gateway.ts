@@ -55,13 +55,18 @@ export namespace KibanaGateway {
     return undefined
   }
 
-  /** Context window for a connector row: API value if present, otherwise the static fallback by id. */
-  function rowContextLimit(row: ConnectorRow | undefined, id: string): number | undefined {
-    return row?.context_window_size ?? connectorContextLimit(id)
+  /**
+   * Context window for a connector row: API value, then static fallback by id, then template
+   * default. Always returns a concrete number — never `undefined` — so refresh paths reset
+   * `limit.context` instead of carrying forward whatever the previous default had set
+   * (e.g. an unknown connector cloned from a 1M Sonnet default would otherwise inherit 1M).
+   */
+  function rowContextLimit(row: ConnectorRow | undefined, id: string): number {
+    return row?.context_window_size ?? connectorContextLimit(id) ?? template.limit.context
   }
 
-  function withContext<L extends { context: number }>(limit: L, ctx: number | undefined): L {
-    return ctx ? { ...limit, context: ctx } : limit
+  function withContext<L extends { context: number }>(limit: L, ctx: number): L {
+    return { ...limit, context: ctx }
   }
 
   /** Inference connector ids look like `.anthropic-claude-4.5-haiku-chat_completion` — shorten for UI labels. */

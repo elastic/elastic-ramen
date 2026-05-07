@@ -270,6 +270,41 @@ describe("KibanaGateway", () => {
     }
   })
 
+  test("refreshKibanaProviderModels resets limit.context to template default for unknown connectors", async () => {
+    // Regression: previously, an unknown connector cloned from a stale 1M default carried the
+    // stale 1M forward instead of resetting to the 128k template default.
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        if (req.url.includes("/internal/search_inference_endpoints/connectors")) {
+          return Response.json({ connectors: [{ connectorId: "unknown-default" }], soEntryFound: false })
+        }
+        if (!req.url.includes("/internal/elastic_ramen/v1/models")) return new Response("no", { status: 404 })
+        return Response.json({ data: [{ id: "unknown-default" }, { id: "unknown-other" }] })
+      },
+    })
+    try {
+      const base = `http://127.0.0.1:${server.port}`
+      const provider = {
+        options: { baseURL: `${base}/internal/elastic_ramen/v1`, headers: { Authorization: "ApiKey x" } },
+        models: {
+          default: {
+            id: "default",
+            api: { id: "default" },
+            limit: { context: 1_000_000, output: 8192 },
+          },
+        },
+      }
+      await KibanaGateway.refreshKibanaProviderModels(provider)
+      const models = provider.models as Record<string, { limit: { context: number; output: number } }>
+      expect(models.default.limit.context).toBe(128_000)
+      expect(models["unknown-other"].limit.context).toBe(128_000)
+      expect(models.default.limit.output).toBe(8192)
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test("refreshKibanaProviderModels overrides limit.context per connector", async () => {
     const server = Bun.serve({
       port: 0,
