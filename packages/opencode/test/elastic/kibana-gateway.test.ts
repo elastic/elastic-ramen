@@ -1,6 +1,21 @@
 import { describe, expect, test } from "bun:test"
 import { KibanaGateway } from "../../src/elastic/kibana-gateway"
 
+describe("KibanaGateway.resolveKibanaModel", () => {
+  test("maps connector id to default entry", () => {
+    const id = ".anthropic-claude-4.6-sonnet-chat_completion"
+    const models = {
+      default: { api: { id }, name: "Anthropic Claude 4.6 Sonnet (default)", limit: { context: 1_000_000 } },
+    }
+    expect(KibanaGateway.resolveKibanaModel(models, id)?.limit?.context).toBe(1_000_000)
+    expect(KibanaGateway.resolveKibanaModel(models, "default")?.name).toContain("default")
+  })
+
+  test("returns undefined when key missing and no default alias", () => {
+    expect(KibanaGateway.resolveKibanaModel({ default: { api: { id: "a" } } }, "b")).toBeUndefined()
+  })
+})
+
 describe("KibanaGateway.connectorDisplayName", () => {
   test("strips inference suffix and dot prefix", () => {
     expect(KibanaGateway.connectorDisplayName(".anthropic-claude-4.5-haiku-chat_completion")).toBe(

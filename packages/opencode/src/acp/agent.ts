@@ -40,6 +40,7 @@ import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
+import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
@@ -71,7 +72,10 @@ export namespace ACP {
       })
 
     const provider = providers.find((p) => p.id === providerID)
-    const model = provider?.models[modelID]
+    const model =
+      providerID === "kibana"
+        ? KibanaGateway.resolveKibanaModel(provider?.models, modelID)
+        : provider?.models[modelID]
     return model?.limit.context ?? null
   }
 

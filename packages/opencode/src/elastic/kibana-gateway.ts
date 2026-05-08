@@ -80,6 +80,23 @@ export namespace KibanaGateway {
       .join(" ")
   }
 
+  /**
+   * Resolve a model entry when `modelID` is either the catalog key (`default`) or the inference
+   * connector id (`api.id`). The gateway omits a duplicate row for the Agent Builder default
+   * connector, so only `models.default` exists while messages may still carry the resolved id.
+   */
+  export function resolveKibanaModel<M extends { api?: { id?: string } }>(
+    models: Record<string, M> | undefined,
+    modelID: string,
+  ): M | undefined {
+    if (!models) return undefined
+    const direct = models[modelID]
+    if (direct) return direct
+    const def = models["default"]
+    if (def?.api?.id === modelID) return def
+    return undefined
+  }
+
   export function authHeaders(apiKey: string) {
     return {
       Authorization: `ApiKey ${apiKey}`,

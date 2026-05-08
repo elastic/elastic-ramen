@@ -1242,7 +1242,10 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    const info = provider.models[modelID]
+    let info = provider.models[modelID]
+    if (!info && providerID === "kibana") {
+      info = KibanaGateway.resolveKibanaModel(provider.models, modelID)
+    }
     if (!info) {
       const availableModels = Object.keys(provider.models)
       const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })

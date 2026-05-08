@@ -76,6 +76,36 @@ describe("computeContextInfo", () => {
     expect(result!.isKibana).toBe(true)
   })
 
+  test("kibana: resolves models.default when assistant modelID is the gateway connector id", () => {
+    const cid = ".anthropic-claude-4.6-sonnet-chat_completion"
+    const msg = assistant("kibana", cid)
+    const cap = provider("kibana", 50_000).models["model-x"].capabilities
+    const prov: Provider = {
+      id: "kibana",
+      name: "Kibana",
+      source: "config",
+      env: [],
+      options: {},
+      models: {
+        default: {
+          id: "default",
+          providerID: "kibana",
+          name: "Anthropic Claude 4.6 Sonnet (default)",
+          api: { id: cid, url: "https://kibana/x", npm: "@ai-sdk/openai-compatible" },
+          capabilities: cap,
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 10_000, output: 8192 },
+          status: "active",
+          options: {},
+          headers: {},
+          release_date: "2025-01-01",
+        },
+      },
+    }
+    const result = computeContextInfo([msg], [prov])
+    expect(result!.percentage).toBe(15)
+  })
+
   test("percentage is null when provider model has no context limit", () => {
     const msg = assistant("anthropic")
     const result = computeContextInfo([msg], [])
