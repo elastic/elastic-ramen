@@ -59,7 +59,7 @@ export function DialogKibanaTakeover() {
           }
           const sessionID = res.data.id
           await SessionProfile.stamp(sessionID)
-          Handover.link(sessionID, option.value)
+          Handover.link(sessionID, option.value, conv.agent_id)
           await sdk.client.session.update({ sessionID, title: `Kibana: ${conv.title}` }).catch(() => {})
 
           const model = local.model.current()

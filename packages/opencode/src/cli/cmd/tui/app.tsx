@@ -53,6 +53,7 @@ import { DialogKibanaContext } from "@tui/component/dialog-kibana-context"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
 import { ElasticProfileProvider, useElasticProfile } from "@tui/context/elastic-profile"
 import { KibanaSkillsSync } from "@/elastic/kibana-skills-sync"
+import { bumpKibanaLinkVersion } from "@tui/util/kibana-link"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -496,10 +497,12 @@ function App() {
               message: "Kibana sync skipped: session belongs to another Elastic profile.",
               duration: 5000,
             }),
-        }).catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err)
-          toast.show({ variant: "error", message: `Kibana conversation sync failed: ${msg}`, duration: 5000 })
         })
+          .then(() => bumpKibanaLinkVersion())
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err)
+            toast.show({ variant: "error", message: `Kibana conversation sync failed: ${msg}`, duration: 5000 })
+          })
       }
     }
   })

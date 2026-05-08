@@ -26,7 +26,24 @@ export namespace Handover {
     return KibanaClient.conversations()
   }
 
-  const mapping = new Map<string, string>()
+  const DEFAULT_AGENT_ID = "elastic-ai-agent"
+
+  export interface Link {
+    conversationID: string
+    agentID: string
+  }
+
+  const mapping = new Map<string, Link>()
+
+  function normalize(stored: unknown): Link | undefined {
+    if (!stored) return undefined
+    if (typeof stored === "string") return { conversationID: stored, agentID: DEFAULT_AGENT_ID }
+    if (typeof stored === "object" && "conversationID" in stored && typeof (stored as Link).conversationID === "string") {
+      const s = stored as Link
+      return { conversationID: s.conversationID, agentID: s.agentID || DEFAULT_AGENT_ID }
+    }
+    return undefined
+  }
 
   export function format(conv: Conversation): string {
     const lines = [`Continuing from Kibana Agent Builder conversation: "${conv.title}"`, "", "Previous conversation:", "---"]
@@ -67,17 +84,23 @@ export namespace Handover {
     }
   }
 
-  export function link(sessionID: string, conversationID: string) {
-    mapping.set(sessionID, conversationID)
-    Storage.write(["kibana_link", sessionID], conversationID).catch(() => {})
+  export function link(sessionID: string, conversationID: string, agentID: string = DEFAULT_AGENT_ID) {
+    const record: Link = { conversationID, agentID }
+    mapping.set(sessionID, record)
+    Storage.write(["kibana_link", sessionID], record).catch(() => {})
   }
 
-  export async function resolve(sessionID: string): Promise<string | undefined> {
+  export function url(base: string, link: Link): string {
+    return `${base.replace(/\/+$/, "")}/app/agent_builder/agents/${encodeURIComponent(link.agentID)}/conversations/${encodeURIComponent(link.conversationID)}`
+  }
+
+  export async function resolve(sessionID: string): Promise<Link | undefined> {
     const cached = mapping.get(sessionID)
     if (cached) return cached
-    const stored = await Storage.read<string>(["kibana_link", sessionID]).catch(() => undefined)
-    if (stored) mapping.set(sessionID, stored)
-    return stored
+    const stored = await Storage.read<unknown>(["kibana_link", sessionID]).catch(() => undefined)
+    const record = normalize(stored)
+    if (record) mapping.set(sessionID, record)
+    return record
   }
 
   export interface SyncOptions {
@@ -121,9 +144,9 @@ export namespace Handover {
     const existing = await resolve(sessionID)
     const api = conversations()
     if (existing) {
-      log.info("updating elasticsearch conversation", { sessionID, conversationID: existing })
+      log.info("updating elasticsearch conversation", { sessionID, conversationID: existing.conversationID })
       try {
-        await api.update(existing, {
+        await api.update(existing.conversationID, {
           title: `RAMEN: ${title}`,
           conversation_rounds: conversationRounds,
         })
@@ -133,17 +156,17 @@ export namespace Handover {
         // Stale link: the conversation lived in another cluster (legacy session
         // first synced before stamping shipped) or was deleted server-side.
         // Drop the link and fall through to create a fresh conversation here.
-        log.info("kibana_link stale, recreating conversation", { sessionID, conversationID: existing })
+        log.info("kibana_link stale, recreating conversation", { sessionID, conversationID: existing.conversationID })
         unlink(sessionID)
       }
     }
     log.info("creating elasticsearch conversation", { sessionID })
     const res = await api.create({
-      agent_id: "elastic-ai-agent",
+      agent_id: DEFAULT_AGENT_ID,
       title: `RAMEN: ${title}`,
       conversation_rounds: conversationRounds,
     })
-    link(sessionID, res.id)
+    link(sessionID, res.id, DEFAULT_AGENT_ID)
   }
 
   export async function list(opts?: { agent_id?: string }) {
