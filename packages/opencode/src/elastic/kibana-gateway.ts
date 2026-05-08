@@ -29,6 +29,46 @@ async function tryFetchJson<T = unknown>(
 }
 
 export namespace KibanaGateway {
+  /**
+   * Fallback context-window map for older Kibana versions whose `/models` route does not
+   * return `context_window_size`. Mirrors `knownModels` in Kibana `@kbn/inference-common`;
+   * IDs use Elastic's version-first format (e.g. `claude-4.5-sonnet`, `gpt-4.1-mini`).
+   * Order matters: specific before general.
+   */
+  const FALLBACK_CONTEXT_LIMITS: Array<[RegExp, number]> = [
+    [/claude-4(?:\.\d+)?-sonnet/, 1_000_000],
+    [/claude-(?:3|4)(?:\.\d+)?-(?:sonnet|opus|haiku)/, 200_000],
+    [/gpt-4\.1(?:[-.]\w+)?/, 1_000_000],
+    [/gpt-4o|gpt-4(?![\.-]?\d)/, 128_000],
+    [/(?:^|[-.])o[34](?:-mini|-pro)?(?:[-.]|$)/, 200_000],
+    [/gemini-2\.0-pro/, 2_000_000],
+    [/gemini-(?:1\.5|2\.5)-pro/, 1_000_000],
+    [/gemini-(?:1\.5|2\.0)-flash/, 1_000_000],
+    [/gemini-2\.5-flash/, 128_000],
+  ]
+
+  export type ConnectorRow = { id: string; owned_by?: string; context_window_size?: number }
+
+  export function connectorContextLimit(id: string): number | undefined {
+    const lower = id.toLowerCase()
+    for (const [re, ctx] of FALLBACK_CONTEXT_LIMITS) if (re.test(lower)) return ctx
+    return undefined
+  }
+
+  /**
+   * Context window for a connector row: API value, then static fallback by id, then template
+   * default. Always returns a concrete number — never `undefined` — so refresh paths reset
+   * `limit.context` instead of carrying forward whatever the previous default had set
+   * (e.g. an unknown connector cloned from a 1M Sonnet default would otherwise inherit 1M).
+   */
+  function rowContextLimit(row: ConnectorRow | undefined, id: string): number {
+    return row?.context_window_size ?? connectorContextLimit(id) ?? template.limit.context
+  }
+
+  function withContext<L extends { context: number }>(limit: L, ctx: number): L {
+    return { ...limit, context: ctx }
+  }
+
   /** Inference connector ids look like `.anthropic-claude-4.5-haiku-chat_completion` — shorten for UI labels. */
   export function connectorDisplayName(id: string) {
     let base = id.replace(/^\./, "").replace(/(?:-chat_completion|_chat_completion)$/i, "")
@@ -38,6 +78,23 @@ export namespace KibanaGateway {
       .filter((w) => w.length > 0)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(" ")
+  }
+
+  /**
+   * Resolve a model entry when `modelID` is either the catalog key (`default`) or the inference
+   * connector id (`api.id`). The gateway omits a duplicate row for the Agent Builder default
+   * connector, so only `models.default` exists while messages may still carry the resolved id.
+   */
+  export function resolveKibanaModel<M extends { api?: { id?: string } }>(
+    models: Record<string, M> | undefined,
+    modelID: string,
+  ): M | undefined {
+    if (!models) return undefined
+    const direct = models[modelID]
+    if (direct) return direct
+    const def = models["default"]
+    if (def?.api?.id === modelID) return def
+    return undefined
   }
 
   export function authHeaders(apiKey: string) {
@@ -136,21 +193,30 @@ export namespace KibanaGateway {
     } satisfies AgentBuilderSkillDetail
   }
 
+  function parseConnectorRow(row: Record<string, unknown>): ConnectorRow | undefined {
+    if (typeof row.id !== "string" || row.id.length === 0) return undefined
+    return {
+      id: row.id,
+      owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
+      context_window_size:
+        typeof row.context_window_size === "number" && row.context_window_size > 0
+          ? row.context_window_size
+          : undefined,
+    }
+  }
+
   export async function fetchConnectors(kibanaUrl: string, apiKey: string) {
     const res = await fetch(`${gatewayBaseUrl(kibanaUrl)}/models`, {
       headers: authHeaders(apiKey),
     })
-    if (!res.ok) return [] as { id: string; owned_by?: string }[]
-    const json = (await res.json()) as { data?: { id?: string; owned_by?: string }[] }
+    if (!res.ok) return [] as ConnectorRow[]
+    const json = (await res.json()) as { data?: Record<string, unknown>[] }
     const rows = json.data
     if (!Array.isArray(rows)) return []
-    const out: { id: string; owned_by?: string }[] = []
+    const out: ConnectorRow[] = []
     for (const row of rows) {
-      if (typeof row.id !== "string" || row.id.length === 0) continue
-      out.push({
-        id: row.id,
-        owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
-      })
+      const parsed = parseConnectorRow(row)
+      if (parsed) out.push(parsed)
     }
     return out
   }
@@ -175,18 +241,15 @@ export namespace KibanaGateway {
 
   /** Like `fetchConnectors`, but returns `undefined` when the request fails so callers can keep existing models. */
   export async function tryFetchConnectors(kibanaUrl: string, apiKey: string) {
-    const json = await tryFetchJson<{ data?: { id?: string; owned_by?: string }[] }>(
+    const json = await tryFetchJson<{ data?: Record<string, unknown>[] }>(
       `${gatewayBaseUrl(kibanaUrl)}/models`,
       authHeaders(apiKey),
     )
     if (!json || !Array.isArray(json.data)) return undefined
-    const out: { id: string; owned_by?: string }[] = []
+    const out: ConnectorRow[] = []
     for (const row of json.data) {
-      if (typeof row.id !== "string" || row.id.length === 0) continue
-      out.push({
-        id: row.id,
-        owned_by: typeof row.owned_by === "string" ? row.owned_by : undefined,
-      })
+      const parsed = parseConnectorRow(row)
+      if (parsed) out.push(parsed)
     }
     return out
   }
@@ -218,31 +281,22 @@ export namespace KibanaGateway {
     if (!base) return
     const apiId = resolved ?? "default"
     const next: Record<string, any> = {}
-    if (provider.models["default"]) {
-      const prev = provider.models["default"] as Record<string, unknown>
-      next.default = {
-        ...prev,
-        id: apiId,
-        name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
-        api: { ...(prev.api as object), id: apiId },
-      }
-    } else {
-      const copy = structuredClone(base)
-      next.default = {
-        ...copy,
-        id: apiId,
-        name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
-        api: { ...copy.api, id: apiId },
-      }
+    const prev = (provider.models["default"] ?? structuredClone(base)) as Record<string, any>
+    next.default = {
+      ...prev,
+      id: apiId,
+      name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
+      api: { ...(prev.api as object), id: apiId },
+      limit: withContext(prev.limit, rowContextLimit(rows.find((r) => r.id === apiId), apiId)),
     }
     for (const row of rows) {
-      if (row.id === "default") continue
-      if (row.id === apiId) continue
+      if (row.id === "default" || row.id === apiId) continue
       const copy = structuredClone(base)
       copy.id = row.id
       copy.name = connectorDisplayName(row.id)
       copy.api = { ...copy.api, id: row.id }
       copy.providerID = "kibana"
+      copy.limit = withContext(copy.limit, rowContextLimit(row, row.id))
       next[row.id] = copy
     }
     provider.models = next
@@ -261,15 +315,16 @@ export namespace KibanaGateway {
         id: apiId,
         name: resolved ? `${connectorDisplayName(resolved)} (default)` : "Default Connector",
         ...template,
+        limit: withContext(template.limit, rowContextLimit(connectors.find((r) => r.id === apiId), apiId)),
       },
     }
     for (const row of connectors) {
-      if (row.id === "default") continue
-      if (row.id === apiId) continue
+      if (row.id === "default" || row.id === apiId) continue
       models[row.id] = {
         id: row.id,
         name: connectorDisplayName(row.id),
         ...template,
+        limit: withContext(template.limit, rowContextLimit(row, row.id)),
       }
     }
     return {

@@ -1,4 +1,5 @@
 import type { AssistantMessage, Message, Provider } from "@opencode-ai/sdk/v2"
+import { KibanaGateway } from "@/elastic/kibana-gateway"
 
 export function computeContextInfo(messages: Message[], providers: Provider[]) {
   const last = messages.findLast(
@@ -7,7 +8,11 @@ export function computeContextInfo(messages: Message[], providers: Provider[]) {
   if (!last) return undefined
   const total =
     last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-  const model = providers.find((x) => x.id === last.providerID)?.models[last.modelID]
+  const prov = providers.find((x) => x.id === last.providerID)
+  const model =
+    last.providerID === "kibana"
+      ? KibanaGateway.resolveKibanaModel(prov?.models, last.modelID)
+      : prov?.models[last.modelID]
   return {
     tokens: total.toLocaleString("en-US"),
     percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
