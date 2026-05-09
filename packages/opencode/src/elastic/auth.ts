@@ -1,7 +1,9 @@
 // Copyright (c) 2026-present, Elastic NV
 import path from "path"
-import os from "os"
+import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
+import { Global } from "@/global"
+import { Config } from "@/config/config"
 import { KibanaGateway } from "./kibana-gateway"
 
 export namespace ElasticAuth {
@@ -43,12 +45,13 @@ export namespace ElasticAuth {
 
   /** Same directory as the elastic Go CLI: filepath.Join(os.UserConfigDir(), "elastic") */
   function dir() {
+    const home = Global.Path.home
     if (process.platform === "win32")
-      return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "elastic")
-    if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "elastic")
+      return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "elastic")
+    if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "elastic")
     const xdg = process.env.XDG_CONFIG_HOME
     if (xdg) return path.join(xdg, "elastic")
-    return path.join(os.homedir(), ".config", "elastic")
+    return path.join(home, ".config", "elastic")
   }
 
   function filepath() {
@@ -244,28 +247,84 @@ export namespace ElasticAuth {
     return { configured: true, name, context: ctx }
   }
 
-  async function configJsonPath(): Promise<string | undefined> {
-    const cwd = process.cwd()
-    for (const name of ["elastic_ramen.json", "elastic_ramen.jsonc"]) {
-      const fp = path.join(cwd, name)
-      if (await Filesystem.exists(fp)) return fp
-    }
-    return undefined
+  function isEnoent(e: unknown): boolean {
+    return !!e && typeof e === "object" && "code" in e && (e as { code: string }).code === "ENOENT"
   }
 
-  function ensureEab(json: Record<string, unknown>) {
-    if (!json.mcp) json.mcp = {}
-    const m = json.mcp as Record<string, unknown>
-    if (!m["eab"]) {
-      m["eab"] = {
-        type: "local",
-        command: ["elastic", "ab", "mcp", "proxy"],
-        enabled: true,
-      }
+  /**
+   * Read a `.json` or `.jsonc` config. Returns `undefined` if the file is missing.
+   * Throws on malformed content so we don't silently overwrite a corrupt file.
+   */
+  async function readConfigFile(fp: string): Promise<Record<string, unknown> | undefined> {
+    const text = await Filesystem.readText(fp).catch((e: unknown) => {
+      if (isEnoent(e)) return undefined
+      throw e
+    })
+    if (text === undefined) return undefined
+    if (!text.trim()) return {}
+    const data = parseJsonc(text)
+    if (data == null || typeof data !== "object" || Array.isArray(data)) return {}
+    return data as Record<string, unknown>
+  }
+
+  type ConfigPatch = { path: string[]; value: unknown }
+
+  function setDeep(obj: Record<string, unknown>, p: string[], value: unknown) {
+    let cur = obj
+    for (let i = 0; i < p.length - 1; i++) {
+      const k = p[i]
+      if (!cur[k] || typeof cur[k] !== "object" || Array.isArray(cur[k])) cur[k] = {}
+      cur = cur[k] as Record<string, unknown>
     }
-    if (!json.permission) json.permission = {}
-    const p = json.permission as Record<string, unknown>
-    if (!p["eab_*"]) p["eab_*"] = "allow"
+    const last = p[p.length - 1]
+    if (value === undefined) delete cur[last]
+    else cur[last] = value
+  }
+
+  /**
+   * Apply `patches` to a config file. `value: undefined` deletes that key.
+   * For `.jsonc`, uses `jsonc-parser` edits per patch to preserve comments and formatting
+   * around untouched keys. For `.json`, reads → mutates → writes plain JSON.
+   */
+  async function patchConfigFile(fp: string, patches: ConfigPatch[]) {
+    const before = await Filesystem.readText(fp).catch((e: unknown) => {
+      if (isEnoent(e)) return ""
+      throw e
+    })
+
+    if (fp.endsWith(".jsonc") && before.trim()) {
+      let next = before
+      for (const { path: p, value } of patches) {
+        const edits = modify(next, p, value, { formattingOptions: { insertSpaces: true, tabSize: 2 } })
+        next = applyEdits(next, edits)
+      }
+      await Filesystem.write(fp, next)
+      return
+    }
+
+    const merged: Record<string, unknown> = before.trim() ? ((parseJsonc(before) as Record<string, unknown>) ?? {}) : {}
+    for (const { path: p, value } of patches) setDeep(merged, p, value)
+    await Filesystem.writeJson(fp, merged)
+  }
+
+  /** Strip `provider`/`model` from any project-local config left over from old setups. */
+  async function stripProjectProviderModel() {
+    const cwd = process.cwd()
+    const candidates = [
+      path.join(cwd, "elastic_ramen.json"),
+      path.join(cwd, "elastic_ramen.jsonc"),
+      path.join(cwd, ".elastic-ramen", "elastic_ramen.json"),
+      path.join(cwd, ".elastic-ramen", "elastic_ramen.jsonc"),
+    ]
+    for (const fp of candidates) {
+      const json = await readConfigFile(fp).catch(() => undefined)
+      if (!json) continue
+      if (!("provider" in json) && !("model" in json)) continue
+      await patchConfigFile(fp, [
+        { path: ["provider"], value: undefined },
+        { path: ["model"], value: undefined },
+      ])
+    }
   }
 
   /**
@@ -282,33 +341,40 @@ export namespace ElasticAuth {
   }
 
   /**
-   * Write `provider` (and optionally `model`) into the project's `elastic_ramen.json`,
-   * ensure the eab MCP entry, and clear any provider/model overrides under `.elastic-ramen/`.
+   * Write `provider` (and optionally `model`) into the global `elastic_ramen.json`,
+   * ensure the eab MCP entry, and strip any leftover provider/model from project-local
+   * configs so global is the single source of truth.
    *
    * `preserveModelIfKibana` keeps an existing `kibana/<connector>` choice — but only if
    * `<connector>` exists in the new provider's models map (see {@link shouldKeepKibanaModel}).
    */
-  async function writeProjectConfig(opts: { provider: unknown; model?: string; preserveModelIfKibana?: boolean }) {
-    let cfg = await configJsonPath()
-    if (!cfg) cfg = path.join(process.cwd(), "elastic_ramen.json")
-    const json = (await Filesystem.readJson(cfg).catch(() => ({ $schema: "https://elastic.co/config.json" }))) as Record<string, unknown>
-    json.provider = opts.provider
+  async function writeGlobalConfig(opts: { provider: unknown; model?: string; preserveModelIfKibana?: boolean }) {
+    const cfg = Config.globalConfigFile()
+    const existing = (await readConfigFile(cfg)) ?? {}
+
+    const patches: ConfigPatch[] = []
+    if (existing.$schema === undefined) patches.push({ path: ["$schema"], value: "https://elastic.co/config.json" })
+    patches.push({ path: ["provider"], value: opts.provider })
     if (opts.model) {
-      const keep = (opts.preserveModelIfKibana ?? false) && shouldKeepKibanaModel(json.model, opts.provider)
-      if (!keep) json.model = opts.model
+      const keep = (opts.preserveModelIfKibana ?? false) && shouldKeepKibanaModel(existing.model, opts.provider)
+      if (!keep) patches.push({ path: ["model"], value: opts.model })
     }
-    ensureEab(json)
-    await Filesystem.writeJson(cfg, json)
-    for (const name of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
-      const override = path.join(process.cwd(), ".elastic-ramen", name)
-      if (!(await Filesystem.exists(override))) continue
-      const overrideJson = await Filesystem.readJson(override).catch(() => undefined)
-      if (overrideJson && (overrideJson.provider || overrideJson.model)) {
-        delete overrideJson.provider
-        delete overrideJson.model
-        await Filesystem.writeJson(override, overrideJson)
-      }
+
+    // Add eab/permission only when missing — preserves any user customizations to those subtrees.
+    const mcp = existing.mcp as Record<string, unknown> | undefined
+    if (!mcp || !mcp.eab) {
+      patches.push({
+        path: ["mcp", "eab"],
+        value: { type: "local", command: ["elastic", "ab", "mcp", "proxy"], enabled: true },
+      })
     }
+    const permission = existing.permission as Record<string, unknown> | undefined
+    if (!permission || !permission["eab_*"]) {
+      patches.push({ path: ["permission", "eab_*"], value: "allow" })
+    }
+
+    await patchConfigFile(cfg, patches)
+    await stripProjectProviderModel()
   }
 
   /**
@@ -322,7 +388,7 @@ export namespace ElasticAuth {
       provider = await KibanaGateway.buildProvider(ctx.kibana_url, ctx.api_key)
     }
     await Bun.write(filepath(), toYaml({ current: currentName, contexts }), { mode: 0o600 } as any)
-    if (provider) await writeProjectConfig({ provider, model: "kibana/default", preserveModelIfKibana: true })
+    if (provider) await writeGlobalConfig({ provider, model: "kibana/default", preserveModelIfKibana: true })
   }
 
   export async function setCurrent(name: string) {
@@ -354,13 +420,15 @@ export namespace ElasticAuth {
     const { unlink } = await import("fs/promises")
     await unlink(filepath()).catch(() => {})
 
-    const cfg = await configJsonPath()
-    if (cfg) {
-      const json = await Filesystem.readJson(cfg).catch(() => ({}))
-      delete json.provider
-      delete json.model
-      await Filesystem.writeJson(cfg, json)
+    const cfg = Config.globalConfigFile()
+    const existing = await readConfigFile(cfg).catch(() => undefined)
+    if (existing && ("provider" in existing || "model" in existing)) {
+      await patchConfigFile(cfg, [
+        { path: ["provider"], value: undefined },
+        { path: ["model"], value: undefined },
+      ])
     }
+    await stripProjectProviderModel()
   }
 
   export async function save(input: SaveInput) {
@@ -397,6 +465,6 @@ export namespace ElasticAuth {
     const yaml = toYaml({ current, contexts: merged })
     await Bun.write(fp, yaml, { mode: 0o600 } as any)
 
-    if (input.provider) await writeProjectConfig({ provider: input.provider, model: input.model })
+    if (input.provider) await writeGlobalConfig({ provider: input.provider, model: input.model })
   }
 }

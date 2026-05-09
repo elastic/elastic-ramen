@@ -1331,7 +1331,7 @@ export namespace Config {
     await Instance.dispose()
   }
 
-  function globalConfigFile() {
+  export function globalConfigFile() {
     const candidates = ["elastic_ramen.jsonc", "elastic_ramen.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
