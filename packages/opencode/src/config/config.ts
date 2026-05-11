@@ -1178,6 +1178,17 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      kibana: z
+        .object({
+          agent_builder_agent_id: z
+            .string()
+            .optional()
+            .describe(
+              "Agent Builder agent id for new RAMEN↔Kibana mirrored conversations and bootstrap (default: elastic-ai-agent). Set via /kibana-agent.",
+            ),
+        })
+        .optional()
+        .describe("Kibana / Agent Builder preferences when using RAMEN with Elastic auth"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

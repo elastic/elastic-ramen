@@ -1,6 +1,7 @@
 import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Config } from "../../src/config/config"
+import { AbAgent } from "../../src/elastic/ab-agent"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
@@ -510,6 +511,27 @@ test("migrates mode field to agent field", async () => {
         options: {},
         permission: {},
       })
+    },
+  })
+})
+
+test("parses kibana.agent_builder_agent_id", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "elastic_ramen.json"),
+        JSON.stringify({
+          kibana: { agent_builder_agent_id: "ops_assistant" },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.kibana?.agent_builder_agent_id).toBe("ops_assistant")
+      expect(await AbAgent.preferred()).toBe("ops_assistant")
     },
   })
 })
