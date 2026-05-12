@@ -1,6 +1,7 @@
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 
-type ProviderEntry = { id: string; models: Record<string, { name?: string }> }
+type ModelEntry = { name?: string; api?: { id?: string } }
+type ProviderEntry = { id: string; models: Record<string, ModelEntry> }
 
 /**
  * Resolve the display label for a (providerID, modelID) pair.
