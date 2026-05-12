@@ -5,9 +5,10 @@ import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { AbSpec } from "@/elastic/ab-spec"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await Skill.available(ctx?.agent)
+  const list = await Skill.available(ctx?.agent, ctx?.sessionID)
 
   const description =
     list.length === 0
@@ -46,6 +47,11 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       if (!skill) {
         const available = await Skill.all().then((x) => x.map((skill) => skill.name).join(", "))
         throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
+      }
+
+      const cfg = await AbSpec.getConfiguration(await AbSpec.effectiveAgentId(ctx.sessionID))
+      if (!AbSpec.skillAllows(cfg, skill.location)) {
+        throw new Error(`Skill "${params.name}" is not enabled for this session's Agent Builder agent`)
       }
 
       await ctx.ask({

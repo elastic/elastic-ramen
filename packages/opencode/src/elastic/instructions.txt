@@ -33,7 +33,7 @@ These tools are always available and call the Kibana API directly:
 - `kibana_update_agent` -- update agent name, instructions, labels, or tools
 - `kibana_delete_agent` -- delete an agent
 
-In RAMEN TUI: `/kibana-agent` selects which Agent Builder agent new Kibana-linked conversations sync to (`elastic_ramen.json` → `kibana.agent_builder_agent_id`).
+In RAMEN TUI: `/kibana-agent` sets `kibana.agent_builder_agent_id`. For each chat, RAMEN resolves the Agent Builder agent (session Kibana handover link, else that config id), fetches `GET /api/agent_builder/agents/{id}`, then: restricts native `kibana_*` tools to the agent's tool `tool_ids` (including `*`), filters synced Kibana skills when `skill_ids` is set, and adds the agent's custom instructions (plus optional research/answer step text) to the system prompt.
 
 ### Connectors
 - `kibana_list_connectors` -- list configured action connectors (email, Slack, PagerDuty, etc.)

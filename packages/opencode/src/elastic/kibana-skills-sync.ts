@@ -13,7 +13,8 @@ const TTL_MS = 60 * 60 * 1000
 const BATCH_SIZE = 10
 const STAMP_FILE = ".sync-stamp.json"
 
-function slug(raw: string) {
+/** Same slug as synced skill folder names under `skill/kibana/<profile>/`. */
+export function kibanaSkillSlug(raw: string) {
   const trimmed = raw.trim()
   const sanitized = trimmed.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "")
   if (sanitized.length > 0 && sanitized !== "." && sanitized !== "..") return sanitized
@@ -133,7 +134,7 @@ export namespace KibanaSkillsSync {
             log.warn("skipped Kibana skill", { id: row.id })
             return
           }
-          const id = slug(detail.id)
+          const id = kibanaSkillSlug(detail.id)
           const dest = path.resolve(path.join(root, id, "SKILL.md"))
           if (!Filesystem.contains(root, dest)) {
             partial = true

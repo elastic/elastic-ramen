@@ -4,6 +4,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "../ui/toast"
 import { useSDK } from "../context/sdk"
 import { useSync } from "../context/sync"
+import { useRoute } from "../context/route"
 import { KibanaClient } from "@/elastic/client"
 import { AbAgent } from "@/elastic/ab-agent"
 import type { Config } from "@opencode-ai/sdk/v2"
@@ -34,6 +35,7 @@ export function DialogKibanaAb() {
   const toast = useToast()
   const sdk = useSDK()
   const sync = useSync()
+  const route = useRoute()
   const [loading, setLoading] = createSignal(true)
   const [api, setApi] = createSignal<{ id: string; title: string }[]>([])
 
@@ -94,9 +96,12 @@ export function DialogKibanaAb() {
         try {
           await sdk.client.config.update({ config: body }, { throwOnError: true })
           await sync.bootstrap()
+          const workspaceID =
+            route.data.type === "session" ? sync.session.get(route.data.sessionID)?.workspaceID : undefined
+          route.navigate({ type: "home", workspaceID })
           toast.show({
             variant: "success",
-            message: `New mirrored conversations use Agent Builder agent: ${opt.value}`,
+            message: `Switched Agent Builder agent to ${opt.value}. Started a fresh session context.`,
             duration: 4000,
           })
         } catch (err) {
