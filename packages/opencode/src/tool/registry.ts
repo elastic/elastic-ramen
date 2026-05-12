@@ -180,10 +180,17 @@ export namespace ToolRegistry {
       modelID: string
     },
     agent?: Agent.Info,
-    opts?: { sessionID?: SessionID },
+    opts?: { sessionID?: SessionID; loadedSkillIds?: Set<string> },
   ) {
     const tools = await all()
-    const allow = opts?.sessionID ? await AbSpec.toolPredicate(opts.sessionID) : () => true
+    const allow = opts?.sessionID
+      ? await (async () => {
+          const sid = opts.sessionID!
+          const aid = await AbSpec.effectiveAgentId(sid)
+          const cfg = await AbSpec.getConfiguration(aid)
+          return (id: string) => AbSpec.toolAllows(cfg, id, opts.loadedSkillIds)
+        })()
+      : () => true
     const result = await Promise.all(
       tools
         .filter((t) => {

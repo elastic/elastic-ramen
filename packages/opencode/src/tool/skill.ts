@@ -6,6 +6,9 @@ import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
 import { AbSpec } from "@/elastic/ab-spec"
+import { ElasticAuth } from "@/elastic/auth"
+import { KibanaGateway } from "@/elastic/kibana-gateway"
+import { kibanaSkillSlug, kibanaSyncedSkillFolderSlug } from "@/elastic/kibana-skills-sync"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent, ctx?.sessionID)
@@ -61,6 +64,20 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {},
       })
 
+      let kid: string | undefined
+      const ids = cfg?.skill_ids
+      if (ids?.length) {
+        const slug = kibanaSyncedSkillFolderSlug(skill.location)
+        if (slug) kid = ids.find((sid) => kibanaSkillSlug(sid) === slug)
+        if (!kid) {
+          const auth = await ElasticAuth.check().catch(() => undefined)
+          const url = auth?.context?.kibana_url
+          const key = auth?.context?.api_key
+          if (auth?.configured && url && key)
+            kid = await KibanaGateway.matchAgentBuilderSkillIdByName(url, key, skill.name, ids)
+        }
+      }
+
       const embedded = skill.location.startsWith("embedded:")
       const dir = embedded ? "" : path.dirname(skill.location)
       const base = embedded ? skill.location : pathToFileURL(dir).href
@@ -89,7 +106,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       return {
         title: `Loaded skill: ${skill.name}`,
         output: [
-          `<skill_content name="${skill.name}">`,
+          `<skill_content name="${skill.name}"${kid ? ` kibana_skill_id="${kid}"` : ""}>`,
           `# Skill: ${skill.name}`,
           "",
           skill.content.trim(),
@@ -106,6 +123,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {
           name: skill.name,
           dir,
+          ...(kid ? { kibana_skill_id: kid } : {}),
         },
       }
     },

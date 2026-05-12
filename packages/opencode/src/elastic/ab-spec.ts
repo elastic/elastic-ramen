@@ -1,18 +1,23 @@
 // Copyright (c) 2026-present, Elastic NV
-import path from "path"
 import { Config } from "@/config/config"
 import { KibanaClient } from "./client"
 import { Handover } from "./handover"
 import { AbAgent } from "./ab-agent"
-import { kibanaSkillSlug } from "./kibana-skills-sync"
+import { ElasticAuth } from "./auth"
+import { KibanaGateway } from "./kibana-gateway"
+import { kibanaSkillSlug, kibanaSyncedSkillFolderSlug } from "./kibana-skills-sync"
 
 const KIBANA_TOOL_PREFIX = "kibana_"
+/** MCP registry keys from {@link MCP.tools}: `eab` × Agent Builder proxy × sanitized tool name. */
+const EAB_MCP_PREFIX = "eab_"
 const CACHE_MS = 120_000
 
 /** Subset of Kibana {@link AgentConfiguration} from GET /api/agent_builder/agents/:id */
 export type Cfg = {
   tools: { tool_ids: string[] }[]
   skill_ids?: string[]
+  /** Per GET /api/agent_builder/skills/{id}: tools attached to that skill (may be deferred until skill load). */
+  skill_tools?: Record<string, string[]>
   instructions?: string
   research?: string
   answer?: string
@@ -95,6 +100,19 @@ export namespace AbSpec {
     } catch {
       cfg = null
     }
+    if (cfg?.skill_ids?.length) {
+      const auth = await ElasticAuth.check().catch(() => undefined)
+      const url = auth?.context?.kibana_url
+      const key = auth?.context?.api_key
+      if (auth?.configured && url && key) {
+        const skill_tools: Record<string, string[]> = {}
+        for (const sid of cfg.skill_ids) {
+          const ids = await KibanaGateway.tryFetchAgentBuilderSkillToolIds(url, key, sid)
+          if (ids?.length) skill_tools[sid] = ids
+        }
+        if (Object.keys(skill_tools).length > 0) cfg.skill_tools = skill_tools
+      }
+    }
     cache.set(agentId, { at: now, cfg, name })
     return { cfg, name }
   }
@@ -103,31 +121,60 @@ export namespace AbSpec {
     return (await getAgentMeta(agentId)).cfg
   }
 
-  /** When `cfg` is null (fetch failed), do not strip Kibana tools. */
-  export function toolAllows(cfg: Cfg | null, toolId: string): boolean {
-    if (!toolId.startsWith(KIBANA_TOOL_PREFIX)) return true
+  /**
+   * MCP registry suffix matches {@link MCP.tools}: `mcpTool.name` with non-[a-zA-Z0-9_-] replaced by `_`.
+   * Kibana returns canonical ids that may contain `.` etc.; compare via sanitizing the Kibana id.
+   */
+  function kibanaToolIdMatchesMcpBare(mcpBareSuffix: string, kibanaToolId: string): boolean {
+    if (kibanaToolId === mcpBareSuffix) return true
+    return kibanaToolId.replace(/[^a-zA-Z0-9_-]/g, "_") === mcpBareSuffix
+  }
+
+  /**
+   * @param loaded When provided, tool ids that appear only under {@link Cfg.skill_tools} require that
+   *   Kibana skill to have been loaded via the `skill` tool. When omitted (e.g. batch/CLI), all
+   *   skill-linked tools are allowed without a prior load.
+   */
+  function sessionToolAllowed(cfg: Cfg | null, bareId: string, loaded: Set<string> | undefined): boolean {
     if (!cfg) return true
-    if (!cfg.tools.length) return false
-    const flat = cfg.tools.flatMap((x) => x.tool_ids)
-    if (flat.includes("*")) return true
-    return flat.includes(toolId)
+    const direct = cfg.tools.flatMap((x) => x.tool_ids)
+    if (direct.includes("*")) return true
+    const directSet = new Set(direct.filter((x) => x !== "*"))
+    if (directSet.has(bareId)) return true
+    if ([...directSet].some((d) => kibanaToolIdMatchesMcpBare(bareId, d))) return true
+
+    const st = cfg.skill_tools
+    if (!st || Object.keys(st).length === 0) return false
+
+    const owners = Object.entries(st)
+      .filter(([, ids]) => ids.some((kid) => kibanaToolIdMatchesMcpBare(bareId, kid)))
+      .map(([sid]) => sid)
+    if (owners.length === 0) return false
+
+    if (loaded === undefined) return true
+
+    return owners.some((sid) => loaded.has(sid))
+  }
+
+  /** When `cfg` is null (fetch failed), do not strip Kibana registry or EAB MCP tools. */
+  export function toolAllows(cfg: Cfg | null, toolId: string, loaded?: Set<string>) {
+    if (!toolId.startsWith(KIBANA_TOOL_PREFIX)) return true
+    return sessionToolAllowed(cfg, toolId, loaded)
+  }
+
+  /**
+   * Agent Builder tools exposed via the `eab` MCP proxy use registry keys `eab_<toolName>` (see
+   * {@link MCP.tools}). Same allow rules as {@link toolAllows}.
+   */
+  export function mcpToolAllows(cfg: Cfg | null, registryKey: string, loaded?: Set<string>) {
+    if (!registryKey.startsWith(EAB_MCP_PREFIX)) return true
+    return sessionToolAllowed(cfg, registryKey.slice(EAB_MCP_PREFIX.length), loaded)
   }
 
   export async function toolPredicate(sessionID: string): Promise<(id: string) => boolean> {
     const aid = await effectiveAgentId(sessionID)
     const c = await getConfiguration(aid)
-    return (id: string) => toolAllows(c, id)
-  }
-
-  const KIBANA_SKILL_MARKER = `${path.sep}skill${path.sep}kibana${path.sep}`
-
-  function kibanaSlugFromLocation(loc: string): string | undefined {
-    const idx = loc.indexOf(KIBANA_SKILL_MARKER)
-    if (idx === -1) return undefined
-    const tail = loc.slice(idx + KIBANA_SKILL_MARKER.length)
-    const parts = tail.split(/[/\\]+/).filter(Boolean)
-    if (parts.length < 2) return undefined
-    return parts[1]
+    return (id: string) => toolAllows(c, id, undefined)
   }
 
   /**
@@ -136,7 +183,7 @@ export namespace AbSpec {
    */
   export function skillAllows(cfg: Cfg | null, skillLocation: string): boolean {
     if (!cfg || cfg.skill_ids === undefined) return true
-    const slug = kibanaSlugFromLocation(skillLocation)
+    const slug = kibanaSyncedSkillFolderSlug(skillLocation)
     if (!slug) return true
     if (cfg.skill_ids.length === 0) return false
     return cfg.skill_ids.some((id) => kibanaSkillSlug(id) === slug)
@@ -160,7 +207,7 @@ export namespace AbSpec {
       sections.push(
         `The active Kibana Agent Builder agent for this RAMEN session is **${name ?? aid}** (agent id: \`${aid}\`). ` +
           `If the user asks which Agent Builder agent is in use, state this id and name. ` +
-          `Native \`kibana_*\` tools and Kibana-synced skills follow this agent's configuration in Kibana.`,
+          `Native \`kibana_*\` tools and \`eab_*\` MCP tools follow the agent's direct tool list in Kibana; tools that exist only on an assigned skill appear after the model loads that skill with the \`skill\` tool in this chat.`,
       )
       if (!cfg) {
         sections.push(

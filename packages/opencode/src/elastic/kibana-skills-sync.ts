@@ -21,6 +21,17 @@ export function kibanaSkillSlug(raw: string) {
   return `skill-${createHash("sha256").update(trimmed).digest("hex").slice(0, 16)}`
 }
 
+/** Directory segment for a synced Kibana skill under `.../skill/kibana/<profile>/<this>/SKILL.md`. */
+export function kibanaSyncedSkillFolderSlug(loc: string): string | undefined {
+  const marker = `${path.sep}skill${path.sep}kibana${path.sep}`
+  const idx = loc.indexOf(marker)
+  if (idx === -1) return undefined
+  const tail = loc.slice(idx + marker.length)
+  const parts = tail.split(/[/\\]+/).filter(Boolean)
+  if (parts.length < 2) return undefined
+  return parts[1]
+}
+
 function markdown(detail: KibanaGateway.AgentBuilderSkillDetail) {
   const lines = [
     "---",

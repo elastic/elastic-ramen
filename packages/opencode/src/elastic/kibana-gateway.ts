@@ -153,6 +153,24 @@ export namespace KibanaGateway {
     return out
   }
 
+  /** Resolve an Agent Builder skill id when local sync slug matching fails (same display name as Kibana). */
+  export async function matchAgentBuilderSkillIdByName(
+    kibanaUrl: string,
+    apiKey: string,
+    displayName: string,
+    allowedIds: string[],
+  ) {
+    const list = await tryFetchAgentBuilderSkillList(kibanaUrl, apiKey)
+    if (!list?.length) return undefined
+    const norm = displayName.trim().toLowerCase()
+    const allow = new Set(allowedIds)
+    for (const row of list) {
+      if (!allow.has(row.id)) continue
+      if (row.name.trim().toLowerCase() === norm) return row.id
+    }
+    return undefined
+  }
+
   /** Full skill definition for local sync (markdown source). */
   export async function tryFetchAgentBuilderSkill(
     kibanaUrl: string,
@@ -191,6 +209,60 @@ export namespace KibanaGateway {
       content,
       referenced_content: referenced,
     } satisfies AgentBuilderSkillDetail
+  }
+
+  /** Tool ids linked to a skill in Agent Builder (GET skill — shapes vary by Kibana version). */
+  export function skillJsonToolIds(json: Record<string, unknown>): string[] {
+    const out: string[] = []
+    const push = (v: unknown) => {
+      if (typeof v === "string" && v.trim()) out.push(v.trim())
+    }
+    const walk = (arr: unknown) => {
+      if (!Array.isArray(arr)) return
+      for (const x of arr) {
+        if (typeof x === "string") push(x)
+        else if (x && typeof x === "object") {
+          const o = x as Record<string, unknown>
+          push(o.id)
+          push(o.tool_id)
+          push(o.toolId)
+          walk(o.tool_ids)
+        }
+      }
+    }
+
+    walk(json.tool_ids)
+    walk(json.tools)
+    walk(json.tool_references)
+    walk(json.toolReferences)
+
+    const cfg = json.configuration
+    if (cfg && typeof cfg === "object") {
+      const c = cfg as Record<string, unknown>
+      walk(c.tool_ids)
+      walk(c.tools)
+      walk(c.tool_references)
+      walk(c.toolReferences)
+      const nested = c.configuration
+      if (nested && typeof nested === "object") {
+        const n = nested as Record<string, unknown>
+        walk(n.tool_ids)
+        walk(n.tools)
+      }
+    }
+
+    return [...new Set(out)]
+  }
+
+  /** Fetches a skill and returns Agent Builder tool ids assigned to that skill (not markdown sync). */
+  export async function tryFetchAgentBuilderSkillToolIds(kibanaUrl: string, apiKey: string, skillId: string) {
+    const json = await tryFetchJson<Record<string, unknown>>(
+      `${agentBuilderApiRoot(kibanaUrl)}/skills/${encodeURIComponent(skillId)}`,
+      authHeaders(apiKey),
+    )
+    if (!json) return undefined
+    const ids = skillJsonToolIds(json)
+    return ids.length ? ids : undefined
   }
 
   function parseConnectorRow(row: Record<string, unknown>): ConnectorRow | undefined {
