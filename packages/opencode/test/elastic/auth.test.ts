@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import path from "path"
 import { ElasticAuth } from "../../src/elastic/auth"
+import { Global } from "../../src/global"
+import { Filesystem } from "../../src/util/filesystem"
+import { tmpdir } from "../fixture/fixture"
 
 describe("ElasticAuth.canon", () => {
   test("falls back to `default` for empty, whitespace-only, and all-invalid input", () => {
@@ -94,5 +98,150 @@ describe("ElasticAuth.profileNameFromSetup", () => {
     expect(ElasticAuth.profileNameFromSetup(undefined, "https://acme-es123.es.us-east-1.aws.elastic-cloud.com")).toBe(
       "acme",
     )
+  })
+})
+
+describe("ElasticAuth.save → global config", () => {
+  // Each test gets its own Global.Path.config and cwd so filesystem effects don't leak.
+  let originalGlobalConfig: string
+  let originalCwd: string
+  let globalDir: Awaited<ReturnType<typeof tmpdir>>
+  let projectDir: Awaited<ReturnType<typeof tmpdir>>
+
+  beforeEach(async () => {
+    originalGlobalConfig = Global.Path.config
+    originalCwd = process.cwd()
+    globalDir = await tmpdir()
+    projectDir = await tmpdir()
+    ;(Global.Path as { config: string }).config = globalDir.path
+    process.chdir(projectDir.path)
+  })
+
+  afterEach(async () => {
+    process.chdir(originalCwd)
+    ;(Global.Path as { config: string }).config = originalGlobalConfig
+    await globalDir[Symbol.asyncDispose]()
+    await projectDir[Symbol.asyncDispose]()
+  })
+
+  test("writes provider/model/eab to global, not to cwd", async () => {
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: { id: "x" } } } },
+      model: "kibana/default",
+      activate: true,
+    })
+
+    const globalCfg = path.join(globalDir.path, "elastic_ramen.json")
+    const localCfg = path.join(projectDir.path, "elastic_ramen.json")
+
+    expect(await Filesystem.exists(globalCfg)).toBe(true)
+    expect(await Filesystem.exists(localCfg)).toBe(false)
+
+    const json = (await Filesystem.readJson(globalCfg)) as Record<string, any>
+    expect(json.model).toBe("kibana/default")
+    expect(json.provider.kibana.models.default.id).toBe("x")
+    expect(json.mcp.eab.type).toBe("local")
+    expect(json.permission["eab_*"]).toBe("allow")
+  })
+
+  test("strips provider/model from a stale project-local config but preserves other keys", async () => {
+    const localCfg = path.join(projectDir.path, "elastic_ramen.json")
+    await Filesystem.writeJson(localCfg, {
+      $schema: "https://elastic.co/config.json",
+      provider: { kibana: { models: { stale: {} } } },
+      model: "kibana/stale",
+      agents: { foo: { description: "keep me" } },
+    })
+
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: {} } } },
+      model: "kibana/default",
+      activate: true,
+    })
+
+    const after = (await Filesystem.readJson(localCfg)) as Record<string, any>
+    expect(after.provider).toBeUndefined()
+    expect(after.model).toBeUndefined()
+    expect(after.agents.foo.description).toBe("keep me")
+    expect(after.$schema).toBe("https://elastic.co/config.json")
+  })
+
+  test("strips provider/model from .elastic-ramen overrides too", async () => {
+    const overrideCfg = path.join(projectDir.path, ".elastic-ramen", "elastic_ramen.json")
+    await Filesystem.writeJson(overrideCfg, {
+      provider: { kibana: { models: { stale: {} } } },
+      model: "kibana/stale",
+      agents: { bar: {} },
+    })
+
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: {} } } },
+      model: "kibana/default",
+    })
+
+    const after = (await Filesystem.readJson(overrideCfg)) as Record<string, any>
+    expect(after.provider).toBeUndefined()
+    expect(after.model).toBeUndefined()
+    expect(after.agents.bar).toEqual({})
+  })
+
+  test("preserves comments and other keys in a project-local .jsonc when stripping", async () => {
+    const localCfg = path.join(projectDir.path, "elastic_ramen.jsonc")
+    const before = `// User-edited project config
+{
+  // We want to keep this comment
+  "agents": { "foo": {} },
+  "provider": { "kibana": { "models": { "stale": {} } } },
+  "model": "kibana/stale"
+}
+`
+    await Filesystem.write(localCfg, before)
+
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: {} } } },
+      model: "kibana/default",
+    })
+
+    const after = await Filesystem.readText(localCfg)
+    expect(after).toContain("User-edited project config")
+    expect(after).toContain("We want to keep this comment")
+    expect(after).toContain("agents")
+    expect(after).not.toContain("kibana/stale")
+    expect(after).not.toMatch(/"provider"\s*:/)
+    expect(after).not.toMatch(/"model"\s*:/)
+  })
+
+  test("reset clears provider/model from global and project-local", async () => {
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: {} } } },
+      model: "kibana/default",
+    })
+    const localCfg = path.join(projectDir.path, "elastic_ramen.json")
+    await Filesystem.writeJson(localCfg, {
+      provider: { kibana: {} },
+      model: "kibana/x",
+      agents: { keep: {} },
+    })
+
+    await ElasticAuth.reset()
+
+    const globalAfter = (await Filesystem.readJson(path.join(globalDir.path, "elastic_ramen.json"))) as Record<string, any>
+    expect(globalAfter.provider).toBeUndefined()
+    expect(globalAfter.model).toBeUndefined()
+
+    const localAfter = (await Filesystem.readJson(localCfg)) as Record<string, any>
+    expect(localAfter.provider).toBeUndefined()
+    expect(localAfter.model).toBeUndefined()
+    expect(localAfter.agents.keep).toEqual({})
   })
 })
