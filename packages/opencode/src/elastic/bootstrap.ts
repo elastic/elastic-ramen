@@ -1,4 +1,5 @@
 // Copyright (c) 2026-present, Elastic NV
+import { AbAgent } from "./ab-agent"
 import { KibanaClient } from "./client"
 import { Sse } from "./sse"
 import { Log } from "@/util/log"
@@ -10,7 +11,6 @@ import { Log } from "@/util/log"
  */
 export namespace Bootstrap {
   const log = Log.create({ service: "bootstrap" })
-  const AGENT_ID = "elastic-ai-agent"
   const PROBE_INPUT = "Initialization probe — please ignore."
   const TIMEOUT_MS = 30_000
 
@@ -23,8 +23,9 @@ export namespace Bootstrap {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
     try {
+      const aid = await AbAgent.preferred()
       const res = await KibanaClient.agentBuilder().converseAsync(
-        { agent_id: AGENT_ID, input: PROBE_INPUT },
+        { agent_id: aid, input: PROBE_INPUT },
         { signal: ctrl.signal },
       )
       if (!res.body) throw new Error("kickstart: empty response body")
