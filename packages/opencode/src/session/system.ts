@@ -12,6 +12,7 @@ import PROMPT_TRINITY from "./prompt/trinity.txt"
 import PROMPT_ELASTIC_SRE from "../elastic/instructions.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
+import type { SessionID } from "@/session/schema"
 import { PermissionNext } from "@/permission/next"
 import { Skill } from "@/skill"
 
@@ -60,10 +61,10 @@ export namespace SystemPrompt {
     ]
   }
 
-  export async function skills(agent: Agent.Info) {
+  export async function skills(agent: Agent.Info, sessionID?: SessionID) {
     if (PermissionNext.disabled(["skill"], agent.permission).has("skill")) return
 
-    const list = await Skill.available(agent)
+    const list = await Skill.available(agent, sessionID)
 
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",
