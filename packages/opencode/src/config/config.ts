@@ -1463,6 +1463,7 @@ export namespace Config {
     })()
 
     global.reset()
+    void import("@/elastic/ab-spec").then((m) => m.AbSpec.bust())
 
     void import("@/elastic/ab-spec").then((m) => m.AbSpec.bust())
 
