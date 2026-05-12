@@ -5,13 +5,9 @@ import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
-import { AbSpec } from "@/elastic/ab-spec"
-import { ElasticAuth } from "@/elastic/auth"
-import { KibanaGateway } from "@/elastic/kibana-gateway"
-import { kibanaSkillSlug, kibanaSyncedSkillFolderSlug } from "@/elastic/kibana-skills-sync"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await Skill.available(ctx?.agent, ctx?.sessionID)
+  const list = await Skill.available(ctx?.agent)
 
   const description =
     list.length === 0
@@ -52,31 +48,12 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
       }
 
-      const cfg = await AbSpec.getConfiguration(await AbSpec.effectiveAgentId(ctx.sessionID))
-      if (!AbSpec.skillAllows(cfg, skill.location)) {
-        throw new Error(`Skill "${params.name}" is not enabled for this session's Agent Builder agent`)
-      }
-
       await ctx.ask({
         permission: "skill",
         patterns: [params.name],
         always: [params.name],
         metadata: {},
       })
-
-      let kid: string | undefined
-      const ids = cfg?.skill_ids
-      if (ids?.length) {
-        const slug = kibanaSyncedSkillFolderSlug(skill.location)
-        if (slug) kid = ids.find((sid) => kibanaSkillSlug(sid) === slug)
-        if (!kid) {
-          const auth = await ElasticAuth.check().catch(() => undefined)
-          const url = auth?.context?.kibana_url
-          const key = auth?.context?.api_key
-          if (auth?.configured && url && key)
-            kid = await KibanaGateway.matchAgentBuilderSkillIdByName(url, key, skill.name, ids)
-        }
-      }
 
       const embedded = skill.location.startsWith("embedded:")
       const dir = embedded ? "" : path.dirname(skill.location)
@@ -106,7 +83,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       return {
         title: `Loaded skill: ${skill.name}`,
         output: [
-          `<skill_content name="${skill.name}"${kid ? ` kibana_skill_id="${kid}"` : ""}>`,
+          `<skill_content name="${skill.name}">`,
           `# Skill: ${skill.name}`,
           "",
           skill.content.trim(),
@@ -123,7 +100,6 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {
           name: skill.name,
           dir,
-          ...(kid ? { kibana_skill_id: kid } : {}),
         },
       }
     },

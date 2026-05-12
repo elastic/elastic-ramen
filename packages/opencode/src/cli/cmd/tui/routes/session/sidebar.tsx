@@ -19,7 +19,6 @@ import { ElasticAuth } from "@/elastic/auth"
 import { SessionProfile } from "@/elastic/session-profile"
 import { Link } from "../../ui/link"
 import { kibanaLinkVersion } from "../../util/kibana-link"
-import { AbAgent } from "@/elastic/ab-agent"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -50,12 +49,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
 
   const context = createMemo(() => computeContextInfo(messages(), sync.data.provider))
-
-  const abId = createMemo(() => {
-    const raw = sync.data.config.kibana?.agent_builder_agent_id?.trim()
-    if (raw) return raw
-    return AbAgent.builtin
-  })
 
   const [agentBuilderLink] = createResource(
     () => [props.sessionID, kibanaLinkVersion()] as const,
@@ -111,9 +104,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </text>
               <Show when={session().share?.url}>
                 <text fg={theme.textMuted}>{session().share!.url}</text>
-              </Show>
-              <Show when={context()?.isKibana}>
-                <text fg={theme.textMuted}>Agent Builder: {abId()}</text>
               </Show>
               <Show when={context()?.isKibana && agentBuilderLink()}>
                 <Link href={agentBuilderLink()!} fg={theme.textMuted} wrapMode="none">

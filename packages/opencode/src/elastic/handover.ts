@@ -1,6 +1,5 @@
 // Copyright (c) 2026-present, Elastic NV
 import { KibanaClient, type ConversationRound, type Conversation } from "./client"
-import { AbAgent } from "./ab-agent"
 import { Bootstrap } from "./bootstrap"
 import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
@@ -27,6 +26,8 @@ export namespace Handover {
     return KibanaClient.conversations()
   }
 
+  const DEFAULT_AGENT_ID = "elastic-ai-agent"
+
   export interface Link {
     conversationID: string
     agentID: string
@@ -36,10 +37,10 @@ export namespace Handover {
 
   function normalize(stored: unknown): Link | undefined {
     if (!stored) return undefined
-    if (typeof stored === "string") return { conversationID: stored, agentID: AbAgent.builtin }
+    if (typeof stored === "string") return { conversationID: stored, agentID: DEFAULT_AGENT_ID }
     if (typeof stored === "object" && "conversationID" in stored && typeof (stored as Link).conversationID === "string") {
       const s = stored as Link
-      return { conversationID: s.conversationID, agentID: s.agentID || AbAgent.builtin }
+      return { conversationID: s.conversationID, agentID: s.agentID || DEFAULT_AGENT_ID }
     }
     return undefined
   }
@@ -83,7 +84,7 @@ export namespace Handover {
     }
   }
 
-  export function link(sessionID: string, conversationID: string, agentID: string = AbAgent.builtin) {
+  export function link(sessionID: string, conversationID: string, agentID: string = DEFAULT_AGENT_ID) {
     const record: Link = { conversationID, agentID }
     mapping.set(sessionID, record)
     Storage.write(["kibana_link", sessionID], record).catch(() => {})
@@ -160,13 +161,12 @@ export namespace Handover {
       }
     }
     log.info("creating elasticsearch conversation", { sessionID })
-    const aid = await AbAgent.preferred()
     const res = await api.create({
-      agent_id: aid,
+      agent_id: DEFAULT_AGENT_ID,
       title: `RAMEN: ${title}`,
       conversation_rounds: conversationRounds,
     })
-    link(sessionID, res.id, aid)
+    link(sessionID, res.id, DEFAULT_AGENT_ID)
   }
 
   export async function list(opts?: { agent_id?: string }) {

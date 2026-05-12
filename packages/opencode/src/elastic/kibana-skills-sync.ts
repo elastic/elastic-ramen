@@ -13,23 +13,11 @@ const TTL_MS = 60 * 60 * 1000
 const BATCH_SIZE = 10
 const STAMP_FILE = ".sync-stamp.json"
 
-/** Same slug as synced skill folder names under `skill/kibana/<profile>/`. */
-export function kibanaSkillSlug(raw: string) {
+function slug(raw: string) {
   const trimmed = raw.trim()
   const sanitized = trimmed.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "")
   if (sanitized.length > 0 && sanitized !== "." && sanitized !== "..") return sanitized
   return `skill-${createHash("sha256").update(trimmed).digest("hex").slice(0, 16)}`
-}
-
-/** Directory segment for a synced Kibana skill under `.../skill/kibana/<profile>/<this>/SKILL.md`. */
-export function kibanaSyncedSkillFolderSlug(loc: string): string | undefined {
-  const marker = `${path.sep}skill${path.sep}kibana${path.sep}`
-  const idx = loc.indexOf(marker)
-  if (idx === -1) return undefined
-  const tail = loc.slice(idx + marker.length)
-  const parts = tail.split(/[/\\]+/).filter(Boolean)
-  if (parts.length < 2) return undefined
-  return parts[1]
 }
 
 function markdown(detail: KibanaGateway.AgentBuilderSkillDetail) {
@@ -145,7 +133,7 @@ export namespace KibanaSkillsSync {
             log.warn("skipped Kibana skill", { id: row.id })
             return
           }
-          const id = kibanaSkillSlug(detail.id)
+          const id = slug(detail.id)
           const dest = path.resolve(path.join(root, id, "SKILL.md"))
           if (!Filesystem.contains(root, dest)) {
             partial = true

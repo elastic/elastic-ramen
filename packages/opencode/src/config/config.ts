@@ -123,12 +123,6 @@ export namespace Config {
 
     // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      // Legacy filename at instance root (Config.update historically wrote `config.json` only).
-      // Loaded before findUp so `elastic_ramen` in the same directory still wins.
-      const legacy = path.join(Instance.directory, "config.json")
-      if (existsSync(legacy)) {
-        result = mergeConfigConcatArrays(result, await loadFile(legacy))
-      }
       for (const file of await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.worktree)) {
         result = mergeConfigConcatArrays(result, await loadFile(file))
       }
@@ -1184,17 +1178,6 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
-      kibana: z
-        .object({
-          agent_builder_agent_id: z
-            .string()
-            .optional()
-            .describe(
-              "Agent Builder agent id for new RAMEN↔Kibana mirrored conversations and bootstrap (default: elastic-ai-agent). Set via /kibana-agent.",
-            ),
-        })
-        .optional()
-        .describe("Kibana / Agent Builder preferences when using RAMEN with Elastic auth"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
@@ -1342,37 +1325,10 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = projectConfigFile()
-    const before = await Filesystem.readText(filepath).catch((err: any) => {
-      if (err.code === "ENOENT") return "{}"
-      throw new JsonError({ path: filepath }, { cause: err })
-    })
-
-    await (async () => {
-      if (!filepath.endsWith(".jsonc")) {
-        const existing = parseConfig(before, filepath)
-        const merged = mergeDeep(existing, config)
-        await Filesystem.writeJson(filepath, merged)
-        return
-      }
-
-      const updated = patchJsonc(before, config)
-      parseConfig(updated, filepath)
-      await Filesystem.write(filepath, updated)
-    })()
-
-    void import("@/elastic/ab-spec").then((m) => m.AbSpec.bust())
+    const filepath = path.join(Instance.directory, "config.json")
+    const existing = await loadFile(filepath)
+    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
     await Instance.dispose()
-  }
-
-  function projectConfigFile() {
-    const candidates = ["elastic_ramen.jsonc", "elastic_ramen.json", "config.json"].map((file) =>
-      path.join(Instance.directory, file),
-    )
-    for (const file of candidates) {
-      if (existsSync(file)) return file
-    }
-    return path.join(Instance.directory, "elastic_ramen.json")
   }
 
   export function globalConfigFile() {
@@ -1463,9 +1419,6 @@ export namespace Config {
     })()
 
     global.reset()
-    void import("@/elastic/ab-spec").then((m) => m.AbSpec.bust())
-
-    void import("@/elastic/ab-spec").then((m) => m.AbSpec.bust())
 
     void Instance.disposeAll()
       .catch(() => undefined)

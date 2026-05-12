@@ -51,7 +51,6 @@ import type { ConversationRound } from "@/elastic/client"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
 import { DialogKibanaContext } from "@tui/component/dialog-kibana-context"
 import { DialogKibanaTakeover } from "@tui/component/dialog-kibana-takeover"
-import { DialogKibanaAb } from "@tui/component/dialog-kibana-ab"
 import { ElasticProfileProvider, useElasticProfile } from "@tui/context/elastic-profile"
 import { KibanaSkillsSync } from "@/elastic/kibana-skills-sync"
 import { bumpKibanaLinkVersion } from "@tui/util/kibana-link"
@@ -613,18 +612,6 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogKibanaTakeover />)
-      },
-    },
-    {
-      title: "Choose Agent Builder agent",
-      value: "kibana.ab",
-      category: "Kibana",
-      slash: {
-        name: "kibana-agent",
-        aliases: ["agent-builder-agent", "ab-agent"],
-      },
-      onSelect: () => {
-        dialog.replace(() => <DialogKibanaAb />)
       },
     },
     {

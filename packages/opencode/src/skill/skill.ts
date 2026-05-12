@@ -15,10 +15,8 @@ import { Discovery } from "./discovery"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import type { Agent } from "@/agent/agent"
-import type { SessionID } from "@/session/schema"
 import { PermissionNext } from "@/permission/next"
 import { KibanaSkillsSync } from "@/elastic/kibana-skills-sync"
-import { AbSpec } from "@/elastic/ab-spec"
 
 // Injected at build time via Bun's define
 declare const ELASTIC_SKILLS_EMBEDDED: Record<string, string> | undefined
@@ -234,16 +232,10 @@ export namespace Skill {
     return state().then((x) => x.dirs)
   }
 
-  export async function available(agent?: Agent.Info, sessionID?: SessionID) {
+  export async function available(agent?: Agent.Info) {
     const list = await all()
-    let filtered = !agent
-      ? list
-      : list.filter((skill) => PermissionNext.evaluate("skill", skill.name, agent.permission).action !== "deny")
-    if (sessionID) {
-      const pred = await AbSpec.skillPredicate(sessionID).catch(() => () => true)
-      filtered = filtered.filter((s) => pred(s.location))
-    }
-    return filtered
+    if (!agent) return list
+    return list.filter((skill) => PermissionNext.evaluate("skill", skill.name, agent.permission).action !== "deny")
   }
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {

@@ -355,8 +355,6 @@ export namespace ElasticAuth {
     const patches: ConfigPatch[] = []
     if (existing.$schema === undefined) patches.push({ path: ["$schema"], value: "https://elastic.co/config.json" })
     patches.push({ path: ["provider"], value: opts.provider })
-    // Agent Builder agent is per-Kibana-deployment; clear so users re-select after a profile switch or new setup.
-    patches.push({ path: ["kibana", "agent_builder_agent_id"], value: undefined })
     if (opts.model) {
       const keep = (opts.preserveModelIfKibana ?? false) && shouldKeepKibanaModel(existing.model, opts.provider)
       if (!keep) patches.push({ path: ["model"], value: opts.model })
@@ -424,11 +422,10 @@ export namespace ElasticAuth {
 
     const cfg = Config.globalConfigFile()
     const existing = await readConfigFile(cfg).catch(() => undefined)
-    if (existing) {
+    if (existing && ("provider" in existing || "model" in existing)) {
       await patchConfigFile(cfg, [
         { path: ["provider"], value: undefined },
         { path: ["model"], value: undefined },
-        { path: ["kibana", "agent_builder_agent_id"], value: undefined },
       ])
     }
     await stripProjectProviderModel()

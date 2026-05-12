@@ -1015,7 +1015,7 @@ export type GlobalEvent = {
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
 /**
- * Server configuration for ramen serve and web commands
+ * Server configuration for opencode serve and web commands
  */
 export type ServerConfig = {
   /**
@@ -1031,7 +1031,7 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
-   * Custom domain name for mDNS service (default: ramen.local)
+   * Custom domain name for mDNS service (default: opencode.local)
    */
   mdnsDomain?: string
   /**
@@ -1315,7 +1315,7 @@ export type Config = {
   logLevel?: LogLevel
   server?: ServerConfig
   /**
-   * Command configuration, see https://elastic.co/docs/commands
+   * Command configuration, see https://opencode.ai/docs/commands
    */
   command?: {
     [key: string]: {
@@ -1345,7 +1345,7 @@ export type Config = {
   plugin?: Array<string>
   snapshot?: boolean
   /**
-   * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing (default: disabled)
+   * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */
   share?: "manual" | "auto" | "disabled"
   /**
@@ -1373,7 +1373,7 @@ export type Config = {
    */
   small_model?: string
   /**
-   * Default agent to use when none is specified. Must be a primary agent. Falls back to 'investigate' if not set or if the specified agent is invalid.
+   * Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.
    */
   default_agent?: string
   /**
@@ -1389,7 +1389,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://elastic.co/docs/agents
+   * Agent configuration, see https://opencode.ai/docs/agents
    */
   agent?: {
     plan?: AgentConfig
@@ -1477,15 +1477,6 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
-  }
-  /**
-   * Kibana / Agent Builder preferences when using RAMEN with Elastic auth
-   */
-  kibana?: {
-    /**
-     * Agent Builder agent id for new RAMEN↔Kibana mirrored conversations and bootstrap (default: elastic-ai-agent). Set via /kibana-agent.
-     */
-    agent_builder_agent_id?: string
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -3686,51 +3677,6 @@ export type SessionUnrevertResponses = {
 }
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
-
-export type SessionSeedData = {
-  body?: {
-    rounds: Array<{
-      input: string
-      output: string
-      started?: string
-    }>
-    model: {
-      providerID: string
-      modelID: string
-    }
-    agent: string
-  }
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/session/{sessionID}/seed"
-}
-
-export type SessionSeedErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionSeedError = SessionSeedErrors[keyof SessionSeedErrors]
-
-export type SessionSeedResponses = {
-  /**
-   * Successfully seeded session
-   */
-  200: boolean
-}
-
-export type SessionSeedResponse = SessionSeedResponses[keyof SessionSeedResponses]
 
 export type PermissionRespondData = {
   body?: {

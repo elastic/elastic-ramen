@@ -1242,12 +1242,9 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    let info = provider.models[modelID]
+    let info: Model | undefined = provider.models[modelID]
     if (!info && providerID === "kibana") {
-      info = KibanaGateway.resolveKibanaModel(
-        provider.models as Record<string, { api?: { id?: string } }>,
-        modelID,
-      ) as typeof info
+      info = KibanaGateway.resolveKibanaModel(provider.models, modelID)
     }
     if (!info) {
       const availableModels = Object.keys(provider.models)

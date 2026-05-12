@@ -13,7 +13,6 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
-import type { SessionID } from "../session/schema"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
@@ -54,7 +53,6 @@ import {
 } from "./kibana"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
-import { AbSpec } from "@/elastic/ab-spec"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -180,21 +178,11 @@ export namespace ToolRegistry {
       modelID: string
     },
     agent?: Agent.Info,
-    opts?: { sessionID?: SessionID; loadedSkillIds?: Set<string> },
   ) {
     const tools = await all()
-    const allow = opts?.sessionID
-      ? await (async () => {
-          const sid = opts.sessionID!
-          const aid = await AbSpec.effectiveAgentId(sid)
-          const cfg = await AbSpec.getConfiguration(aid)
-          return (id: string) => AbSpec.toolAllows(cfg, id, opts.loadedSkillIds)
-        })()
-      : () => true
     const result = await Promise.all(
       tools
         .filter((t) => {
-          if (!allow(t.id)) return false
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
             return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
@@ -210,7 +198,7 @@ export namespace ToolRegistry {
         })
         .map(async (t) => {
           using _ = log.time(t.id)
-          const tool = await t.init({ agent, sessionID: opts?.sessionID })
+          const tool = await t.init({ agent })
           const output = {
             description: tool.description,
             parameters: tool.parameters,
