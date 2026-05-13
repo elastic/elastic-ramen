@@ -340,6 +340,81 @@ export namespace ElasticAuth {
     return connector in models
   }
 
+  function remoteEabMatches(eab: Record<string, unknown> | undefined, kibana: { url: string; apiKey: string }) {
+    if (!eab || eab.type !== "remote" || typeof eab.url !== "string") return false
+    const want = kibana.url.replace(/\/+$/, "") + "/api/agent_builder/mcp"
+    if (eab.url !== want) return false
+    const h = eab.headers
+    if (!h || typeof h !== "object" || Array.isArray(h)) return false
+    return (h as Record<string, string>).Authorization === "ApiKey " + kibana.apiKey
+  }
+
+  function pushEabMcpPatches(
+    patches: ConfigPatch[],
+    existing: Record<string, unknown>,
+    kibana?: { url: string; apiKey: string },
+  ) {
+    const mcp = existing.mcp as Record<string, unknown> | undefined
+    const eab = mcp?.eab as Record<string, unknown> | undefined
+    const hadEab = !!(eab && typeof eab === "object")
+    const legacy =
+      hadEab &&
+      eab!.type === "local" &&
+      Array.isArray(eab!.command) &&
+      (eab!.command as unknown[])[0] === "elastic"
+
+    if (legacy) patches.push({ path: ["mcp", "eab"], value: undefined })
+
+    if (kibana) {
+      const gap = !hadEab || legacy
+      const needsRemote = gap || !remoteEabMatches(eab, kibana)
+      if (needsRemote) {
+        patches.push({
+          path: ["mcp", "eab"],
+          value: {
+            type: "remote",
+            url: kibana.url.replace(/\/+$/, "") + "/api/agent_builder/mcp",
+            headers: { Authorization: "ApiKey " + kibana.apiKey },
+          },
+        })
+      }
+    }
+
+    const permission = existing.permission as Record<string, unknown> | undefined
+    if (!permission || !permission["eab_*"]) {
+      patches.push({ path: ["permission", "eab_*"], value: "allow" })
+    }
+  }
+
+  /** Remote Agent Builder MCP derived from the active Elastic CLI profile (when Kibana + API key exist). */
+  export async function remoteEabMcp(): Promise<Config.Mcp | undefined> {
+    const auth = await check()
+    if (!auth.configured || !auth.context?.kibana_url || !auth.context?.api_key) return undefined
+    const k = auth.context.kibana_url
+    const key = auth.context.api_key
+    return {
+      type: "remote",
+      url: k.replace(/\/+$/, "") + "/api/agent_builder/mcp",
+      headers: { Authorization: "ApiKey " + key },
+    }
+  }
+
+  /**
+   * Persist `mcp.eab` + `permission.eab_*` to global config when auth has Kibana credentials
+   * and the file is missing or stale. Does not dispose Instance (safe during MCP init).
+   */
+  export async function ensureEabMcpOnDisk() {
+    const auth = await check()
+    if (!auth.configured || !auth.context?.kibana_url || !auth.context?.api_key) return
+    const kibana = { url: auth.context.kibana_url, apiKey: auth.context.api_key }
+    const cfgPath = Config.globalConfigFile()
+    const existing = (await readConfigFile(cfgPath)) ?? {}
+    const patches: ConfigPatch[] = []
+    pushEabMcpPatches(patches, existing, kibana)
+    if (patches.length === 0) return
+    await patchConfigFile(cfgPath, patches)
+  }
+
   /**
    * Write `provider` (and optionally `model`) into the global `elastic_ramen.json`,
    * ensure the eab MCP entry when Kibana credentials are known, and strip any leftover
@@ -365,33 +440,7 @@ export namespace ElasticAuth {
       if (!keep) patches.push({ path: ["model"], value: opts.model })
     }
 
-    const mcp = existing.mcp as Record<string, unknown> | undefined
-    const eab = mcp?.eab as Record<string, unknown> | undefined
-    const hadEab = !!(eab && typeof eab === "object")
-    const legacy =
-      hadEab &&
-      eab!.type === "local" &&
-      Array.isArray(eab!.command) &&
-      (eab!.command as unknown[])[0] === "elastic"
-
-    if (legacy) patches.push({ path: ["mcp", "eab"], value: undefined })
-
-    const eabMissing = !hadEab || legacy
-    if (opts.kibana && eabMissing) {
-      patches.push({
-        path: ["mcp", "eab"],
-        value: {
-          type: "remote",
-          url: opts.kibana.url.replace(/\/+$/, "") + "/api/agent_builder/mcp",
-          headers: { Authorization: "ApiKey " + opts.kibana.apiKey },
-        },
-      })
-    }
-
-    const permission = existing.permission as Record<string, unknown> | undefined
-    if (!permission || !permission["eab_*"]) {
-      patches.push({ path: ["permission", "eab_*"], value: "allow" })
-    }
+    pushEabMcpPatches(patches, existing, opts.kibana)
 
     await patchConfigFile(cfg, patches)
     await stripProjectProviderModel()

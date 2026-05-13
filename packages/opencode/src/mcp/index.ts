@@ -206,10 +206,24 @@ export namespace MCP {
     return pids
   }
 
+  /** Merge persisted MCP config with live Elastic profile EAB (fixes missing/stale `mcp.eab` in RAMEN). */
+  async function resolvedMcpConfig(): Promise<Record<string, any>> {
+    await ElasticAuth.ensureEabMcpOnDisk()
+    const cfg = await Config.get()
+    const base = { ...(cfg.mcp ?? {}) }
+    const injected = await ElasticAuth.remoteEabMcp()
+    if (injected) base.eab = injected
+    const legacy = base.ab
+    if (legacy && typeof legacy === "object" && legacy !== null && "type" in legacy && isMcpConfigured(legacy as McpEntry)) {
+      if (!base.eab) base.eab = legacy
+      delete base.ab
+    }
+    return base
+  }
+
   const state = Instance.state(
     async () => {
-      const cfg = await Config.get()
-      const config: Record<string, any> = { ...cfg.mcp }
+      const config = await resolvedMcpConfig()
 
       const clients: Record<string, MCPClient> = {}
       const status: Record<string, Status> = {}
@@ -613,8 +627,7 @@ export namespace MCP {
 
   export async function status() {
     const s = await state()
-    const cfg = await Config.get()
-    const config = cfg.mcp ?? {}
+    const config = await resolvedMcpConfig()
     const result: Record<string, Status> = {}
 
     // Include all configured MCPs from config, not just connected ones
@@ -631,9 +644,11 @@ export namespace MCP {
   }
 
   export async function connect(name: string) {
-    const cfg = await Config.get()
-    const config = cfg.mcp ?? {}
-    const mcp = config[name]
+    const config = await resolvedMcpConfig()
+    let mcp = config[name]
+    if (name === "eab" && !isMcpConfigured(mcp)) {
+      mcp = (await ElasticAuth.remoteEabMcp()) as McpEntry | undefined
+    }
     if (!mcp) {
       log.error("MCP config not found", { name })
       return
