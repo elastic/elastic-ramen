@@ -41,6 +41,10 @@ jobs:
 
       - uses: elastic/oblt-actions/git/setup@v1
 
+      - name: Patch elastic/cli for RAMEN integration
+        run: git apply ../cli-patches/0001-ramen-integration.patch
+        working-directory: packages/cli
+
       - name: Install CLI dependencies
         run: bun install
         working-directory: packages/cli
