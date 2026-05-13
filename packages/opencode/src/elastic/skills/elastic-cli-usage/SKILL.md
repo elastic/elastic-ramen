@@ -1,69 +1,105 @@
 ---
 name: elastic-cli-usage
 description: >
-  Use this skill when invoking the elastic CLI or deciding whether to use
-  MCP tools vs the CLI. Activate when using the elastic_cli tool or deciding
-  how to query Elasticsearch / Kibana.
+  Use when invoking the elastic CLI via elastic_cli or choosing CLI vs MCP/native
+  Kibana tools. Covers shorthands, serverless gotchas, command names, and docs/ESQL flags.
 metadata:
-  version: 0.2.0
+  version: 0.3.0
   visibility: public
 ---
 
-# Elastic CLI Usage
+# Skill: elastic-cli-usage (verified gotchas)
 
-## Tool Priority
+Use `elastic_cli` tool for all CLI operations — credentials are injected automatically.
+The `elastic` binary is NOT on PATH in the shell environment; never use bash for this.
 
-**Always prefer MCP tools and native Kibana tools over the CLI when available.**
-The `eab` MCP server and built-in `kibana_*` tools are faster and return structured data.
-Use `elastic_cli` only as a fallback for operations not covered by those tools.
-
-| Task | Prefer |
-|------|--------|
-| ES\|QL queries | `eab` MCP tool |
-| Index / data-stream listing | `eab` MCP tool |
-| Cluster health | `elastic_cli` with `es cluster health --json` |
-| Docs lookup | `elastic_cli` with `docs search "<query>"` |
+For anything not listed here, run `es <namespace> --help` or `kb <namespace> --help`.
 
 ---
 
-## elastic_cli Tool
+## Shorthands
 
-Use the `elastic_cli` tool for all elastic CLI operations. It calls the TypeScript
-elastic CLI directly — no subprocess, no PATH issues, credentials injected automatically.
+`es` = `stack es`, `kb` = `stack kb`. Both work.
 
-### Command Structure
+---
 
-The top-level subcommands are:
+## Prefer MCP/native tools over CLI
 
-- `stack es <operation>` — Elasticsearch API operations
-- `stack kb <operation>` — Kibana API operations
-- `cloud <operation>` — Elastic Cloud management
-- `docs <operation>` — Documentation search and read
+| Task | Prefer instead |
+|------|---------------|
+| ES\|QL queries | `eab_platform_core_execute_esql` |
+| Index/datastream listing | `eab_platform_core_list_indices` |
+| Streams | `eab_platform_streams_*` |
+| Agent builder | `kibana_list_agents`, `kibana_list_tools` |
 
-The shorthands `es` and `kb` are accepted as aliases for `stack es` / `stack kb`.
+---
 
-### Common Commands
+## Gotchas
+
+### Serverless: many cluster APIs return 410
+
+These all fail on serverless with "not available in serverless mode":
+
+- `es cluster health` / `stats` / `get-settings`
+- `es ilm get-lifecycle` / `get-status`
+
+Use `es cat count --json` to verify connectivity on serverless instead.
+
+### `es indices list` does not exist
+
+Use `es indices get --index "*" --json` or `es indices get-data-stream --json`.
+
+### `es cluster health-report` does not exist
+
+The subcommand is `es cluster health`. There is no `health-report`.
+
+### Agent builder subcommands use verbose REST-style names
+
+`kb agent-builder agents list` and `tools list` do **not** exist. Real commands:
 
 ```
-es cluster health --json
-es cluster info --json
-es indices list --json
-stack kb agent-builder agents list --json
-stack kb agent-builder tools list --json
+kb agent-builder get-agent-builder-agents --json
+kb agent-builder get-agent-builder-tools --json
+```
+
+Pattern: `<http-method>-<resource-path>` throughout all of `kb`.
+
+### `docs search` and `docs read` require named flags, not positional args
+
+```
+# WRONG — "too many arguments" error
 docs search "index lifecycle management"
-docs read https://www.elastic.co/guide/...
+docs read https://www.elastic.co/...
+
+# CORRECT
+docs search --query "index lifecycle management"
+docs read --path "https://www.elastic.co/docs/..."
 ```
 
-Always append `--json` when you need machine-readable output for further processing.
+Also: old `/guide/` URLs return `(no output)`. Use `elastic.co/docs/` URLs.
 
-### Output Flags
+### `es esql query` requires `--query` flag, not positional
 
-- `--json` — machine-readable JSON output
-- `--output-fields <list>` — comma-separated dot-notation fields to include
-- `--output-template <string>` — Mustache-like template, e.g. `"{{name}}: {{status}}"`
+```
+# WRONG
+es esql query "FROM logs-* | LIMIT 1"
 
-### API Availability Notes
+# CORRECT
+es esql query --query "FROM logs-* | LIMIT 1" --json
+```
 
-Some APIs are only available on stateful (self-managed / hosted) deployments, not
-on serverless projects. When a command returns a 404 or "not available" response,
-try the equivalent MCP tool or a different API path for serverless.
+### `kb slo find-slos-op` requires `--space-id`
+
+Omitting it returns a validation error. Use `--space-id default`.
+
+### `--output-fields` and `--output-template` are per-subcommand flags (placed at end)
+
+They are listed as global flags in the help but must come after the full subcommand.
+`--output-fields` returns `{}` for array responses — unreliable, avoid it.
+`--output-template` only works for top-level scalar fields.
+Just use `--json` and process the output.
+
+### Never block on stdin
+
+Never use `--input-file /dev/stdin` or `es helpers watch`. These block forever
+and hang the `elastic_cli` tool with no way to cancel.
