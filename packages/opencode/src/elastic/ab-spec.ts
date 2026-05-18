@@ -67,13 +67,18 @@ export namespace AbSpec {
   }
 
   /**
-   * Configured Agent Builder agent for RAMEN tools/skills/prompts.
+   * Agent Builder agent for RAMEN tools/skills/prompts for a given session.
    *
-   * Order: explicit `kibana.agent_builder_agent_id` in merged config (from `/kibana-agent`) wins over
-   * {@link Handover} link metadata — otherwise user switches agent but a prior mirror link still
-   * carries `elastic-ai-agent`. If neither is set, {@link AbAgent.preferred()} (builtin default).
+   * Order: {@link Handover} link metadata wins — it reflects the agent the Kibana conversation was
+   * actually created under, which is the one {@link Handover.write} will keep updating. Falling back
+   * to config first would scope prompts/tools to a different agent than the conversation in Kibana.
+   * Unlinked/new sessions fall through to `kibana.agent_builder_agent_id` from merged config (set via
+   * `/kibana-agent`), then the builtin default — same precedence {@link Handover.write} uses when
+   * creating a fresh conversation.
    */
   export async function effectiveAgentId(sessionID: string): Promise<string> {
+    const link = await Handover.resolve(sessionID)
+    if (link?.agentID) return link.agentID
     try {
       const cfg = await Config.get()
       const raw = cfg.kibana?.agent_builder_agent_id
@@ -81,10 +86,6 @@ export namespace AbSpec {
     } catch {
       /* no Instance — fall through */
     }
-    const link = await Handover.resolve(sessionID)
-    if (link?.agentID) return link.agentID
-    // Config.get() already attempted above; if it had a value we returned. Same path in
-    // AbAgent.preferred() would just re-run the same read for the same answer.
     return AbAgent.builtin
   }
 
