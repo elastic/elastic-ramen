@@ -27,6 +27,8 @@ import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
+import { AbSpec } from "../elastic/ab-spec"
+import { loadedKibanaSkillIds } from "../elastic/loaded-kibana-skills"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
@@ -653,9 +655,11 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
-      const skills = await SystemPrompt.skills(agent)
+      const skills = await SystemPrompt.skills(agent, sessionID)
+      const ab = await AbSpec.instructionBlock(sessionID)
       const system = [
         ...(await SystemPrompt.environment(model)),
+        ...(ab ? [ab] : []),
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
       ]
@@ -789,9 +793,21 @@ export namespace SessionPrompt {
       },
     })
 
+    const abCfg = await (async () => {
+      try {
+        const aid = await AbSpec.effectiveAgentId(input.session.id)
+        return await AbSpec.getConfiguration(aid)
+      } catch {
+        return null
+      }
+    })()
+
+    const loaded = await loadedKibanaSkillIds(abCfg, input.messages)
+
     for (const item of await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
+      { sessionID: input.session.id, loadedSkillIds: loaded },
     )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
@@ -837,6 +853,7 @@ export namespace SessionPrompt {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
+      if (!AbSpec.mcpToolAllows(abCfg, key, loaded)) continue
       const execute = item.execute
       if (!execute) continue
 
