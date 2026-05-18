@@ -51,7 +51,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const context = createMemo(() => computeContextInfo(messages(), sync.data.provider))
 
+  const [elasticConfigured] = createResource(() => ElasticAuth.check().then((s) => s.configured).catch(() => false))
+
+  const [linkedAgentId] = createResource(
+    () => [props.sessionID, kibanaLinkVersion()] as const,
+    async ([id]) => (await Handover.resolve(id))?.agentID,
+  )
+
   const abId = createMemo(() => {
+    // The session's link reflects which agent the Kibana conversation was actually created under.
+    // Switching the configured agent doesn't migrate existing conversations, so prefer the link.
+    const linked = linkedAgentId()?.trim()
+    if (linked) return linked
     const raw = sync.data.config.kibana?.agent_builder_agent_id?.trim()
     if (raw) return raw
     return AbAgent.builtin
@@ -112,7 +123,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <Show when={session().share?.url}>
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
-              <Show when={context()?.isKibana}>
+              <Show when={elasticConfigured()}>
                 <text fg={theme.textMuted}>Agent Builder: {abId()}</text>
               </Show>
               <Show when={context()?.isKibana && agentBuilderLink()}>

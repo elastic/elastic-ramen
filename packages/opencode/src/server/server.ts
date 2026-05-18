@@ -272,6 +272,11 @@ export namespace Server {
         }),
         async (c) => {
           await Instance.dispose()
+          // AbSpec.cache lives at module scope (not tied to Instance state). Profile switches
+          // bypass Config.update, so bust here too — otherwise the agent config fetched against
+          // the prior Kibana endpoint can serve stale tool/skill filters for up to 2 minutes.
+          const { AbSpec } = await import("@/elastic/ab-spec")
+          AbSpec.bust()
           return c.json(true)
         },
       )

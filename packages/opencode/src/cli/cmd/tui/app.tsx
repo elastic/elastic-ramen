@@ -46,6 +46,7 @@ import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { ElasticAuth } from "@/elastic/auth"
 import { Handover } from "@/elastic/handover"
+import { AbAgent } from "@/elastic/ab-agent"
 import { SessionProfile } from "@/elastic/session-profile"
 import type { ConversationRound } from "@/elastic/client"
 import { DialogElasticSetup } from "@tui/component/dialog-elastic-setup"
@@ -485,7 +486,9 @@ function App() {
         const session = sync.session.get(sessionID)
         if (!session) continue
         const rounds = buildRounds(sessionID)
+        const agentId = sync.data.config.kibana?.agent_builder_agent_id?.trim() || AbAgent.builtin
         Handover.sync(sessionID, session.title, rounds, {
+          agentId,
           onKickstart: () =>
             toast.show({
               variant: "info",

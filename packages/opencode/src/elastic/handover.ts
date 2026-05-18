@@ -103,6 +103,8 @@ export namespace Handover {
   }
 
   export interface SyncOptions {
+    /** Agent Builder agent id to use when creating a new Kibana conversation. Falls back to {@link AbAgent.preferred}. */
+    agentId?: string
     /** Called once if a 503 forces a kickstart. */
     onKickstart?: () => void
     /** Called when a session is stamped to a different active Elastic profile. */
@@ -160,7 +162,7 @@ export namespace Handover {
       }
     }
     log.info("creating elasticsearch conversation", { sessionID })
-    const aid = await AbAgent.preferred()
+    const aid = opts?.agentId?.trim() || await AbAgent.preferred()
     const res = await api.create({
       agent_id: aid,
       title: `RAMEN: ${title}`,

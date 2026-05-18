@@ -83,7 +83,9 @@ export namespace AbSpec {
     }
     const link = await Handover.resolve(sessionID)
     if (link?.agentID) return link.agentID
-    return AbAgent.preferred()
+    // Config.get() already attempted above; if it had a value we returned. Same path in
+    // AbAgent.preferred() would just re-run the same read for the same answer.
+    return AbAgent.builtin
   }
 
   export async function getAgentMeta(agentId: string): Promise<{ cfg: Cfg | null; name?: string }> {
@@ -196,10 +198,13 @@ export namespace AbSpec {
   }
 
   /**
-   * Always returns a block so the model knows which Kibana Agent Builder agent applies — even when
-   * the agent has no custom `instructions` text (tools/skills may still be scoped in Kibana).
+   * Returns a block describing the active Kibana Agent Builder agent (so the model knows which one
+   * applies even when the agent has no custom `instructions` text — tools/skills may still be scoped
+   * in Kibana). Returns `""` when Elastic auth is not configured: callers should skip injection.
    */
   export async function instructionBlock(sessionID: string): Promise<string> {
+    const auth = await ElasticAuth.check().catch(() => undefined)
+    if (!auth?.configured) return ""
     try {
       const aid = await effectiveAgentId(sessionID)
       const { cfg, name } = await getAgentMeta(aid)

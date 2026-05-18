@@ -659,7 +659,7 @@ export namespace SessionPrompt {
       const ab = await AbSpec.instructionBlock(sessionID)
       const system = [
         ...(await SystemPrompt.environment(model)),
-        ab,
+        ...(ab ? [ab] : []),
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
       ]

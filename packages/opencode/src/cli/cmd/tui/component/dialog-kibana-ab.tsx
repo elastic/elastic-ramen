@@ -88,6 +88,7 @@ export function DialogKibanaAb() {
       onSelect={async (opt) => {
         if (!opt.value) return
         dialog.clear()
+        if (opt.value === selected()) return
         const cur = sync.data.config
         const body = {
           ...cur,
