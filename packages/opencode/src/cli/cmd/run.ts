@@ -280,6 +280,11 @@ export const RunCommand = cmd({
         type: "string",
         describe: "Kibana Agent Builder agent ID to use for this session",
       })
+      .option("allow-all", {
+        type: "boolean",
+        describe: "auto-allow all permission requests (bash, edit, write, etc.)",
+        default: false,
+      })
       .option("format", {
         type: "string",
         choices: ["default", "json"],
@@ -375,6 +380,7 @@ export const RunCommand = cmd({
     }
 
     const rules: PermissionNext.Ruleset = [
+      // Interactive prompts can never be answered in headless mode.
       {
         permission: "question",
         action: "deny",
@@ -390,6 +396,9 @@ export const RunCommand = cmd({
         action: "deny",
         pattern: "*",
       },
+      ...(args["allow-all"]
+        ? [{ permission: "*", action: "allow" as const, pattern: "*" }]
+        : []),
     ]
 
     function title() {

@@ -116,6 +116,8 @@ describe("tui thread", () => {
       kibanaBase: undefined,
       "kibana-agent": undefined,
       kibanaAgent: undefined,
+      "allow-all": false,
+      allowAll: false,
       ...overrides,
     }
     return TuiThreadCommand.handler(args)

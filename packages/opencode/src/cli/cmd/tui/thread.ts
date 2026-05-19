@@ -109,6 +109,11 @@ export const TuiThreadCommand = cmd({
       .option("kibana-agent", {
         type: "string",
         describe: "Kibana Agent Builder agent ID to use for this session",
+      })
+      .option("allow-all", {
+        type: "boolean",
+        describe: "auto-allow all permission requests (bash, edit, write, etc.)",
+        default: false,
       }),
   handler: async (args) => {
     // When -p/--prompt is given, run headless instead of launching the TUI
@@ -121,6 +126,7 @@ export const TuiThreadCommand = cmd({
         model: args.model,
         agent: args.agent,
         "kibana-agent": args["kibana-agent"],
+        "allow-all": args["allow-all"],
         continue: args.continue,
         session: args.session,
         fork: args.fork,

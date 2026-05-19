@@ -81,6 +81,14 @@ elastic-ramen -p "list my services" --kibana-agent my-agent-id
 
 `--model` accepts `provider/model` format. `--kibana-agent` takes a Kibana Agent Builder agent ID and overrides the agent configured in `elastic_ramen.json`.
 
+To auto-allow all tool executions without prompting (bash, edit, write, etc.), add `--allow-all`:
+
+```bash
+elastic-ramen -p "fix the failing tests" --allow-all
+```
+
+Interactive prompts (`question`, `plan_enter`, `plan_exit`) are always denied in headless mode regardless of `--allow-all`.
+
 ### What happens during auth
 
 The auth flow writes:
