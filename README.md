@@ -65,26 +65,16 @@ For one-shot, headless usage (no TUI), pass `-p` / `--prompt`:
 elastic-ramen -p "list my services"
 ```
 
-The CLI runs the prompt through the `run` command and exits.
+The CLI runs the prompt through the `run` command and exits. You can combine any of these flags:
 
-To use a specific model, add `-m` / `--model`:
-
-```bash
-elastic-ramen -p "list my services" -m kibana/default
-```
-
-To run the prompt in the context of a specific Kibana Agent Builder agent, add `--kibana-agent`:
+| Flag | Description |
+|------|-------------|
+| `-m` / `--model` | Model to use in `provider/model` format (e.g. `kibana/default`) |
+| `--kibana-agent` | Kibana Agent Builder agent ID — overrides the agent set in `elastic_ramen.json` |
+| `--allow-all` | Auto-allow all tool executions (bash, edit, write, etc.) without prompting |
 
 ```bash
-elastic-ramen -p "list my services" --kibana-agent my-agent-id
-```
-
-`--model` accepts `provider/model` format. `--kibana-agent` takes a Kibana Agent Builder agent ID and overrides the agent configured in `elastic_ramen.json`.
-
-To auto-allow all tool executions without prompting (bash, edit, write, etc.), add `--allow-all`:
-
-```bash
-elastic-ramen -p "fix the failing tests" --allow-all
+elastic-ramen -p "fix the failing tests" -m kibana/default --kibana-agent my-agent-id --allow-all
 ```
 
 Interactive prompts (`question`, `plan_enter`, `plan_exit`) are always denied in headless mode regardless of `--allow-all`.
