@@ -379,26 +379,24 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
+    if (args["kibana-agent"]) {
+      const existing = process.env.OPENCODE_CONFIG_CONTENT
+      const base = existing ? JSON.parse(existing) : {}
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+        ...base,
+        kibana: { ...(base.kibana ?? {}), agent_builder_agent_id: args["kibana-agent"] },
+      })
+    }
+
+    // allow-all must be listed first; evaluate() uses findLast, so later rules win.
+    // The interactive-prompt denials come last so they always override allow-all.
     const rules: PermissionNext.Ruleset = [
-      // Interactive prompts can never be answered in headless mode.
-      {
-        permission: "question",
-        action: "deny",
-        pattern: "*",
-      },
-      {
-        permission: "plan_enter",
-        action: "deny",
-        pattern: "*",
-      },
-      {
-        permission: "plan_exit",
-        action: "deny",
-        pattern: "*",
-      },
       ...(args["allow-all"]
         ? [{ permission: "*", action: "allow" as const, pattern: "*" }]
         : []),
+      { permission: "question",   action: "deny", pattern: "*" },
+      { permission: "plan_enter", action: "deny", pattern: "*" },
+      { permission: "plan_exit",  action: "deny", pattern: "*" },
     ]
 
     function title() {
@@ -689,13 +687,6 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
-    }
-
-    if (args["kibana-agent"]) {
-      const override = { kibana: { agent_builder_agent_id: args["kibana-agent"] } }
-      const existing = process.env.OPENCODE_CONFIG_CONTENT
-      const base = existing ? JSON.parse(existing) : {}
-      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...base, ...override, kibana: { ...(base.kibana ?? {}), ...override.kibana } })
     }
 
     if (args.attach) {
