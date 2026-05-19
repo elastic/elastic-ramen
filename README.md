@@ -67,6 +67,20 @@ elastic-ramen -p "list my services"
 
 The CLI runs the prompt through the `run` command and exits.
 
+To use a specific model, add `-m` / `--model`:
+
+```bash
+elastic-ramen -p "list my services" -m kibana/default
+```
+
+To run the prompt in the context of a specific Kibana Agent Builder agent, add `--kibana-agent`:
+
+```bash
+elastic-ramen -p "list my services" --kibana-agent my-agent-id
+```
+
+`--model` accepts `provider/model` format. `--kibana-agent` takes a Kibana Agent Builder agent ID and overrides the agent configured in `elastic_ramen.json`.
+
 ### What happens during auth
 
 The auth flow writes:

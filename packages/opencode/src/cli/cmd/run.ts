@@ -276,6 +276,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "agent to use",
       })
+      .option("kibana-agent", {
+        type: "string",
+        describe: "Kibana Agent Builder agent ID to use for this session",
+      })
       .option("format", {
         type: "string",
         choices: ["default", "json"],
@@ -676,6 +680,13 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
+    }
+
+    if (args["kibana-agent"]) {
+      const override = { kibana: { agent_builder_agent_id: args["kibana-agent"] } }
+      const existing = process.env.OPENCODE_CONFIG_CONTENT
+      const base = existing ? JSON.parse(existing) : {}
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...base, ...override, kibana: { ...(base.kibana ?? {}), ...override.kibana } })
     }
 
     if (args.attach) {
