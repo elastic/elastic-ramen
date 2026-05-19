@@ -74,7 +74,7 @@ The CLI runs the prompt through the `run` command and exits. You can combine any
 | `--allow-all` | Auto-allow all tool executions (bash, edit, write, etc.) without prompting |
 
 ```bash
-elastic-ramen -p "fix the failing tests" -m kibana/default --kibana-agent my-agent-id --allow-all
+elastic-ramen -p "why is the latency spiking on the checkout service?" -m kibana/default --kibana-agent my-agent-id --allow-all
 ```
 
 Interactive prompts (`question`, `plan_enter`, `plan_exit`) are always denied in headless mode regardless of `--allow-all`.
