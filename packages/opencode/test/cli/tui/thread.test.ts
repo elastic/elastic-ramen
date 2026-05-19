@@ -114,6 +114,8 @@ describe("tui thread", () => {
       cors: [],
       "kibana-base": undefined,
       kibanaBase: undefined,
+      "kibana-agent": undefined,
+      kibanaAgent: undefined,
       ...overrides,
     }
     return TuiThreadCommand.handler(args)
