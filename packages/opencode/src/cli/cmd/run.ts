@@ -35,6 +35,7 @@ import { Locale } from "../../util/locale"
 import { stripAttachmentTags } from "../../util/attachment_tag"
 import stripAnsi from "strip-ansi"
 import { SessionProfile } from "../../elastic/session-profile"
+import { parse as parseJsonc } from "jsonc-parser"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -276,6 +277,15 @@ export const RunCommand = cmd({
         type: "string",
         describe: "agent to use",
       })
+      .option("kibana-agent", {
+        type: "string",
+        describe: "Kibana Agent Builder agent ID to use for this session",
+      })
+      .option("allow-all", {
+        type: "boolean",
+        describe: "auto-allow all permission requests (bash, edit, write, etc.)",
+        default: false,
+      })
       .option("format", {
         type: "string",
         choices: ["default", "json"],
@@ -370,22 +380,24 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
+    if (args["kibana-agent"]) {
+      const existing = process.env.OPENCODE_CONFIG_CONTENT
+      const base = existing ? parseJsonc(existing, [], { allowTrailingComma: true }) : {}
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+        ...base,
+        kibana: { ...(base.kibana ?? {}), agent_builder_agent_id: args["kibana-agent"] },
+      })
+    }
+
+    // allow-all must be listed first; evaluate() uses findLast, so later rules win.
+    // The interactive-prompt denials come last so they always override allow-all.
     const rules: PermissionNext.Ruleset = [
-      {
-        permission: "question",
-        action: "deny",
-        pattern: "*",
-      },
-      {
-        permission: "plan_enter",
-        action: "deny",
-        pattern: "*",
-      },
-      {
-        permission: "plan_exit",
-        action: "deny",
-        pattern: "*",
-      },
+      ...(args["allow-all"]
+        ? [{ permission: "*", action: "allow" as const, pattern: "*" }]
+        : []),
+      { permission: "question",   action: "deny", pattern: "*" },
+      { permission: "plan_enter", action: "deny", pattern: "*" },
+      { permission: "plan_exit",  action: "deny", pattern: "*" },
     ]
 
     function title() {
@@ -570,15 +582,22 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL +
-                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
-            )
-            await sdk.permission.reply({
-              requestID: permission.id,
-              reply: "reject",
-            })
+            if (args["allow-all"]) {
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "always",
+              })
+            } else {
+              UI.println(
+                UI.Style.TEXT_WARNING_BOLD + "!",
+                UI.Style.TEXT_NORMAL +
+                  `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+              )
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "reject",
+              })
+            }
           }
         }
       }
