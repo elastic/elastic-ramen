@@ -17,15 +17,25 @@ export namespace ElasticCli {
     }
   }
 
+  // io.ts in the CLI patch uses module-global writers for capture(), so concurrent
+  // runCommand calls would clobber each other's state. Serialize via a simple queue.
+  let _queue: Promise<unknown> = Promise.resolve()
+
   /**
    * Run an `elastic` CLI command in-process, returning captured stdout.
    * Args should not include the "elastic" program name itself.
    * The shorthands `es` / `kb` are accepted and redirected to `stack es` / `stack kb`.
+   * Calls are serialized to prevent concurrent capture() writer clobbering.
    */
-  export async function run(argv: string[]): Promise<{ output: string; code: number }> {
-    const status = await ElasticAuth.check()
-    if (!status.configured || !status.context) return { output: "elastic CLI: not configured", code: 1 }
-    const { runCommand } = await import("@elastic/cli/runner")
-    return runCommand(argv, cfg(status.context))
+  export function run(argv: string[]): Promise<{ output: string; code: number }> {
+    const result = _queue.then(async () => {
+      const status = await ElasticAuth.check()
+      if (!status.configured || !status.context) return { output: "elastic CLI: not configured", code: 1 }
+      const { runCommand } = await import("@elastic/cli/runner")
+      return runCommand(argv, cfg(status.context))
+    })
+    // Advance the queue regardless of whether this invocation errors.
+    _queue = result.catch(() => {})
+    return result
   }
 }

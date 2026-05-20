@@ -48,7 +48,7 @@ The `elastic_cli` tool runs elastic CLI commands directly. It injects credential
 
 - `es cluster health --json` -- check cluster health
 - `es cluster info --json` -- get cluster info
-- `es indices list --json` -- list indices
+- `es indices get --index "*" --json` -- list indices
 - `stack es raw /_cat/indices?v` -- raw Elasticsearch HTTP request
 - `stack kb raw /api/status` -- raw Kibana HTTP request
 - `docs search "<query>"` -- search Elastic documentation
