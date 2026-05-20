@@ -1,0 +1,11 @@
+# Copyright (c) 2026-present, Elastic NV
+
+steps:
+  - label: ":construction: elastic-ramen-release stub (ci dry-run)"
+    if: build.branch =~ /^ci\//
+    env:
+      DRY_RUN: "true"
+    command: |
+      echo "This is the stub pipeline."
+      echo "DRY_RUN=${DRY_RUN}"
+      echo "If you're seeing this on a real release, the BK trigger in"

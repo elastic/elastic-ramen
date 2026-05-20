@@ -6,11 +6,11 @@
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  name: buildkite-pipeline-elastic-ramen-sign
+  name: buildkite-pipeline-elastic-ramen-release
   description: Buildkite pipeline that signs Elastic RAMEN release artifacts via unified-release-{gpg,macos,windows}-signing.
   links:
     - title: Pipeline
-      url: https://buildkite.com/elastic/elastic-ramen-sign
+      url: https://buildkite.com/elastic/elastic-ramen-release
 spec:
   type: buildkite-pipeline
   owner: group:obs-elastic-brain-team
@@ -19,16 +19,25 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elastic-ramen-sign
+      name: elastic-ramen-release
       description: Signs elastic-ramen release artifacts.
     spec:
       repository: elastic/elastic-ramen
-      pipeline_file: ".buildkite/sign.yml"
+      pipeline_file: ".buildkite/release.yml"
       # Triggered by elastic/oblt-actions/buildkite/run from
       # .github/workflows/release-ramen.yml. Disable native git triggers
       # so PRs and tags don't accidentally fire the signing pipeline.
       provider_settings:
-        build_branches: false
+        # Auto-run pipeline only for ci/* branches.
+        build_branches: true
+        filter_condition: |
+          build.branch =~ /^ci\//
+        filter_enabled: true
+        # Normal branch run scaffold (disabled):
+        # build_branches: true
+        # filter_condition: |
+        #   true
+        # filter_enabled: true
         build_pull_requests: false
         build_tags: false
       cancel_intermediate_builds: false
