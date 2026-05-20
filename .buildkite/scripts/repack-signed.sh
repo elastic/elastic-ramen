@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026-present, Elastic NV
 #
-# Pull signed mac/windows binaries from the triggered signing builds, rebuild
-# the original zip layout around them (preserving NOTICE/LICENSE), and pass
-# the linux tarballs through untouched. Result is uploaded as signed/ramen-*
-# for the downstream GPG signing step.
+# Pull signed mac/windows binaries from the triggered signing builds and build
+# fresh ramen-*.zip / ramen-*.tar.gz archives from the build output layout.
+# Result is uploaded as signed/ramen-* for the downstream GPG signing step.
 set -euo pipefail
 
 # shellcheck source=./_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-mkdir -p downloads/unsigned downloads/signed work signed
+mkdir -p downloads/build downloads/signed work signed
 
-buildkite-agent artifact download "packages/opencode/dist/ramen-*.zip"    downloads/unsigned/
-buildkite-agent artifact download "packages/opencode/dist/ramen-*.tar.gz" downloads/unsigned/
+buildkite-agent artifact download "packages/opencode/dist/ramen-*/bin/*" downloads/build/
 
 mac_build=$(lookup_triggered_build_id macos-sign-service)
 win_build=$(lookup_triggered_build_id windows-sign-service)
@@ -22,23 +20,42 @@ buildkite-agent artifact download --build "${mac_build}" "extracted/darwin-*/ela
 buildkite-agent artifact download --build "${win_build}" "extracted/windows-*/elastic-ramen.exe" downloads/signed/
 
 shopt -s nullglob
-for arch in downloads/unsigned/packages/opencode/dist/ramen-darwin-*.zip \
-            downloads/unsigned/packages/opencode/dist/ramen-windows-*.zip; do
-  variant=$(basename "$arch" .zip)       # ramen-darwin-arm64
-  short=${variant#ramen-}                 # darwin-arm64
+for dir in downloads/build/packages/opencode/dist/ramen-*; do
+  variant=$(basename "$dir")
+  short=${variant#ramen-}
+  os=${short%%-*}
   workdir="work/${variant}"
   rm -rf "${workdir}"
-  mkdir -p "${workdir}"
-  unzip -q "${arch}" -d "${workdir}"
-  signed=$(find "downloads/signed/extracted/${short}" -type f | head -n1)
-  if [[ -z "${signed}" ]]; then
-    echo "no signed binary found for ${short}" >&2
+  mkdir -p "${workdir}/bin"
+
+  if [[ "${os}" == "darwin" || "${os}" == "windows" ]]; then
+    signed=$(find "downloads/signed/extracted/${short}" -type f | head -n1)
+    if [[ -z "${signed}" ]]; then
+      echo "no signed binary found for ${short}" >&2
+      exit 1
+    fi
+    cp "${signed}" "${workdir}/bin/$(basename "${signed}")"
+  elif [[ -f "${dir}/bin/elastic-ramen" ]]; then
+    cp "${dir}/bin/elastic-ramen" "${workdir}/bin/elastic-ramen"
+  elif [[ -f "${dir}/bin/elastic-ramen.exe" ]]; then
+    cp "${dir}/bin/elastic-ramen.exe" "${workdir}/bin/elastic-ramen.exe"
+  else
+    echo "no binary found for ${variant}" >&2
     exit 1
   fi
-  cp "${signed}" "${workdir}/bin/$(basename "${signed}")"
-  (cd "${workdir}" && zip -qr "../../signed/${variant}.zip" bin)
-done
 
-cp downloads/unsigned/packages/opencode/dist/ramen-linux-*.tar.gz signed/
+  if [[ -f "${dir}/bin/NOTICE" ]]; then
+    cp "${dir}/bin/NOTICE" "${workdir}/bin/NOTICE"
+  fi
+  if [[ -f "${dir}/bin/LICENSE" ]]; then
+    cp "${dir}/bin/LICENSE" "${workdir}/bin/LICENSE"
+  fi
+
+  if [[ "${os}" == "linux" ]]; then
+    (cd "${workdir}" && tar -czf "../../signed/${variant}.tar.gz" bin)
+  else
+    (cd "${workdir}" && zip -qr "../../signed/${variant}.zip" bin)
+  fi
+done
 
 ls -la signed/
