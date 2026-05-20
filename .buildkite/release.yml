@@ -53,5 +53,6 @@ steps:
       fi
 
       echo "Using Bun $$(bun --version)"
+      cd packages/opencode
       bun install
       bun run build
