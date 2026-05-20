@@ -17,8 +17,11 @@
 # multi-step pipeline.
 
 steps:
-  - label: ":construction: elastic-ramen-sign stub"
+  - label: ":construction: elastic-ramen-sign stub (ci dry-run)"
+    if: build.branch =~ /^ci\//
+    env:
+      DRY_RUN: "true"
     command: |
-      echo "This is the stub pipeline. The real signing flow ships in PR #43."
+      echo "This is the stub pipeline."
+      echo "DRY_RUN=${DRY_RUN}"
       echo "If you're seeing this on a real release, the BK trigger in"
-      echo "release-ramen.yml was merged without the rest of #43 — roll it back."

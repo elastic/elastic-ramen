@@ -28,7 +28,12 @@ spec:
       # .github/workflows/release-ramen.yml. Disable native git triggers
       # so PRs and tags don't accidentally fire the signing pipeline.
       provider_settings:
-        build_branches: false
+        # Auto-run pipeline only for ci/* branches.
+        build_branches: true
+        branch_configuration: "ci/*"
+        # Normal branch run scaffold (disabled):
+        # build_branches: true
+        # branch_configuration: "*"
         build_pull_requests: false
         build_tags: false
       cancel_intermediate_builds: false
