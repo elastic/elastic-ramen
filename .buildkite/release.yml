@@ -10,7 +10,7 @@ steps:
     if: build.branch =~ /^ci\//
     env:
       DRY_RUN: "true"
-      BUN_VERSION: "1.3.14"
+      BUN_VERSION: "1.3.10"
     command: |
       set -euo pipefail
 
