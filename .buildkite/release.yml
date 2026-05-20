@@ -31,8 +31,14 @@ steps:
         fi
 
         case "$$(uname -m)" in
-          x86_64) target="bun-linux-x64" ;;
-          aarch64|arm64) target="bun-linux-aarch64" ;;
+          x86_64)
+            target="bun-linux-x64"
+            sha256="f57bc0187e39623de716ba3a389fda5486b2d7be7131a980ba54dc7b733d2e08"
+            ;;
+          aarch64|arm64)
+            target="bun-linux-aarch64"
+            sha256="fa5ecb25cafa8e8f5c87a0f833719d46dd0af0a86c7837d806531212d55636d3"
+            ;;
           *)
             echo "Unsupported Linux architecture: $$(uname -m)"
             exit 1
@@ -54,6 +60,10 @@ steps:
           --max-time 300 \
           "https://github.com/oven-sh/bun/releases/download/bun-v$${BUN_VERSION}/$${target}.zip" \
           -o "$${tmp}/bun.zip"
+        echo "$${sha256}  $${tmp}/bun.zip" | sha256sum --check --status || {
+          echo "SHA256 mismatch for $${target}.zip — aborting"
+          exit 1
+        }
         unzip -q "$${tmp}/bun.zip" -d "$${tmp}"
         mkdir -p "$${BUN_INSTALL}/bin"
         install -m 0755 "$${tmp}/$${target}/bun" "$${BUN_INSTALL}/bin/bun"
