@@ -45,11 +45,18 @@ steps:
         fi
 
         tmp="$$(mktemp -d)"
-        curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v$${BUN_VERSION}/$${target}.zip" -o "$${tmp}/bun.zip"
+        trap 'rm -rf "$${tmp}"' EXIT
+        curl -fsSL \
+          --retry 5 \
+          --retry-all-errors \
+          --retry-delay 2 \
+          --connect-timeout 10 \
+          --max-time 300 \
+          "https://github.com/oven-sh/bun/releases/download/bun-v$${BUN_VERSION}/$${target}.zip" \
+          -o "$${tmp}/bun.zip"
         unzip -q "$${tmp}/bun.zip" -d "$${tmp}"
         mkdir -p "$${BUN_INSTALL}/bin"
         install -m 0755 "$${tmp}/$${target}/bun" "$${BUN_INSTALL}/bin/bun"
-        rm -rf "$${tmp}"
       fi
 
       echo "Using Bun $$(bun --version)"
