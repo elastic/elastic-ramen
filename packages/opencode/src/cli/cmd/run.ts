@@ -35,6 +35,7 @@ import { Locale } from "../../util/locale"
 import { stripAttachmentTags } from "../../util/attachment_tag"
 import stripAnsi from "strip-ansi"
 import { SessionProfile } from "../../elastic/session-profile"
+import { parse as parseJsonc } from "jsonc-parser"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -381,7 +382,7 @@ export const RunCommand = cmd({
 
     if (args["kibana-agent"]) {
       const existing = process.env.OPENCODE_CONFIG_CONTENT
-      const base = existing ? JSON.parse(existing) : {}
+      const base = existing ? parseJsonc(existing, [], { allowTrailingComma: true }) : {}
       process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
         ...base,
         kibana: { ...(base.kibana ?? {}), agent_builder_agent_id: args["kibana-agent"] },
@@ -581,15 +582,22 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL +
-                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
-            )
-            await sdk.permission.reply({
-              requestID: permission.id,
-              reply: "reject",
-            })
+            if (args["allow-all"]) {
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "always",
+              })
+            } else {
+              UI.println(
+                UI.Style.TEXT_WARNING_BOLD + "!",
+                UI.Style.TEXT_NORMAL +
+                  `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+              )
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "reject",
+              })
+            }
           }
         }
       }
