@@ -30,10 +30,14 @@ spec:
       provider_settings:
         # Auto-run pipeline only for ci/* branches.
         build_branches: true
-        branch_configuration: "ci/*"
+        filter_condition: |
+          build.branch =~ /^ci\//
+        filter_enabled: true
         # Normal branch run scaffold (disabled):
         # build_branches: true
-        # branch_configuration: "*"
+        # filter_condition: |
+        #   true
+        # filter_enabled: true
         build_pull_requests: false
         build_tags: false
       cancel_intermediate_builds: false
