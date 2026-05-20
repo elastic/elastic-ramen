@@ -44,17 +44,7 @@ Additional capabilities are available through the eab MCP server, including ES|Q
 
 ## Elastic CLI
 
-The `elastic_cli` tool runs elastic CLI commands directly. It injects credentials automatically and does not require the bash tool. Key commands:
-
-- `es cluster health --json` -- check cluster health
-- `es cluster info --json` -- get cluster info
-- `es indices get --index "*" --json` -- list indices
-- `stack es raw /_cat/indices?v` -- raw Elasticsearch HTTP request
-- `stack kb raw /api/status` -- raw Kibana HTTP request
-- `docs search "<query>"` -- search Elastic documentation
-- `docs read <url>` -- read an Elastic docs page
-
-Use `--json` for machine-readable output. Use the `elastic-cli-usage` skill for full syntax reference including raw request examples.
+The `elastic_cli` tool runs elastic CLI commands directly. It injects credentials automatically and does not require the bash tool. Use the `elastic-cli-usage` skill for command syntax, shorthands, and examples before invoking `elastic_cli`.
 
 Prefer MCP tools and native `kibana_*` tools over `elastic_cli` when they cover the operation.
 
