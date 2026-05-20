@@ -1,11 +1,14 @@
 # Copyright (c) 2026-present, Elastic NV
 
 steps:
-  - label: ":construction: elastic-ramen-release stub (ci dry-run)"
+  - label: ":package: build binaries"
+    key: "build"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      cpu: 2000m
+      memory: 2048Mi
     if: build.branch =~ /^ci\//
     env:
       DRY_RUN: "true"
-    command: |
-      echo "This is the stub pipeline."
-      echo "DRY_RUN=${DRY_RUN}"
-      echo "If you're seeing this on a real release, the BK trigger in"
+      BUN_VERSION: "1.3.14"
+    command: ./.buildkite/scripts/release-build.sh
