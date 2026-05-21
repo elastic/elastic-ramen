@@ -15,15 +15,23 @@ steps:
       - "packages/opencode/dist/ramen-*/bin/*"
     command: ./.buildkite/scripts/release-build.sh
 
-  - label: ":scissors: extract mac/win binaries"
-    key: "extract"
+  - label: ":apple: pack mac archives"
+    key: "pack-mac"
     depends_on: "build"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
-      - "artifacts-to-sign/extracted/**/elastic-ramen"
-      - "artifacts-to-sign/extracted/**/elastic-ramen.exe"
-    command: ./.buildkite/scripts/extract-binaries.sh
+      - "artifacts-to-sign/ramen-darwin-*.tar.gz"
+    command: ./.buildkite/scripts/pack-mac.sh
+
+  - label: ":windows: pack windows archives"
+    key: "pack-windows"
+    depends_on: "build"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+    artifact_paths:
+      - "artifacts-to-sign/ramen-windows-*.zip"
+    command: ./.buildkite/scripts/pack-windows.sh
 
   - label: ":penguin: pack linux archives"
     key: "pack-linux"
@@ -34,6 +42,23 @@ steps:
       - "artifacts-to-sign/ramen-linux-*.tar.gz"
     command: ./.buildkite/scripts/pack-linux.sh
 
+  - label: ":apple: macOS sign"
+    trigger: unified-release-macos-signing
+    key: macos-sign-service
+    depends_on: "pack-mac"
+    build:
+      env:
+        INPUT_PATH: "buildkite://"
+
+  - label: ":windows: Windows sign"
+    trigger: unified-release-windows-signing
+    key: windows-sign-service
+    depends_on: "pack-windows"
+    build:
+      env:
+        INPUT_PATH: "buildkite://"
+        DOWNLOAD_ARTIFACTS_FILTER: "ramen-windows-*.zip"
+
   - label: ":pgp: GPG sign linux archives"
     trigger: unified-release-gpg-signing
     key: gpg-sign-service
@@ -42,43 +67,11 @@ steps:
       env:
         INPUT_PATH: "buildkite://"
 
-  - label: ":apple: macOS sign"
-    trigger: unified-release-macos-signing
-    key: macos-sign-service
-    depends_on: "extract"
-    build:
-      env:
-        INPUT_PATH: "buildkite://"
-
-  - label: ":windows: Windows sign"
-    trigger: unified-release-windows-signing
-    key: windows-sign-service
-    depends_on: "extract"
-    build:
-      env:
-        INPUT_PATH: "buildkite://"
-        DOWNLOAD_ARTIFACTS_FILTER: "extracted/windows-*/elastic-ramen.exe"
-
-  - label: ":package: repack signed mac/win archives"
-    key: "repack"
-    depends_on:
-      - "build"
-      - "macos-sign-service"
-      - "windows-sign-service"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
-    plugins:
-      - elastic/vault-secrets#v0.1.0:
-          path: "kv/ci-shared/observability-ci/buildkite-read-build-access"
-          field: "buildkite_token"
-          env_var: "BUILDKITE_TOKEN_SECRET"
-    artifact_paths:
-      - "signed/ramen-*.zip"
-    command: ./.buildkite/scripts/repack-signed.sh
-
-  - label: ":inbox_tray: collect signatures"
+  - label: ":inbox_tray: collect signed artifacts"
     key: "collect"
     depends_on:
+      - "macos-sign-service"
+      - "windows-sign-service"
       - "gpg-sign-service"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
@@ -88,5 +81,5 @@ steps:
           field: "buildkite_token"
           env_var: "BUILDKITE_TOKEN_SECRET"
     artifact_paths:
-      - "signed/ramen-*.asc"
-    command: ./.buildkite/scripts/collect-signatures.sh
+      - "final/*"
+    command: ./.buildkite/scripts/collect-signed.sh
