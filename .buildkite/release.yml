@@ -28,19 +28,34 @@ steps:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     matrix:
       setup:
-        variant: ["x64", "x64-baseline", "x64-musl", "x64-baseline-musl"]
+        variant: ["x64", "x64-baseline"]
     command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} pre-sign
 
-  - label: ":penguin: smoke linux arm64 ({{matrix.variant}}, pre-sign)"
+  - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, pre-sign)"
+    key: "smoke-linux-x64-musl-pre"
+    depends_on: "build"
+    agents:
+      image: "alpine:latest"
+    matrix:
+      setup:
+        variant: ["x64-musl", "x64-baseline-musl"]
+    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} pre-sign
+
+  - label: ":penguin: smoke linux arm64 (pre-sign)"
     key: "smoke-linux-arm64-pre"
     depends_on: "build"
     agents:
       provider: "gcp"
       image: "family/core-ubuntu-2204-aarch64"
-    matrix:
-      setup:
-        variant: ["arm64", "arm64-musl"]
-    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} pre-sign
+    command: ./.buildkite/scripts/smoke.sh linux arm64 pre-sign
+
+  - label: ":penguin: smoke linux arm64-musl (pre-sign)"
+    key: "smoke-linux-arm64-musl-pre"
+    depends_on: "build"
+    agents:
+      provider: "gcp"
+      image: "family/core-ubuntu-2204-aarch64"
+    command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl pre-sign
 
   - label: ":apple: smoke darwin arm64 (pre-sign)"
     key: "smoke-darwin-arm64-pre"
@@ -78,7 +93,9 @@ steps:
     key: "pack-mac"
     depends_on:
       - "smoke-linux-x64-pre"
+      - "smoke-linux-x64-musl-pre"
       - "smoke-linux-arm64-pre"
+      - "smoke-linux-arm64-musl-pre"
       - "smoke-darwin-arm64-pre"
       - "smoke-darwin-x64-pre"
       - "smoke-windows-x64-pre"
@@ -92,7 +109,9 @@ steps:
     key: "pack-windows"
     depends_on:
       - "smoke-linux-x64-pre"
+      - "smoke-linux-x64-musl-pre"
       - "smoke-linux-arm64-pre"
+      - "smoke-linux-arm64-musl-pre"
       - "smoke-darwin-arm64-pre"
       - "smoke-darwin-x64-pre"
       - "smoke-windows-x64-pre"
@@ -106,7 +125,9 @@ steps:
     key: "pack-linux"
     depends_on:
       - "smoke-linux-x64-pre"
+      - "smoke-linux-x64-musl-pre"
       - "smoke-linux-arm64-pre"
+      - "smoke-linux-arm64-musl-pre"
       - "smoke-darwin-arm64-pre"
       - "smoke-darwin-x64-pre"
       - "smoke-windows-x64-pre"
@@ -167,19 +188,34 @@ steps:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     matrix:
       setup:
-        variant: ["x64", "x64-baseline", "x64-musl", "x64-baseline-musl"]
+        variant: ["x64", "x64-baseline"]
     command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} post-sign
 
-  - label: ":penguin: smoke linux arm64 ({{matrix.variant}}, post-sign)"
+  - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, post-sign)"
+    key: "smoke-linux-x64-musl-post"
+    depends_on: "collect"
+    agents:
+      image: "alpine:latest"
+    matrix:
+      setup:
+        variant: ["x64-musl", "x64-baseline-musl"]
+    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} post-sign
+
+  - label: ":penguin: smoke linux arm64 (post-sign)"
     key: "smoke-linux-arm64-post"
     depends_on: "collect"
     agents:
       provider: "gcp"
       image: "family/core-ubuntu-2204-aarch64"
-    matrix:
-      setup:
-        variant: ["arm64", "arm64-musl"]
-    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} post-sign
+    command: ./.buildkite/scripts/smoke.sh linux arm64 post-sign
+
+  - label: ":penguin: smoke linux arm64-musl (post-sign)"
+    key: "smoke-linux-arm64-musl-post"
+    depends_on: "collect"
+    agents:
+      provider: "gcp"
+      image: "family/core-ubuntu-2204-aarch64"
+    command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl post-sign
 
   - label: ":apple: smoke darwin arm64 (post-sign)"
     key: "smoke-darwin-arm64-post"

@@ -1,15 +1,17 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Copyright (c) 2026-present, Elastic NV
 #
 # Smoke-test a linux or darwin elastic-ramen binary by running --help.
 # Used both pre-sign (raw build output from the build step) and post-sign
 # (final archive produced by collect-signed.sh).
 #
+# POSIX sh so it works on alpine (musl smoke runs) and bash hosts alike.
+#
 # Usage: smoke.sh <platform> <variant> <stage>
 #   platform: linux | darwin
 #   variant:  e.g. x64, arm64, x64-musl, x64-baseline-musl
 #   stage:    pre-sign | post-sign
-set -euo pipefail
+set -eu
 
 platform=$1
 variant=$2
@@ -22,7 +24,7 @@ case "${stage}" in
     bin="packages/opencode/dist/${name}/bin/elastic-ramen"
     ;;
   post-sign)
-    if [[ "${platform}" == "linux" ]]; then
+    if [ "${platform}" = "linux" ]; then
       archive="final/${name}.tgz"
     else
       archive="final/${name}.tar.gz"
