@@ -35,7 +35,7 @@ steps:
     key: "smoke-linux-x64-musl-pre"
     depends_on: "build"
     agents:
-      image: "alpine:latest"
+      image: "cgr.dev/chainguard/wolfi-base:latest"
     matrix:
       setup:
         variant: ["x64-musl", "x64-baseline-musl"]
@@ -195,7 +195,7 @@ steps:
     key: "smoke-linux-x64-musl-post"
     depends_on: "collect"
     agents:
-      image: "alpine:latest"
+      image: "cgr.dev/chainguard/wolfi-base:latest"
     matrix:
       setup:
         variant: ["x64-musl", "x64-baseline-musl"]
