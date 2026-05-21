@@ -10,6 +10,8 @@ mkdir -p downloads work artifacts-to-sign
 
 buildkite-agent artifact download "packages/opencode/dist/ramen-darwin-*/bin/*" downloads/
 
+repo_root="$(pwd)"
+
 shopt -s nullglob
 for dir in downloads/packages/opencode/dist/ramen-darwin-*; do
   variant=$(basename "$dir")
@@ -22,8 +24,8 @@ for dir in downloads/packages/opencode/dist/ramen-darwin-*; do
     exit 1
   fi
   cp "${dir}/bin/elastic-ramen" "${workdir}/bin/elastic-ramen"
-  [[ -f "${dir}/bin/NOTICE" ]]  && cp "${dir}/bin/NOTICE"  "${workdir}/bin/NOTICE"
-  [[ -f "${dir}/bin/LICENSE" ]] && cp "${dir}/bin/LICENSE" "${workdir}/bin/LICENSE"
+  [[ -f "${repo_root}/NOTICE"  ]] && cp "${repo_root}/NOTICE"  "${workdir}/bin/NOTICE"
+  [[ -f "${repo_root}/LICENSE" ]] && cp "${repo_root}/LICENSE" "${workdir}/bin/LICENSE"
 
   (cd "${workdir}" && tar -czf "../../artifacts-to-sign/${variant}.tar.gz" bin)
 done

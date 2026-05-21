@@ -17,7 +17,7 @@ set -euo pipefail
 # shellcheck source=./_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-mkdir -p final work/win-exe work/win-docs
+mkdir -p final work/win-exe
 
 mac_build=$(lookup_triggered_build_id macos-sign-service)
 win_build=$(lookup_triggered_build_id windows-sign-service)
@@ -31,11 +31,11 @@ buildkite-agent artifact download --build "${gpg_build}" "ramen-linux-*.tgz"    
 buildkite-agent artifact download --build "${gpg_build}" "ramen-linux-*.tgz.asc"    final/
 buildkite-agent artifact download --build "${gpg_build}" "ramen-linux-*.tgz.sha512" final/
 
-# Windows - bundle the signed .exe with NOTICE/LICENSE from the build step into
-# ramen-windows-<variant>.zip with a bin/ layout matching mac/linux.
-buildkite-agent artifact download --build "${win_build}" "ramen-windows-*.exe"         work/win-exe/
-buildkite-agent artifact download "packages/opencode/dist/ramen-windows-*/bin/NOTICE"  work/win-docs/
-buildkite-agent artifact download "packages/opencode/dist/ramen-windows-*/bin/LICENSE" work/win-docs/
+# Windows - bundle the signed .exe with NOTICE/LICENSE from the repo checkout
+# into ramen-windows-<variant>.zip with a bin/ layout matching mac/linux.
+buildkite-agent artifact download --build "${win_build}" "ramen-windows-*.exe" work/win-exe/
+
+repo_root="$(pwd)"
 
 shopt -s nullglob
 for exe in work/win-exe/ramen-windows-*.exe; do
@@ -44,9 +44,8 @@ for exe in work/win-exe/ramen-windows-*.exe; do
   rm -rf "${stage}"
   mkdir -p "${stage}/bin"
   cp "${exe}" "${stage}/bin/elastic-ramen.exe"
-  src="work/win-docs/packages/opencode/dist/${variant}/bin"
-  [[ -f "${src}/NOTICE"  ]] && cp "${src}/NOTICE"  "${stage}/bin/NOTICE"
-  [[ -f "${src}/LICENSE" ]] && cp "${src}/LICENSE" "${stage}/bin/LICENSE"
+  [[ -f "${repo_root}/NOTICE"  ]] && cp "${repo_root}/NOTICE"  "${stage}/bin/NOTICE"
+  [[ -f "${repo_root}/LICENSE" ]] && cp "${repo_root}/LICENSE" "${stage}/bin/LICENSE"
   (cd "${stage}" && zip -qr "../../final/${variant}.zip" bin)
 done
 
