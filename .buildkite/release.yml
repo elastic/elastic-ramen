@@ -35,11 +35,12 @@ steps:
     key: "smoke-linux-x64-musl-pre"
     depends_on: "build"
     agents:
-      image: "cgr.dev/chainguard/wolfi-base:latest"
+      provider: "gcp"
+      image: "family/core-ubuntu-2204"
     matrix:
       setup:
         variant: ["x64-musl", "x64-baseline-musl"]
-    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} pre-sign
+    command: ./.buildkite/scripts/smoke-musl-docker.sh {{matrix.variant}} pre-sign
 
   - label: ":penguin: smoke linux arm64 (pre-sign)"
     key: "smoke-linux-arm64-pre"
@@ -195,11 +196,12 @@ steps:
     key: "smoke-linux-x64-musl-post"
     depends_on: "collect"
     agents:
-      image: "cgr.dev/chainguard/wolfi-base:latest"
+      provider: "gcp"
+      image: "family/core-ubuntu-2204"
     matrix:
       setup:
         variant: ["x64-musl", "x64-baseline-musl"]
-    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} post-sign
+    command: ./.buildkite/scripts/smoke-musl-docker.sh {{matrix.variant}} post-sign
 
   - label: ":penguin: smoke linux arm64 (post-sign)"
     key: "smoke-linux-arm64-post"
