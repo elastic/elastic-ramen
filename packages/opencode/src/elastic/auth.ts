@@ -386,27 +386,35 @@ export namespace ElasticAuth {
     }
   }
 
-  /** Remote Agent Builder MCP derived from the active Elastic CLI profile (when Kibana + API key exist). */
-  export async function remoteEabMcp(): Promise<Config.Mcp | undefined> {
-    const auth = await check()
+  /**
+   * Build the EAB `Config.Mcp` entry from a pre-resolved auth result.
+   * Returns `undefined` when Kibana credentials are absent.
+   */
+  export function eabMcpFromAuth(auth: Awaited<ReturnType<typeof check>>): Config.Mcp | undefined {
     if (!auth.configured || !auth.context?.kibana_url || !auth.context?.api_key) return undefined
-    const k = auth.context.kibana_url
-    const key = auth.context.api_key
     return {
       type: "remote",
-      url: k.replace(/\/+$/, "") + "/api/agent_builder/mcp",
-      headers: { Authorization: "ApiKey " + key },
+      url: auth.context.kibana_url.replace(/\/+$/, "") + "/api/agent_builder/mcp",
+      headers: { Authorization: "ApiKey " + auth.context.api_key },
     }
+  }
+
+  /** Remote Agent Builder MCP derived from the active Elastic CLI profile (when Kibana + API key exist). */
+  export async function remoteEabMcp(): Promise<Config.Mcp | undefined> {
+    return eabMcpFromAuth(await check())
   }
 
   /**
    * Persist `mcp.eab` + `permission.eab_*` to global config when auth has Kibana credentials
    * and the file is missing or stale. Does not dispose Instance (safe during MCP init).
+   *
+   * Accepts a pre-resolved auth result to avoid a redundant `check()` call when the
+   * caller already holds one (e.g. `resolvedMcpConfig`).
    */
-  export async function ensureEabMcpOnDisk() {
-    const auth = await check()
-    if (!auth.configured || !auth.context?.kibana_url || !auth.context?.api_key) return
-    const kibana = { url: auth.context.kibana_url, apiKey: auth.context.api_key }
+  export async function ensureEabMcpOnDisk(auth?: Awaited<ReturnType<typeof check>>) {
+    const resolved = auth ?? (await check())
+    if (!resolved.configured || !resolved.context?.kibana_url || !resolved.context?.api_key) return
+    const kibana = { url: resolved.context.kibana_url, apiKey: resolved.context.api_key }
     const cfgPath = Config.globalConfigFile()
     const existing = (await readConfigFile(cfgPath)) ?? {}
     const patches: ConfigPatch[] = []
