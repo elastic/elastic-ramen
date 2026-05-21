@@ -2,6 +2,9 @@
 import { ElasticAuth } from "./auth"
 import type { ResolvedConfig } from "@elastic/cli/config/types"
 
+/** Default wall-clock timeout for a single CLI command invocation (30 s). */
+export const CLI_TIMEOUT_MS = 30_000
+
 export namespace ElasticCli {
   function cfg(ctx: ElasticAuth.Context): ResolvedConfig {
     const auth = ctx.api_key
@@ -26,13 +29,17 @@ export namespace ElasticCli {
    * Args should not include the "elastic" program name itself.
    * The shorthands `es` / `kb` are accepted and redirected to `stack es` / `stack kb`.
    * Calls are serialized to prevent concurrent capture() writer clobbering.
+   * Rejects with an error if the command exceeds {@link CLI_TIMEOUT_MS}.
    */
-  export function run(argv: string[]): Promise<{ output: string; code: number }> {
+  export function run(argv: string[], timeoutMs = CLI_TIMEOUT_MS): Promise<{ output: string; code: number }> {
     const result = _queue.then(async () => {
       const status = await ElasticAuth.check()
       if (!status.configured || !status.context) return { output: "elastic CLI: not configured", code: 1 }
       const { runCommand } = await import("@elastic/cli/runner")
-      return runCommand(argv, cfg(status.context))
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`elastic CLI timed out after ${timeoutMs}ms`)), timeoutMs),
+      )
+      return Promise.race([runCommand(argv, cfg(status.context)), timeout])
     })
     // Advance the queue regardless of whether this invocation errors.
     _queue = result.catch(() => {})

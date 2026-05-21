@@ -26,5 +26,9 @@ jobs:
         run: bun install
         working-directory: packages/cli
 
+      - name: Build CLI workspace packages
+        run: node_modules/.bin/tsc -b packages/es-schemas packages/config-resolver
+        working-directory: packages/cli
+
       - name: Run typecheck
         run: bun typecheck

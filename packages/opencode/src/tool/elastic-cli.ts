@@ -1,14 +1,15 @@
 // Copyright (c) 2026-present, Elastic NV
 import z from "zod"
 import { Tool } from "./tool"
-import { ElasticCli } from "@/elastic/cli"
+import { ElasticCli, CLI_TIMEOUT_MS } from "@/elastic/cli"
 
 export const ElasticCliTool = Tool.define("elastic_cli", {
   description:
     "Run an elastic CLI command directly. Use this instead of the bash tool for all elastic CLI operations — it is faster, handles authentication automatically, and returns structured output. " +
     "Pass the full command after `elastic`, e.g. `stack es cluster health --json` or `stack kb agent-builder agents list --json`. " +
     "The shorthands `es` and `kb` are also accepted (e.g. `es cluster health`). " +
-    "Always append `--json` when you need machine-readable output.",
+    "Always append `--json` when you need machine-readable output. " +
+    `Commands time out after ${CLI_TIMEOUT_MS / 1000}s.`,
   parameters: z.object({
     command: z
       .string()
