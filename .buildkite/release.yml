@@ -19,9 +19,46 @@ steps:
           limit: 2
     command: ./.buildkite/scripts/release-build.sh
 
+  - label: ":penguin: smoke test (linux x64)"
+    key: "smoke-linux-x64"
+    depends_on: "build"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+    command: |
+      set -euo pipefail
+      buildkite-agent artifact download "packages/opencode/dist/ramen-linux-x64/bin/elastic-ramen" .
+      chmod +x packages/opencode/dist/ramen-linux-x64/bin/elastic-ramen
+      ./packages/opencode/dist/ramen-linux-x64/bin/elastic-ramen --help
+
+  - label: ":windows: smoke test (windows x64)"
+    key: "smoke-windows-x64"
+    depends_on: "build"
+    agents:
+      provider: "gcp"
+      image: "family/core-windows-2022"
+    command: |
+      $ErrorActionPreference = "Stop"
+      buildkite-agent artifact download "packages/opencode/dist/ramen-windows-x64/bin/elastic-ramen.exe" .
+      & .\packages\opencode\dist\ramen-windows-x64\bin\elastic-ramen.exe --help
+
+  - label: ":apple: smoke test (darwin arm64)"
+    key: "smoke-darwin-arm64"
+    depends_on: "build"
+    agents:
+      provider: "orka"
+      imagePrefix: "generic-13-ventura-arm"
+    command: |
+      set -euo pipefail
+      buildkite-agent artifact download "packages/opencode/dist/ramen-darwin-arm64/bin/elastic-ramen" .
+      chmod +x packages/opencode/dist/ramen-darwin-arm64/bin/elastic-ramen
+      ./packages/opencode/dist/ramen-darwin-arm64/bin/elastic-ramen --help
+
   - label: ":apple: pack mac archives"
     key: "pack-mac"
-    depends_on: "build"
+    depends_on:
+      - "smoke-linux-x64"
+      - "smoke-windows-x64"
+      - "smoke-darwin-arm64"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
@@ -30,7 +67,10 @@ steps:
 
   - label: ":windows: pack windows archives"
     key: "pack-windows"
-    depends_on: "build"
+    depends_on:
+      - "smoke-linux-x64"
+      - "smoke-windows-x64"
+      - "smoke-darwin-arm64"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
@@ -39,7 +79,10 @@ steps:
 
   - label: ":penguin: pack linux archives"
     key: "pack-linux"
-    depends_on: "build"
+    depends_on:
+      - "smoke-linux-x64"
+      - "smoke-windows-x64"
+      - "smoke-darwin-arm64"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
