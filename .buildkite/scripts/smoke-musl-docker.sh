@@ -35,4 +35,7 @@ case "${stage}" in
 esac
 
 chmod +x "${bindir}/elastic-ramen"
-docker run --rm -v "${bindir}:/w" -w /w alpine:latest /w/elastic-ramen --help
+# Bun's runtime links against libstdc++ and libgcc_s; install them in alpine
+# before exec'ing the binary.
+docker run --rm -v "${bindir}:/w" -w /w alpine:latest sh -c \
+  'apk add --no-cache libstdc++ libgcc >/dev/null && /w/elastic-ramen --help'
