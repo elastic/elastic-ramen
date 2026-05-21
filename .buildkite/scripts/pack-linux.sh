@@ -25,7 +25,10 @@ for dir in downloads/packages/opencode/dist/ramen-linux-*; do
   [[ -f "${dir}/bin/NOTICE" ]] && cp "${dir}/bin/NOTICE" "${workdir}/bin/NOTICE"
   [[ -f "${dir}/bin/LICENSE" ]] && cp "${dir}/bin/LICENSE" "${workdir}/bin/LICENSE"
 
-  (cd "${workdir}" && tar -czf "../../artifacts-to-sign/${variant}.tar.gz" bin)
+  # Use .tgz (not .tar.gz) so the macOS signer's extension check skips it -
+  # mac downloads artifacts-to-sign/* unfiltered and crashes on archives that
+  # contain no Mach-O binaries.
+  (cd "${workdir}" && tar -czf "../../artifacts-to-sign/${variant}.tgz" bin)
 done
 
 ls -la artifacts-to-sign/
