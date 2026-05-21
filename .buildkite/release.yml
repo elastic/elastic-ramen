@@ -25,10 +25,19 @@ steps:
       - "artifacts-to-sign/extracted/**/elastic-ramen.exe"
     command: ./.buildkite/scripts/extract-binaries.sh
 
-  - label: ":pgp: GPG sign archives"
+  - label: ":penguin: pack linux archives"
+    key: "pack-linux"
+    depends_on: "build"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+    artifact_paths:
+      - "artifacts-to-sign/ramen-linux-*.tar.gz"
+    command: ./.buildkite/scripts/pack-linux.sh
+
+  - label: ":pgp: GPG sign linux archives"
     trigger: unified-release-gpg-signing
     key: gpg-sign-service
-    depends_on: "repack"
+    depends_on: "pack-linux"
     build:
       env:
         INPUT_PATH: "buildkite://"
@@ -50,7 +59,7 @@ steps:
         INPUT_PATH: "buildkite://"
         DOWNLOAD_ARTIFACTS_FILTER: "extracted/windows-*/elastic-ramen.exe"
 
-  - label: ":package: repack signed archives"
+  - label: ":package: repack signed mac/win archives"
     key: "repack"
     depends_on:
       - "build"
@@ -64,8 +73,7 @@ steps:
           field: "buildkite_token"
           env_var: "BUILDKITE_TOKEN_SECRET"
     artifact_paths:
-      - "artifacts-to-sign/signed/ramen-*.zip"
-      - "artifacts-to-sign/signed/ramen-*.tar.gz"
+      - "signed/ramen-*.zip"
     command: ./.buildkite/scripts/repack-signed.sh
 
   - label: ":inbox_tray: collect signatures"
