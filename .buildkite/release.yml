@@ -46,16 +46,16 @@ steps:
     key: "smoke-linux-arm64-pre"
     depends_on: "build"
     agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
+      provider: "aws"
+      imagePrefix: "core-ubuntu-2204-aarch64"
     command: ./.buildkite/scripts/smoke.sh linux arm64 pre-sign
 
   - label: ":penguin: smoke linux arm64-musl (pre-sign)"
     key: "smoke-linux-arm64-musl-pre"
     depends_on: "build"
     agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
+      provider: "aws"
+      imagePrefix: "core-ubuntu-2204-aarch64"
     command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl pre-sign
 
   - label: ":apple: smoke darwin arm64 (pre-sign)"
@@ -207,16 +207,16 @@ steps:
     key: "smoke-linux-arm64-post"
     depends_on: "collect"
     agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
+      provider: "aws"
+      imagePrefix: "core-ubuntu-2204-aarch64"
     command: ./.buildkite/scripts/smoke.sh linux arm64 post-sign
 
   - label: ":penguin: smoke linux arm64-musl (post-sign)"
     key: "smoke-linux-arm64-musl-post"
     depends_on: "collect"
     agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
+      provider: "aws"
+      imagePrefix: "core-ubuntu-2204-aarch64"
     command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl post-sign
 
   - label: ":apple: smoke darwin arm64 (post-sign)"
