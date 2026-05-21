@@ -5,14 +5,14 @@
 # as bare files so the platform signing services can sign them directly.
 set -euo pipefail
 
-mkdir -p downloads extracted
+mkdir -p downloads artifacts-to-sign/extracted
 buildkite-agent artifact download "packages/opencode/dist/ramen-*/bin/elastic-ramen*" downloads/
 
 shopt -s nullglob
 for dir in downloads/packages/opencode/dist/ramen-darwin-* \
            downloads/packages/opencode/dist/ramen-windows-*; do
-  variant=$(basename "$dir")             # ramen-darwin-arm64
-  out="extracted/${variant#ramen-}"      # extracted/darwin-arm64
+  variant=$(basename "$dir")                              # ramen-darwin-arm64
+  out="artifacts-to-sign/extracted/${variant#ramen-}"     # artifacts-to-sign/extracted/darwin-arm64
   mkdir -p "$out"
   if [[ -f "$dir/bin/elastic-ramen" ]]; then
     cp "$dir/bin/elastic-ramen" "$out/elastic-ramen"
@@ -24,4 +24,4 @@ for dir in downloads/packages/opencode/dist/ramen-darwin-* \
   fi
 done
 
-ls -la extracted/*/
+ls -la artifacts-to-sign/extracted/*/

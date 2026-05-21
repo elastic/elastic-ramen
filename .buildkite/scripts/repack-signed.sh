@@ -9,7 +9,7 @@ set -euo pipefail
 # shellcheck source=./_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-mkdir -p downloads/build downloads/signed work signed
+mkdir -p downloads/build downloads/signed work artifacts-to-sign/signed
 
 buildkite-agent artifact download "packages/opencode/dist/ramen-*/bin/*" downloads/build/
 
@@ -52,10 +52,10 @@ for dir in downloads/build/packages/opencode/dist/ramen-*; do
   fi
 
   if [[ "${os}" == "linux" ]]; then
-    (cd "${workdir}" && tar -czf "../../signed/${variant}.tar.gz" bin)
+    (cd "${workdir}" && tar -czf "../../artifacts-to-sign/signed/${variant}.tar.gz" bin)
   else
-    (cd "${workdir}" && zip -qr "../../signed/${variant}.zip" bin)
+    (cd "${workdir}" && zip -qr "../../artifacts-to-sign/signed/${variant}.zip" bin)
   fi
 done
 
-ls -la signed/
+ls -la artifacts-to-sign/signed/

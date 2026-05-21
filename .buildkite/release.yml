@@ -21,8 +21,8 @@ steps:
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
-      - "extracted/**/elastic-ramen"
-      - "extracted/**/elastic-ramen.exe"
+      - "artifacts-to-sign/extracted/**/elastic-ramen"
+      - "artifacts-to-sign/extracted/**/elastic-ramen.exe"
     command: ./.buildkite/scripts/extract-binaries.sh
 
   - label: ":pgp: GPG sign archives"
@@ -64,8 +64,8 @@ steps:
           field: "buildkite_token"
           env_var: "BUILDKITE_TOKEN_SECRET"
     artifact_paths:
-      - "signed/ramen-*.zip"
-      - "signed/ramen-*.tar.gz"
+      - "artifacts-to-sign/signed/ramen-*.zip"
+      - "artifacts-to-sign/signed/ramen-*.tar.gz"
     command: ./.buildkite/scripts/repack-signed.sh
 
   - label: ":inbox_tray: collect signatures"
