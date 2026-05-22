@@ -1836,58 +1836,58 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     )
   }
 
-  const areaChartBlock = (d: { stacked?: boolean; title?: string; columns: string[]; rows: { label: string; values: number[] }[] }) => {
-    const colors = CHART_COLORS(theme)
-    const n = d.rows.length
-    const S = d.columns.length
-    const doStack = !!(d.stacked && S > 1)
-    const vals = d.columns.map((_, si) => d.rows.map((r) => r.values[si] ?? 0))
-    const max = doStack
-      ? Math.max(1, ...d.rows.map((r) => r.values.reduce((a, b) => a + (b ?? 0), 0)))
-      : Math.max(1, ...vals.flat())
-    const W = areaWidth(n)
-    const { bits, dom } = areaGrid(vals, max, doStack, W)
-    const first = n > 0 ? d.rows[0].label : ""
-    const last = n > 0 ? d.rows[n - 1].label : ""
+  const areaSinglePanel = (series: number[], max: number, color: string, label: string, first: string, last: string, W: number) => {
+    const { bits } = areaGrid([series], max, false, W)
     return (
       <box>
+        <text style={{ fg: color }}>{label}</text>
         <text fg={theme.textMuted}>{"┌" + "─".repeat(W) + "┐"}</text>
         <For each={bits}>
-          {(rowBits, cy) => (
+          {(rowBits) => (
             <text>
               <span style={{ fg: theme.textMuted }}>│</span>
-              {rowBits.map((b, cx) => {
-                const s = dom[cy()][cx]
-                return (
-                  <span style={{ fg: s >= 0 ? colors[s % colors.length] : theme.textMuted }}>
-                    {String.fromCharCode(0x2800 + b)}
-                  </span>
-                )
-              })}
+              {rowBits.map((b) => (
+                <span style={{ fg: b > 0 ? color : theme.textMuted }}>
+                  {String.fromCharCode(0x2800 + b)}
+                </span>
+              ))}
               <span style={{ fg: theme.textMuted }}>│</span>
             </text>
           )}
         </For>
         <text fg={theme.textMuted}>{"└" + "─".repeat(W) + "┘"}</text>
-        {n > 0 && (
-          <text fg={theme.textMuted}>
-            {" " + first + " ".repeat(Math.max(0, W - first.length - last.length)) + last}
-          </text>
-        )}
-        {S > 1 && (
-          <box gap={1}>
-            <For each={d.columns}>
-              {(col, ci) => (
-                <text>
-                  <span style={{ fg: colors[ci() % colors.length] }}>█</span>
-                  <span style={{ fg: theme.text }}> {col}</span>
-                </text>
-              )}
-            </For>
-          </box>
-        )}
+        <text fg={theme.textMuted}>{" " + first + " ".repeat(Math.max(0, W - first.length - last.length)) + last}</text>
       </box>
     )
+  }
+
+  const areaChartBlock = (d: { title?: string; columns: string[]; rows: { label: string; values: number[] }[] }) => {
+    const colors = CHART_COLORS(theme)
+    const n = d.rows.length
+    const S = d.columns.length
+    const vals = d.columns.map((_, si) => d.rows.map((r) => r.values[si] ?? 0))
+    const globalMax = Math.max(1, ...vals.flat())
+    const first = n > 0 ? d.rows[0].label : ""
+    const last = n > 0 ? d.rows[n - 1].label : ""
+
+    if (S === 1) {
+      const W = areaWidth(n)
+      return areaSinglePanel(vals[0]!, globalMax, colors[0]!, d.columns[0]!, first, last, W)
+    }
+
+    const COLS = S === 2 ? 2 : 1
+    const panelW = COLS === 2 ? Math.max(20, Math.floor((areaWidth(n) - 2) / 2)) : areaWidth(n)
+    const gridRows: JSX.Element[] = []
+    for (let r = 0; r < Math.ceil(S / COLS); r++) {
+      const panels: JSX.Element[] = []
+      for (let c = 0; c < COLS; c++) {
+        const si = r * COLS + c
+        if (si >= S) break
+        panels.push(areaSinglePanel(vals[si]!, globalMax, colors[si % colors.length]!, d.columns[si]!, first, last, panelW))
+      }
+      gridRows.push(<box direction="row" gap={2}>{panels}</box>)
+    }
+    return <box gap={1}>{gridRows}</box>
   }
 
   return (

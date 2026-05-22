@@ -46,7 +46,7 @@ function pad(s: string, w: number): string {
   return s + " ".repeat(Math.max(0, w - visible(s).length))
 }
 
-function colorFor(i: number): string {
+export function colorFor(i: number): string {
   return ANSI_COLORS[i % ANSI_COLORS.length]
 }
 
