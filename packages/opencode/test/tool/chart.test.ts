@@ -328,7 +328,7 @@ describe("ChartTool", () => {
     expect(legend.length).toBeGreaterThan(0)
   })
 
-  test("area chart with multiple series uses colored braille", async () => {
+  test("area chart with multiple series uses distinct colors", async () => {
     const res = await exec({
       type: "area",
       columns: ["ok", "err"],
@@ -364,17 +364,9 @@ describe("areaGrid", () => {
     expect(dom[AREA_HEIGHT - 1][0]).toBe(0)
   })
 
-  test("multi-series: smaller series dominates upper cells", () => {
-    // Series 0 = 50, series 1 = 30; series 1 is smaller so it paints last (on top).
-    // Both should appear as dominant in different cells.
-    const { dom } = areaGrid([[50], [30]], 100, false, 5)
-    const flat = dom.flat().filter((s) => s >= 0)
-    expect(flat.some((s) => s === 0)).toBe(true)
-    expect(flat.some((s) => s === 1)).toBe(true)
-  })
-
-  test("multi-series: both series visible when values differ", () => {
-    const { dom } = areaGrid([[60], [40]], 100, false, 5)
+  test("stacked series: both series appear as dominant in different cells", () => {
+    // Series 0 fills bottom half, series 1 stacks on top — both colors present.
+    const { dom } = areaGrid([[50], [50]], 100, true, 5)
     const flat = dom.flat().filter((s) => s >= 0)
     expect(flat.some((s) => s === 0)).toBe(true)
     expect(flat.some((s) => s === 1)).toBe(true)
