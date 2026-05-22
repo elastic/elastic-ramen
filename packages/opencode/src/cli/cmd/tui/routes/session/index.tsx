@@ -51,7 +51,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
-import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum, segSizes, areaGrid, AREA_HEIGHT, areaWidth } from "@/tool/chart"
+import { ChartTool, BAR_WIDTH, EIGHTHS, render as renderBar, fmt as fmtNum, segSizes, areaGrid, AREA_WIDTH } from "@/tool/chart"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -1687,7 +1687,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
   const need = createMemo(() => {
     const d = data()
     if (!d) return 0
-    if (d.type === "area") return areaWidth(d.rows.length) + 2
+    if (d.type === "area") return AREA_WIDTH + 2
     const l = layout()
     const s = stacked()
     const n = d.columns.length
@@ -1837,7 +1837,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
   }
 
   const areaSinglePanel = (series: number[], max: number, color: RGBA, label: string, first: string, last: string, W: number) => {
-    const { bits } = areaGrid([series], max, false, W)
+    const bits = areaGrid(series, max, W)
     return (
       <box>
         <text style={{ fg: color }}>{label}</text>
@@ -1871,14 +1871,12 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     const last = n > 0 ? d.rows[n - 1].label : ""
 
     if (S === 1) {
-      const W = areaWidth(n)
-      return areaSinglePanel(vals[0]!, globalMax, colors[0]!, d.columns[0]!, first, last, W)
+      return areaSinglePanel(vals[0]!, globalMax, colors[0]!, d.columns[0]!, first, last, AREA_WIDTH)
     }
 
-    const panelW = areaWidth(n)
     const panels: JSX.Element[] = []
     for (let si = 0; si < S; si++) {
-      panels.push(areaSinglePanel(vals[si]!, globalMax, colors[si % colors.length]!, d.columns[si]!, first, last, panelW))
+      panels.push(areaSinglePanel(vals[si]!, globalMax, colors[si % colors.length]!, d.columns[si]!, first, last, AREA_WIDTH))
     }
     return <box gap={1}>{panels}</box>
   }

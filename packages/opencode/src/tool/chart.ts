@@ -5,6 +5,8 @@ import type { MessageV2 } from "../session/message-v2"
 export const EIGHTHS = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
 export const BAR_WIDTH = 20
 export const AREA_HEIGHT = 12
+/** Width in braille chars (each char = 2 pixel columns). Data is interpolated across this width. */
+export const AREA_WIDTH = 60
 /** Braille dot bitmasks indexed by [row 0-3][col 0-1]. Row 0 is the topmost dot, row 3 the bottommost. */
 export const BRAILLE_DOTS = [
   [0x01, 0x08],
@@ -12,13 +14,6 @@ export const BRAILLE_DOTS = [
   [0x04, 0x20],
   [0x40, 0x80],
 ]
-
-/** Width in braille chars for an area chart with `n` data points. */
-export function areaWidth(n: number): number {
-  // Each braille char holds 2 pixel columns. Target 60 chars (120 pixel cols)
-  // to fill a typical terminal; data is interpolated across the full width.
-  return Math.min(80, Math.max(20, 60))
-}
 
 const ANSI_COLORS = ["\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[31m"]
 const ANSI_RESET = "\x1b[0m"
@@ -77,22 +72,12 @@ export function ansiStack(values: number[], globalMax: number, width: number): s
   return out
 }
 
-/**
- * Build the braille grid for a single-series area chart.
- * vals[dataIdx]; returns bit patterns per cell.
- */
-export function areaGrid(
-  vals: number[][],
-  max: number,
-  _stacked: boolean,
-  width: number,
-): { bits: number[][]; dom: number[][] } {
-  const series = vals[0] ?? []
+/** Build the braille grid for a single-series area chart. Returns bit patterns per cell. */
+export function areaGrid(series: number[], max: number, width: number): number[][] {
   const H = AREA_HEIGHT
   const LEVELS = H * 4
   const n = series.length
   const bits = Array.from({ length: H }, () => new Array(width).fill(0))
-  const dom = Array.from({ length: H }, () => new Array(width).fill(-1))
   const pixelCols = width * 2
   for (let px = 0; px < pixelCols; px++) {
     const cx = Math.floor(px / 2)
@@ -107,14 +92,13 @@ export function areaGrid(
       const cy = H - 1 - Math.floor(lev / 4)
       const row = 3 - (lev % 4)
       bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
-      dom[cy][cx] = 0
     }
   }
-  return { bits, dom }
+  return bits
 }
 
 function brailleArea(series: number[], max: number, color: string, width: number): string[] {
-  const { bits } = areaGrid([series], max, false, width)
+  const bits = areaGrid(series, max, width)
   return bits.map((row) =>
     row
       .map((b) => {
@@ -136,7 +120,7 @@ function areaPanel(
   width: number,
 ): string[] {
   const lines: string[] = []
-  lines.push(colorFor(0).replace(colorFor(0), color) + label + ANSI_RESET)
+  lines.push(color + label + ANSI_RESET)
   lines.push("┌" + "─".repeat(width) + "┐")
   for (const row of brailleArea(series, max, color, width)) {
     lines.push("│" + row + "│")
@@ -234,17 +218,12 @@ function areaChart(params: {
   }
 
   if (S === 1) {
-    // Single series: one full-width panel.
-    const W = areaWidth(n)
     const max = Math.max(1, ...vals[0])
-    lines.push(...areaPanel(vals[0], max, colorFor(0), params.columns[0], firstLabel, lastLabel, W))
+    lines.push(...areaPanel(vals[0], max, colorFor(0), params.columns[0], firstLabel, lastLabel, AREA_WIDTH))
   } else {
-    // Multiple series: render side-by-side if 2 series, otherwise in a vertical grid.
-    // Each panel shares the same max scale so heights are comparable across panels.
     const globalMax = Math.max(1, ...vals.flat())
-    const panelW = areaWidth(n)
     for (let si = 0; si < S; si++) {
-      lines.push(...areaPanel(vals[si], globalMax, colorFor(si), params.columns[si], firstLabel, lastLabel, panelW))
+      lines.push(...areaPanel(vals[si], globalMax, colorFor(si), params.columns[si], firstLabel, lastLabel, AREA_WIDTH))
       if (si < S - 1) lines.push("")
     }
   }
@@ -266,7 +245,17 @@ function lastEsqlResult(messages: MessageV2.WithParts[]): EsqlResult | undefined
       if (part.type !== "tool" || part.state.status !== "completed") continue
       try {
         const data = JSON.parse(part.state.output)
-        if (Array.isArray(data?.columns) && Array.isArray(data?.values)) return data as EsqlResult
+        if (
+          Array.isArray(data?.columns) &&
+          Array.isArray(data?.values) &&
+          data.columns.every(
+            (c: unknown) =>
+              typeof c === "object" &&
+              c !== null &&
+              typeof (c as { name?: unknown }).name === "string" &&
+              typeof (c as { type?: unknown }).type === "string",
+          )
+        ) return data as EsqlResult
       } catch {}
     }
   }

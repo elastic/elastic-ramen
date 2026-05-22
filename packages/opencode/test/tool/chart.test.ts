@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { z } from "zod"
-import { ChartTool, chartParameters, render, fmt, ansiStack, segSizes, BAR_WIDTH, EIGHTHS, areaGrid, AREA_HEIGHT, BRAILLE_DOTS, areaWidth } from "../../src/tool/chart"
+import { ChartTool, chartParameters, render, fmt, ansiStack, segSizes, BAR_WIDTH, EIGHTHS, areaGrid, AREA_HEIGHT, AREA_WIDTH, BRAILLE_DOTS } from "../../src/tool/chart"
 
 function vis(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "")
@@ -347,34 +347,24 @@ describe("ChartTool", () => {
 })
 
 describe("areaGrid", () => {
-  test("returns grids of correct dimensions", () => {
-    const { bits, dom } = areaGrid([[10, 20, 30]], 30, false, 10)
+  test("returns grid of correct dimensions", () => {
+    const bits = areaGrid([10, 20, 30], 30, 10)
     expect(bits.length).toBe(AREA_HEIGHT)
     expect(bits[0].length).toBe(10)
-    expect(dom.length).toBe(AREA_HEIGHT)
-    expect(dom[0].length).toBe(10)
   })
 
   test("all-zero input produces no filled dots", () => {
-    const { bits, dom } = areaGrid([[0, 0, 0]], 10, false, 5)
+    const bits = areaGrid([0, 0, 0], 10, 5)
     expect(bits.flat().every((b) => b === 0)).toBe(true)
-    expect(dom.flat().every((s) => s === -1)).toBe(true)
   })
 
   test("full value fills bottom rows of grid", () => {
-    const { bits, dom } = areaGrid([[100]], 100, false, 5)
+    const bits = areaGrid([100], 100, 5)
     expect(bits[AREA_HEIGHT - 1][0] & BRAILLE_DOTS[3][0]).toBe(BRAILLE_DOTS[3][0])
-    expect(dom[AREA_HEIGHT - 1][0]).toBe(0)
-  })
-
-  test("single series fills cells with dom=0", () => {
-    const { dom } = areaGrid([[50]], 100, false, 5)
-    const filled = dom.flat().filter((s) => s >= 0)
-    expect(filled.every((s) => s === 0)).toBe(true)
   })
 
   test("data beyond width is ignored", () => {
-    const { bits } = areaGrid([Array.from({ length: 100 }, (_, i) => i)], 99, false, 5)
+    const bits = areaGrid(Array.from({ length: 100 }, (_, i) => i), 99, 5)
     expect(bits[0].length).toBe(5)
   })
 })
@@ -420,13 +410,34 @@ describe("ES|QL auto-extraction", () => {
     const tool = await ChartTool.init()
     expect(tool.execute(chartParameters.parse({ type: "bar" }), ctx as any)).rejects.toThrow("No ES|QL result")
   })
+
+  test("ignores tool outputs with bare-string columns (not ES|QL shape)", async () => {
+    const tool = await ChartTool.init()
+    const lookalike = {
+      ...ctx,
+      messages: [
+        {
+          info: { id: "msg_1", sessionID: "ses_test", role: "assistant", time: { created: 0 }, agent: "build", model: { providerID: "x", modelID: "y" } },
+          parts: [
+            {
+              type: "tool",
+              id: "p1",
+              sessionID: "ses_test",
+              messageID: "msg_1",
+              callID: "c1",
+              tool: "other_tool",
+              state: { status: "completed", input: {}, output: JSON.stringify({ columns: ["a", "b"], values: [[1, 2]] }), title: "x", metadata: {}, time: { start: 0, end: 1 } },
+            },
+          ],
+        },
+      ],
+    } as any
+    expect(tool.execute(chartParameters.parse({ type: "bar" }), lookalike)).rejects.toThrow("No ES|QL result")
+  })
 })
 
-describe("areaWidth", () => {
-  test("always returns 60 — fixed target width with interpolation", () => {
-    expect(areaWidth(1)).toBe(60)
-    expect(areaWidth(0)).toBe(60)
-    expect(areaWidth(40)).toBe(60)
-    expect(areaWidth(1000)).toBe(60)
+describe("AREA_WIDTH", () => {
+  test("is 60 braille chars wide", () => {
+    expect(AREA_WIDTH).toBe(60)
   })
 })
