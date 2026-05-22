@@ -19,89 +19,75 @@ steps:
           limit: 2
     command: ./.buildkite/scripts/release-build.sh
 
-  # ----- pre-sign smoke tests (block packs/signing if any fail) -----
-
-  - label: ":penguin: smoke linux x64 ({{matrix.variant}}, pre-sign)"
-    key: "smoke-linux-x64-pre"
+  - group: ":mag: pre-sign smoke tests"
+    key: "smoke-pre"
     depends_on: "build"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
-    matrix:
-      setup:
-        variant: ["x64", "x64-baseline"]
-    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} pre-sign
+    steps:
+      - label: ":penguin: smoke linux x64 ({{matrix.variant}}, pre-sign)"
+        key: "smoke-linux-x64-pre"
+        agents:
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+        matrix:
+          setup:
+            variant: ["x64", "x64-baseline"]
+        command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} pre-sign
 
-  - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, pre-sign)"
-    key: "smoke-linux-x64-musl-pre"
-    depends_on: "build"
-    agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204"
-    matrix:
-      setup:
-        variant: ["x64-musl", "x64-baseline-musl"]
-    command: ./.buildkite/scripts/smoke-musl-docker.sh {{matrix.variant}} pre-sign
+      - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, pre-sign)"
+        key: "smoke-linux-x64-musl-pre"
+        agents:
+          provider: "gcp"
+          image: "family/core-ubuntu-2204"
+        matrix:
+          setup:
+            variant: ["x64-musl", "x64-baseline-musl"]
+        command: ./.buildkite/scripts/smoke-musl-docker.sh {{matrix.variant}} pre-sign
 
-  - label: ":penguin: smoke linux arm64 (pre-sign)"
-    key: "smoke-linux-arm64-pre"
-    depends_on: "build"
-    agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
-      machineType: "t2a-standard-2"
-    command: ./.buildkite/scripts/smoke.sh linux arm64 pre-sign
+      - label: ":penguin: smoke linux arm64 (pre-sign)"
+        key: "smoke-linux-arm64-pre"
+        agents:
+          provider: "gcp"
+          image: "family/core-ubuntu-2204-aarch64"
+          machineType: "t2a-standard-2"
+        command: ./.buildkite/scripts/smoke.sh linux arm64 pre-sign
 
-  - label: ":penguin: smoke linux arm64-musl (pre-sign)"
-    key: "smoke-linux-arm64-musl-pre"
-    depends_on: "build"
-    agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
-      machineType: "t2a-standard-2"
-    command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl pre-sign
+      - label: ":penguin: smoke linux arm64-musl (pre-sign)"
+        key: "smoke-linux-arm64-musl-pre"
+        agents:
+          provider: "gcp"
+          image: "family/core-ubuntu-2204-aarch64"
+          machineType: "t2a-standard-2"
+        command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl pre-sign
 
-  - label: ":apple: smoke darwin arm64 (pre-sign)"
-    key: "smoke-darwin-arm64-pre"
-    depends_on: "build"
-    agents:
-      provider: "orka"
-      imagePrefix: "generic-13-ventura-arm"
-    command: ./.buildkite/scripts/smoke.sh darwin arm64 pre-sign
+      - label: ":apple: smoke darwin arm64 (pre-sign)"
+        key: "smoke-darwin-arm64-pre"
+        agents:
+          provider: "orka"
+          imagePrefix: "generic-13-ventura-arm"
+        command: ./.buildkite/scripts/smoke.sh darwin arm64 pre-sign
 
-  - label: ":apple: smoke darwin x64 ({{matrix.variant}}, pre-sign)"
-    key: "smoke-darwin-x64-pre"
-    depends_on: "build"
-    agents:
-      provider: "orka"
-      imagePrefix: "generic-13-ventura-x64"
-    matrix:
-      setup:
-        variant: ["x64", "x64-baseline"]
-    command: ./.buildkite/scripts/smoke.sh darwin {{matrix.variant}} pre-sign
+      - label: ":apple: smoke darwin x64 ({{matrix.variant}}, pre-sign)"
+        key: "smoke-darwin-x64-pre"
+        agents:
+          provider: "orka"
+          imagePrefix: "generic-13-ventura-x64"
+        matrix:
+          setup:
+            variant: ["x64", "x64-baseline"]
+        command: ./.buildkite/scripts/smoke.sh darwin {{matrix.variant}} pre-sign
 
-  - label: ":windows: smoke windows x64 ({{matrix.variant}}, pre-sign)"
-    key: "smoke-windows-x64-pre"
-    depends_on: "build"
-    agents:
-      provider: "gcp"
-      image: "family/core-windows-2022"
-    matrix:
-      setup:
-        variant: ["x64", "x64-baseline"]
-    command: ./.buildkite/scripts/smoke.ps1 -Variant {{matrix.variant}} -Stage pre-sign
-
-  # ----- pack (every pack waits on every pre-sign smoke) -----
+      - label: ":windows: smoke windows x64 ({{matrix.variant}}, pre-sign)"
+        key: "smoke-windows-x64-pre"
+        agents:
+          provider: "gcp"
+          image: "family/core-windows-2022"
+        matrix:
+          setup:
+            variant: ["x64", "x64-baseline"]
+        command: ./.buildkite/scripts/smoke.ps1 -Variant {{matrix.variant}} -Stage pre-sign
 
   - label: ":apple: pack mac archives"
     key: "pack-mac"
-    depends_on:
-      - "smoke-linux-x64-pre"
-      - "smoke-linux-x64-musl-pre"
-      - "smoke-linux-arm64-pre"
-      - "smoke-linux-arm64-musl-pre"
-      - "smoke-darwin-arm64-pre"
-      - "smoke-darwin-x64-pre"
-      - "smoke-windows-x64-pre"
+    depends_on: "smoke-pre"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
@@ -110,14 +96,7 @@ steps:
 
   - label: ":windows: pack windows archives"
     key: "pack-windows"
-    depends_on:
-      - "smoke-linux-x64-pre"
-      - "smoke-linux-x64-musl-pre"
-      - "smoke-linux-arm64-pre"
-      - "smoke-linux-arm64-musl-pre"
-      - "smoke-darwin-arm64-pre"
-      - "smoke-darwin-x64-pre"
-      - "smoke-windows-x64-pre"
+    depends_on: "smoke-pre"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
@@ -126,14 +105,7 @@ steps:
 
   - label: ":penguin: pack linux archives"
     key: "pack-linux"
-    depends_on:
-      - "smoke-linux-x64-pre"
-      - "smoke-linux-x64-musl-pre"
-      - "smoke-linux-arm64-pre"
-      - "smoke-linux-arm64-musl-pre"
-      - "smoke-darwin-arm64-pre"
-      - "smoke-darwin-x64-pre"
-      - "smoke-windows-x64-pre"
+    depends_on: "smoke-pre"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     artifact_paths:
@@ -182,73 +154,68 @@ steps:
       - "final/*"
     command: ./.buildkite/scripts/collect-signed.sh
 
-  # ----- post-sign smoke tests (verify signing didn't break the binaries) -----
-
-  - label: ":penguin: smoke linux x64 ({{matrix.variant}}, post-sign)"
-    key: "smoke-linux-x64-post"
+  - group: ":mag: post-sign smoke tests"
+    key: "smoke-post"
     depends_on: "collect"
-    agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
-    matrix:
-      setup:
-        variant: ["x64", "x64-baseline"]
-    command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} post-sign
+    steps:
+      - label: ":penguin: smoke linux x64 ({{matrix.variant}}, post-sign)"
+        key: "smoke-linux-x64-post"
+        agents:
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+        matrix:
+          setup:
+            variant: ["x64", "x64-baseline"]
+        command: ./.buildkite/scripts/smoke.sh linux {{matrix.variant}} post-sign
 
-  - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, post-sign)"
-    key: "smoke-linux-x64-musl-post"
-    depends_on: "collect"
-    agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204"
-    matrix:
-      setup:
-        variant: ["x64-musl", "x64-baseline-musl"]
-    command: ./.buildkite/scripts/smoke-musl-docker.sh {{matrix.variant}} post-sign
+      - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, post-sign)"
+        key: "smoke-linux-x64-musl-post"
+        agents:
+          provider: "gcp"
+          image: "family/core-ubuntu-2204"
+        matrix:
+          setup:
+            variant: ["x64-musl", "x64-baseline-musl"]
+        command: ./.buildkite/scripts/smoke-musl-docker.sh {{matrix.variant}} post-sign
 
-  - label: ":penguin: smoke linux arm64 (post-sign)"
-    key: "smoke-linux-arm64-post"
-    depends_on: "collect"
-    agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
-      machineType: "t2a-standard-2"
-    command: ./.buildkite/scripts/smoke.sh linux arm64 post-sign
+      - label: ":penguin: smoke linux arm64 (post-sign)"
+        key: "smoke-linux-arm64-post"
+        agents:
+          provider: "gcp"
+          image: "family/core-ubuntu-2204-aarch64"
+          machineType: "t2a-standard-2"
+        command: ./.buildkite/scripts/smoke.sh linux arm64 post-sign
 
-  - label: ":penguin: smoke linux arm64-musl (post-sign)"
-    key: "smoke-linux-arm64-musl-post"
-    depends_on: "collect"
-    agents:
-      provider: "gcp"
-      image: "family/core-ubuntu-2204-aarch64"
-      machineType: "t2a-standard-2"
-    command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl post-sign
+      - label: ":penguin: smoke linux arm64-musl (post-sign)"
+        key: "smoke-linux-arm64-musl-post"
+        agents:
+          provider: "gcp"
+          image: "family/core-ubuntu-2204-aarch64"
+          machineType: "t2a-standard-2"
+        command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl post-sign
 
-  - label: ":apple: smoke darwin arm64 (post-sign)"
-    key: "smoke-darwin-arm64-post"
-    depends_on: "collect"
-    agents:
-      provider: "orka"
-      imagePrefix: "generic-13-ventura-arm"
-    command: ./.buildkite/scripts/smoke.sh darwin arm64 post-sign
+      - label: ":apple: smoke darwin arm64 (post-sign)"
+        key: "smoke-darwin-arm64-post"
+        agents:
+          provider: "orka"
+          imagePrefix: "generic-13-ventura-arm"
+        command: ./.buildkite/scripts/smoke.sh darwin arm64 post-sign
 
-  - label: ":apple: smoke darwin x64 ({{matrix.variant}}, post-sign)"
-    key: "smoke-darwin-x64-post"
-    depends_on: "collect"
-    agents:
-      provider: "orka"
-      imagePrefix: "generic-13-ventura-x64"
-    matrix:
-      setup:
-        variant: ["x64", "x64-baseline"]
-    command: ./.buildkite/scripts/smoke.sh darwin {{matrix.variant}} post-sign
+      - label: ":apple: smoke darwin x64 ({{matrix.variant}}, post-sign)"
+        key: "smoke-darwin-x64-post"
+        agents:
+          provider: "orka"
+          imagePrefix: "generic-13-ventura-x64"
+        matrix:
+          setup:
+            variant: ["x64", "x64-baseline"]
+        command: ./.buildkite/scripts/smoke.sh darwin {{matrix.variant}} post-sign
 
-  - label: ":windows: smoke windows x64 ({{matrix.variant}}, post-sign)"
-    key: "smoke-windows-x64-post"
-    depends_on: "collect"
-    agents:
-      provider: "gcp"
-      image: "family/core-windows-2022"
-    matrix:
-      setup:
-        variant: ["x64", "x64-baseline"]
-    command: ./.buildkite/scripts/smoke.ps1 -Variant {{matrix.variant}} -Stage post-sign
+      - label: ":windows: smoke windows x64 ({{matrix.variant}}, post-sign)"
+        key: "smoke-windows-x64-post"
+        agents:
+          provider: "gcp"
+          image: "family/core-windows-2022"
+        matrix:
+          setup:
+            variant: ["x64", "x64-baseline"]
+        command: ./.buildkite/scripts/smoke.ps1 -Variant {{matrix.variant}} -Stage post-sign
