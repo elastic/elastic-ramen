@@ -13,7 +13,13 @@ buildkite-agent artifact download "packages/opencode/dist/ramen-darwin-*/bin/*" 
 repo_root="$(pwd)"
 
 shopt -s nullglob
-for dir in downloads/packages/opencode/dist/ramen-darwin-*; do
+variant_dirs=(downloads/packages/opencode/dist/ramen-darwin-*)
+if [[ ${#variant_dirs[@]} -eq 0 ]]; then
+  echo "no ramen-darwin-* directories found under downloads/packages/opencode/dist" >&2
+  exit 1
+fi
+
+for dir in "${variant_dirs[@]}"; do
   variant=$(basename "$dir")
   workdir="work/${variant}"
   rm -rf "${workdir}"
