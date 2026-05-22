@@ -314,7 +314,7 @@ describe("ChartTool", () => {
     expect(labelLine).toContain("end")
   })
 
-  test("area chart with multiple columns has legend", async () => {
+  test("area chart with multiple columns has panel labels", async () => {
     const res = await exec({
       type: "area",
       columns: ["ok", "err"],
@@ -323,12 +323,11 @@ describe("ChartTool", () => {
         { label: "t2", values: [70, 30] },
       ],
     })
-    const lines = res.output.split("\n")
-    const legend = lines.filter((l) => l.includes("ok") && l.includes("err"))
-    expect(legend.length).toBeGreaterThan(0)
+    expect(res.output).toContain("ok")
+    expect(res.output).toContain("err")
   })
 
-  test("area chart with multiple series uses distinct colors", async () => {
+  test("area chart with multiple series renders separate panels", async () => {
     const res = await exec({
       type: "area",
       columns: ["ok", "err"],
@@ -338,6 +337,10 @@ describe("ChartTool", () => {
       ],
     })
     expect(/[\u2800-\u28FF]/.test(res.output)).toBe(true)
+    // Each series has its own label header and box
+    expect(res.output).toContain("ok")
+    expect(res.output).toContain("err")
+    // Two distinct colors used
     expect(res.output).toContain("\x1b[32m")
     expect(res.output).toContain("\x1b[33m")
   })
@@ -364,12 +367,10 @@ describe("areaGrid", () => {
     expect(dom[AREA_HEIGHT - 1][0]).toBe(0)
   })
 
-  test("stacked series: both series appear as dominant in different cells", () => {
-    // Series 0 fills bottom half, series 1 stacks on top — both colors present.
-    const { dom } = areaGrid([[50], [50]], 100, true, 5)
-    const flat = dom.flat().filter((s) => s >= 0)
-    expect(flat.some((s) => s === 0)).toBe(true)
-    expect(flat.some((s) => s === 1)).toBe(true)
+  test("single series fills cells with dom=0", () => {
+    const { dom } = areaGrid([[50]], 100, false, 5)
+    const filled = dom.flat().filter((s) => s >= 0)
+    expect(filled.every((s) => s === 0)).toBe(true)
   })
 
   test("data beyond width is ignored", () => {

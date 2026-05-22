@@ -78,79 +78,72 @@ export function ansiStack(values: number[], globalMax: number, width: number): s
 }
 
 /**
- * Build the braille grid for an area chart.
- * vals[seriesIdx][dataIdx]; returns bit patterns and dominant series per cell.
- *
- * Stacked rendering: series 0 fills from 0 upward, series 1 is stacked on top
- * of series 0, etc. Each braille cell is colored by whichever series
- * contributed the most dots to that cell (majority vote), so the boundary
- * between series is visually accurate even when it falls mid-cell.
+ * Build the braille grid for a single-series area chart.
+ * vals[dataIdx]; returns bit patterns per cell.
  */
 export function areaGrid(
   vals: number[][],
   max: number,
-  stacked: boolean,
+  _stacked: boolean,
   width: number,
 ): { bits: number[][]; dom: number[][] } {
+  const series = vals[0] ?? []
   const H = AREA_HEIGHT
   const LEVELS = H * 4
-  const n = vals[0]?.length ?? 0
-  const S = vals.length
+  const n = series.length
   const bits = Array.from({ length: H }, () => new Array(width).fill(0))
   const dom = Array.from({ length: H }, () => new Array(width).fill(-1))
-  // Track dot count per cell per series to determine dominant color per cell.
-  const dotCount = Array.from({ length: H }, () => Array.from({ length: width }, () => new Array(S).fill(0)))
-  // Each braille char is 2 pixel columns wide; iterate over pixel columns.
   const pixelCols = width * 2
   for (let px = 0; px < pixelCols; px++) {
     const cx = Math.floor(px / 2)
     const dcol = px % 2
-    // Map pixel column to a data index via linear interpolation.
     const di = n <= 1 ? 0 : (px / (pixelCols - 1)) * (n - 1)
     const lo = Math.floor(di)
     const hi = Math.min(n - 1, lo + 1)
     const t = di - lo
-    let base = 0
-    for (let si = 0; si < S; si++) {
-      const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
-      const top = stacked ? base + v : v
-      const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
-      const fillBase = stacked ? Math.round((base / max) * LEVELS) : 0
-      for (let lev = fillBase; lev < fillTop; lev++) {
-        const cy = H - 1 - Math.floor(lev / 4)
-        const row = 3 - (lev % 4)
-        bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
-        dotCount[cy][cx][si]++
-      }
-      if (stacked) base += v
-    }
-  }
-  // Assign each cell's color to the series that contributed the most dots.
-  for (let cy = 0; cy < H; cy++) {
-    for (let cx = 0; cx < width; cx++) {
-      let best = -1
-      let bestCount = 0
-      for (let si = 0; si < S; si++) {
-        const c = dotCount[cy][cx][si]
-        if (c > bestCount) { bestCount = c; best = si }
-      }
-      dom[cy][cx] = best
+    const v = (series[lo] ?? 0) * (1 - t) + (series[hi] ?? 0) * t
+    const fillTop = Math.min(LEVELS, Math.round((v / max) * LEVELS))
+    for (let lev = 0; lev < fillTop; lev++) {
+      const cy = H - 1 - Math.floor(lev / 4)
+      const row = 3 - (lev % 4)
+      bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
+      dom[cy][cx] = 0
     }
   }
   return { bits, dom }
 }
 
-function brailleArea(vals: number[][], max: number, stacked: boolean, width: number): string[] {
-  const { bits, dom } = areaGrid(vals, max, stacked, width)
-  return bits.map((row, cy) =>
+function brailleArea(series: number[], max: number, color: string, width: number): string[] {
+  const { bits } = areaGrid([series], max, false, width)
+  return bits.map((row) =>
     row
-      .map((b, cx) => {
+      .map((b) => {
         const ch = String.fromCharCode(0x2800 + b)
-        const s = dom[cy][cx]
-        return s >= 0 ? colorFor(s) + ch + ANSI_RESET : ch
+        return b > 0 ? color + ch + ANSI_RESET : ch
       })
       .join(""),
   )
+}
+
+/** Render one area panel: box + x-axis labels. Width is in braille chars. */
+function areaPanel(
+  series: number[],
+  max: number,
+  color: string,
+  label: string,
+  firstLabel: string,
+  lastLabel: string,
+  width: number,
+): string[] {
+  const lines: string[] = []
+  lines.push(colorFor(0).replace(colorFor(0), color) + label + ANSI_RESET)
+  lines.push("┌" + "─".repeat(width) + "┐")
+  for (const row of brailleArea(series, max, color, width)) {
+    lines.push("│" + row + "│")
+  }
+  lines.push("└" + "─".repeat(width) + "┘")
+  lines.push(" " + firstLabel + " ".repeat(Math.max(0, width - firstLabel.length - lastLabel.length)) + lastLabel)
+  return lines
 }
 
 function barChart(params: {
@@ -231,31 +224,46 @@ function areaChart(params: {
   const S = params.columns.length
   const vals = params.columns.map((_, si) => params.rows.map((r) => r.values[si] ?? 0))
   const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
-  // Area charts are always stacked — each series sits on top of the previous.
-  const stacked = S > 1
-  const max = stacked
-    ? Math.max(1, ...params.rows.map((r) => r.values.reduce((a, b) => a + (b ?? 0), 0)))
-    : Math.max(1, ...vals.flat())
-  const W = areaWidth(n)
+  const firstLabel = n > 0 ? params.rows[0].label : ""
+  const lastLabel = n > 0 ? params.rows[n - 1].label : ""
+
   const lines: string[] = []
   if (params.title) {
     lines.push(params.title)
     lines.push("")
   }
-  lines.push("┌" + "─".repeat(W) + "┐")
-  for (const row of brailleArea(vals, max, stacked, W)) {
-    lines.push("│" + row + "│")
+
+  if (S === 1) {
+    // Single series: one full-width panel.
+    const W = areaWidth(n)
+    const max = Math.max(1, ...vals[0])
+    lines.push(...areaPanel(vals[0], max, colorFor(0), params.columns[0], firstLabel, lastLabel, W))
+  } else {
+    // Multiple series: render side-by-side if 2 series, otherwise in a vertical grid.
+    // Each panel shares the same max scale so heights are comparable across panels.
+    const globalMax = Math.max(1, ...vals.flat())
+    const COLS = S === 2 ? 2 : 1
+    const panelW = COLS === 2 ? Math.max(20, Math.floor((areaWidth(n) - 2) / 2)) : areaWidth(n)
+    for (let row = 0; row < Math.ceil(S / COLS); row++) {
+      const panelLines: string[][] = []
+      for (let col = 0; col < COLS; col++) {
+        const si = row * COLS + col
+        if (si >= S) break
+        panelLines.push(areaPanel(vals[si], globalMax, colorFor(si), params.columns[si], firstLabel, lastLabel, panelW))
+      }
+      if (panelLines.length === 1) {
+        lines.push(...panelLines[0])
+      } else {
+        // Zip panel lines side by side with a 2-space gutter.
+        const height = Math.max(...panelLines.map((p) => p.length))
+        for (let li = 0; li < height; li++) {
+          lines.push(panelLines.map((p) => p[li] ?? " ".repeat(panelW + 2)).join("  "))
+        }
+      }
+      if (row < Math.ceil(S / COLS) - 1) lines.push("")
+    }
   }
-  lines.push("└" + "─".repeat(W) + "┘")
-  if (n > 0) {
-    const first = params.rows[0].label
-    const last = params.rows[n - 1].label
-    lines.push(" " + first + " ".repeat(Math.max(0, W - first.length - last.length)) + last)
-  }
-  if (S > 1) {
-    lines.push("")
-    lines.push(params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  "))
-  }
+
   return { lines, maxes }
 }
 
@@ -342,8 +350,9 @@ export const ChartTool = Tool.define("chart", {
     "",
     "Chart types:",
     "  bar  — table with one horizontal magnitude bar per numeric cell (category × column). Default.",
-    "  area — braille-based stacked area chart. Use for time series or sequential data.",
-    "         Multiple numeric columns are stacked on the y-axis, each with its own color.",
+    "  area — braille-based area chart. Use for time series or sequential data.",
+    "         Each numeric column gets its own panel. Two series render side by side;",
+    "         more than two render in a vertical grid. All panels share the same y scale.",
     "",
     "Stacking (bar only): set stacked=true when columns are parts of a whole (e.g. success + error).",
     "",
