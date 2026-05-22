@@ -142,7 +142,9 @@ describe("ElasticAuth.save → global config", () => {
     const json = (await Filesystem.readJson(globalCfg)) as Record<string, any>
     expect(json.model).toBe("kibana/default")
     expect(json.provider.kibana.models.default.id).toBe("x")
-    expect(json.mcp.eab.type).toBe("local")
+    expect(json.mcp.eab.type).toBe("remote")
+    expect(json.mcp.eab.url).toBe("https://kibana.example.com:5601/api/agent_builder/mcp")
+    expect(json.mcp.eab.headers.Authorization).toBe("ApiKey test-key")
     expect(json.permission["eab_*"]).toBe("allow")
   })
 

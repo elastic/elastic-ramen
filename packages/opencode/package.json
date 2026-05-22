@@ -13,6 +13,7 @@
     "access": "public"
   },
   "scripts": {
+    "pretypecheck": "bun script/ensure-cli-patch.ts",
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
     "build": "bun run script/build.ts",

@@ -90,14 +90,6 @@ let cli = yargs(hideBin(process.argv))
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
-    // Extract embedded elastic CLI and ensure it's on PATH
-    const { ElasticBin } = await import("./elastic/bin")
-    const elasticBinPath = await ElasticBin.resolve()
-    const elasticBinDir = path.dirname(elasticBinPath)
-    if (!process.env.PATH?.includes(elasticBinDir)) {
-      process.env.PATH = elasticBinDir + ":" + (process.env.PATH ?? "")
-    }
-
     Log.Default.info("ramen", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
