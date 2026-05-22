@@ -104,39 +104,18 @@ export function areaGrid(
     const hi = Math.min(n - 1, lo + 1)
     const t = di - lo
     let base = 0
-    if (!stacked) {
-      // Unstacked: all series fill from zero. Draw from largest to smallest so
-      // the series with the smaller top edge wins the color in the overlap zone,
-      // making every series visible instead of the largest always dominating.
-      const order = Array.from({ length: S }, (_, i) => i).sort((a, b) => {
-        const va = (vals[a][lo] ?? 0) * (1 - t) + (vals[a][hi] ?? 0) * t
-        const vb = (vals[b][lo] ?? 0) * (1 - t) + (vals[b][hi] ?? 0) * t
-        return vb - va // descending — paint largest first, smallest last
-      })
-      for (const si of order) {
-        const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
-        const fillTop = Math.min(LEVELS, Math.round((v / max) * LEVELS))
-        for (let lev = 0; lev < fillTop; lev++) {
-          const cy = H - 1 - Math.floor(lev / 4)
-          const row = 3 - (lev % 4)
-          bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
-          dom[cy][cx] = si // smaller series overwrites, so its color shows on top
-        }
+    for (let si = 0; si < S; si++) {
+      const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
+      const top = stacked ? base + v : v
+      const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
+      const fillBase = stacked ? Math.round((base / max) * LEVELS) : 0
+      for (let lev = fillBase; lev < fillTop; lev++) {
+        const cy = H - 1 - Math.floor(lev / 4)
+        const row = 3 - (lev % 4)
+        bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
+        dom[cy][cx] = si
       }
-    } else {
-      for (let si = 0; si < S; si++) {
-        const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
-        const top = base + v
-        const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
-        const fillBase = Math.round((base / max) * LEVELS)
-        for (let lev = fillBase; lev < fillTop; lev++) {
-          const cy = H - 1 - Math.floor(lev / 4)
-          const row = 3 - (lev % 4)
-          bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
-          dom[cy][cx] = si
-        }
-        base += v
-      }
+      if (stacked) base += v
     }
   }
   return { bits, dom }
@@ -228,14 +207,14 @@ function areaChart(params: {
   title?: string
   columns: string[]
   rows: { label: string; values: number[] }[]
-  stacked?: boolean
 }): { lines: string[]; maxes: number[] } {
   const n = params.rows.length
   const S = params.columns.length
-  const doStack = !!(params.stacked && S > 1)
   const vals = params.columns.map((_, si) => params.rows.map((r) => r.values[si] ?? 0))
   const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
-  const max = doStack
+  // Area charts are always stacked — overlapping fills are meaningless.
+  const stacked = S > 1
+  const max = stacked
     ? Math.max(1, ...params.rows.map((r) => r.values.reduce((a, b) => a + (b ?? 0), 0)))
     : Math.max(1, ...vals.flat())
   const W = areaWidth(n)
@@ -245,7 +224,7 @@ function areaChart(params: {
     lines.push("")
   }
   lines.push("┌" + "─".repeat(W) + "┐")
-  for (const row of brailleArea(vals, max, doStack, W)) {
+  for (const row of brailleArea(vals, max, stacked, W)) {
     lines.push("│" + row + "│")
   }
   lines.push("└" + "─".repeat(W) + "┘")
@@ -340,14 +319,14 @@ export const ChartTool = Tool.define("chart", {
     "",
     "AUTO-EXTRACTION: if you omit both `columns` and `rows`, the tool automatically",
     "reads the most recent ES|QL query result from the conversation and builds the chart",
-    "from it. Prefer this — just call chart with type/title/stacked after an ES|QL query.",
+    "from it. Prefer this — just call chart with type/title after an ES|QL query.",
     "",
     "Chart types:",
     "  bar  — table with one horizontal magnitude bar per numeric cell (category × column). Default.",
-    "  area — braille-based horizontal area chart. Use for time series or sequential data.",
+    "  area — braille-based stacked area chart. Use for time series or sequential data.",
+    "         Multiple numeric columns are always stacked.",
     "",
-    "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
-    "Unstacked (default) shows independent bars/areas for comparison.",
+    "Stacking (bar only): set stacked=true when columns are parts of a whole (e.g. success + error).",
     "",
     "Example — after an ES|QL query, just call:",
     '  { type: "area", title: "Request rate over time" }',
@@ -367,7 +346,7 @@ export const ChartTool = Tool.define("chart", {
       rows = derived.rows
     }
     const stacked = params.stacked
-    const result = params.type === "area" ? areaChart({ ...params, columns, rows, stacked }) : barChart({ ...params, columns, rows, stacked })
+    const result = params.type === "area" ? areaChart({ ...params, columns, rows }) : barChart({ ...params, columns, rows, stacked })
     const lines = result.lines
     const t = params.title
     const body = t && lines[0] === t ? lines.slice(lines[1] === "" ? 2 : 1) : lines
