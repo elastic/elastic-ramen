@@ -14,7 +14,13 @@ mkdir -p downloads artifacts-to-sign
 buildkite-agent artifact download "packages/opencode/dist/ramen-windows-*/bin/*" downloads/
 
 shopt -s nullglob
-for dir in downloads/packages/opencode/dist/ramen-windows-*; do
+windows_variants=(downloads/packages/opencode/dist/ramen-windows-*)
+if (( ${#windows_variants[@]} == 0 )); then
+  echo "no ramen-windows-* directories found in downloaded artifacts" >&2
+  exit 1
+fi
+
+for dir in "${windows_variants[@]}"; do
   variant=$(basename "$dir")
   if [[ ! -f "${dir}/bin/elastic-ramen.exe" ]]; then
     echo "no windows binary found for ${variant}" >&2
