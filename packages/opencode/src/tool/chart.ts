@@ -104,18 +104,39 @@ export function areaGrid(
     const hi = Math.min(n - 1, lo + 1)
     const t = di - lo
     let base = 0
-    for (let si = 0; si < S; si++) {
-      const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
-      const top = stacked ? base + v : v
-      const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
-      const fillBase = stacked ? Math.round((base / max) * LEVELS) : 0
-      for (let lev = fillBase; lev < fillTop; lev++) {
-        const cy = H - 1 - Math.floor(lev / 4)
-        const row = 3 - (lev % 4)
-        bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
-        dom[cy][cx] = si
+    if (!stacked) {
+      // Unstacked: all series fill from zero. Draw from largest to smallest so
+      // the series with the smaller top edge wins the color in the overlap zone,
+      // making every series visible instead of the largest always dominating.
+      const order = Array.from({ length: S }, (_, i) => i).sort((a, b) => {
+        const va = (vals[a][lo] ?? 0) * (1 - t) + (vals[a][hi] ?? 0) * t
+        const vb = (vals[b][lo] ?? 0) * (1 - t) + (vals[b][hi] ?? 0) * t
+        return vb - va // descending — paint largest first, smallest last
+      })
+      for (const si of order) {
+        const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
+        const fillTop = Math.min(LEVELS, Math.round((v / max) * LEVELS))
+        for (let lev = 0; lev < fillTop; lev++) {
+          const cy = H - 1 - Math.floor(lev / 4)
+          const row = 3 - (lev % 4)
+          bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
+          dom[cy][cx] = si // smaller series overwrites, so its color shows on top
+        }
       }
-      if (stacked) base += v
+    } else {
+      for (let si = 0; si < S; si++) {
+        const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
+        const top = base + v
+        const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
+        const fillBase = Math.round((base / max) * LEVELS)
+        for (let lev = fillBase; lev < fillTop; lev++) {
+          const cy = H - 1 - Math.floor(lev / 4)
+          const row = 3 - (lev % 4)
+          bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
+          dom[cy][cx] = si
+        }
+        base += v
+      }
     }
   }
   return { bits, dom }
