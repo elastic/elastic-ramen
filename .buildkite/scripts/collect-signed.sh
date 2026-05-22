@@ -38,7 +38,13 @@ buildkite-agent artifact download --build "${win_build}" "ramen-windows-*.exe" w
 repo_root="$(pwd)"
 
 shopt -s nullglob
-for exe in work/win-exe/ramen-windows-*.exe; do
+win_exes=(work/win-exe/ramen-windows-*.exe)
+if ((${#win_exes[@]} == 0)); then
+  echo "ERROR: No signed ramen-windows-*.exe artifacts were downloaded" >&2
+  exit 1
+fi
+
+for exe in "${win_exes[@]}"; do
   variant=$(basename "${exe}" .exe)
   stage="work/${variant}"
   rm -rf "${stage}"
