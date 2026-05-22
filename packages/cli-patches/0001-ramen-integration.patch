@@ -1,3 +1,32 @@
+diff --git a/packages/config-resolver/package.json b/packages/config-resolver/package.json
+index 7937330..6f71990 100644
+--- a/packages/config-resolver/package.json
++++ b/packages/config-resolver/package.json
+@@ -9,6 +9,7 @@
+   "types": "./dist/index.d.ts",
+   "exports": {
+     ".": {
++      "bun": "./src/index.ts",
+       "types": "./dist/index.d.ts",
+       "default": "./dist/index.js"
+     }
+diff --git a/packages/es-schemas/package.json b/packages/es-schemas/package.json
+index e34a1b7..dde89ae 100644
+--- a/packages/es-schemas/package.json
++++ b/packages/es-schemas/package.json
+@@ -7,10 +7,12 @@
+   "types": "dist/index.d.ts",
+   "exports": {
+     ".": {
++      "bun": "./src/index.ts",
+       "types": "./src/index.ts",
+       "import": "./dist/index.js"
+     },
+     "./*.js": {
++      "bun": "./src/*.ts",
+       "types": "./src/*.ts",
+       "import": "./dist/*.js"
+     }
 diff --git a/src/config/commands.ts b/src/config/commands.ts
 index f1b2187..fd405c9 100644
 --- a/src/config/commands.ts
