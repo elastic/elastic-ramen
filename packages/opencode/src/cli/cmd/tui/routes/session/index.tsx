@@ -1836,7 +1836,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
     )
   }
 
-  const areaSinglePanel = (series: number[], max: number, color: string, label: string, first: string, last: string, W: number) => {
+  const areaSinglePanel = (series: number[], max: number, color: RGBA, label: string, first: string, last: string, W: number) => {
     const { bits } = areaGrid([series], max, false, W)
     return (
       <box>
@@ -1875,19 +1875,12 @@ function Chart(props: ToolProps<typeof ChartTool>) {
       return areaSinglePanel(vals[0]!, globalMax, colors[0]!, d.columns[0]!, first, last, W)
     }
 
-    const COLS = S === 2 ? 2 : 1
-    const panelW = COLS === 2 ? Math.max(20, Math.floor((areaWidth(n) - 2) / 2)) : areaWidth(n)
-    const gridRows: JSX.Element[] = []
-    for (let r = 0; r < Math.ceil(S / COLS); r++) {
-      const panels: JSX.Element[] = []
-      for (let c = 0; c < COLS; c++) {
-        const si = r * COLS + c
-        if (si >= S) break
-        panels.push(areaSinglePanel(vals[si]!, globalMax, colors[si % colors.length]!, d.columns[si]!, first, last, panelW))
-      }
-      gridRows.push(<box direction="row" gap={2}>{panels}</box>)
+    const panelW = areaWidth(n)
+    const panels: JSX.Element[] = []
+    for (let si = 0; si < S; si++) {
+      panels.push(areaSinglePanel(vals[si]!, globalMax, colors[si % colors.length]!, d.columns[si]!, first, last, panelW))
     }
-    return <box gap={1}>{gridRows}</box>
+    return <box gap={1}>{panels}</box>
   }
 
   return (
@@ -1913,7 +1906,7 @@ function Chart(props: ToolProps<typeof ChartTool>) {
             </BlockTool>
           )
         }
-        const dataBlock = d().type === "area" ? areaChartBlock({ ...d(), stacked: s }) : barChart({ ...d(), stacked: s })
+        const dataBlock = d().type === "area" ? areaChartBlock(d()) : barChart({ ...d(), stacked: s })
         return (
           <BlockTool title={`# 📊 ${title}`} part={props.part}>
             {dataBlock}

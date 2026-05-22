@@ -242,25 +242,10 @@ function areaChart(params: {
     // Multiple series: render side-by-side if 2 series, otherwise in a vertical grid.
     // Each panel shares the same max scale so heights are comparable across panels.
     const globalMax = Math.max(1, ...vals.flat())
-    const COLS = S === 2 ? 2 : 1
-    const panelW = COLS === 2 ? Math.max(20, Math.floor((areaWidth(n) - 2) / 2)) : areaWidth(n)
-    for (let row = 0; row < Math.ceil(S / COLS); row++) {
-      const panelLines: string[][] = []
-      for (let col = 0; col < COLS; col++) {
-        const si = row * COLS + col
-        if (si >= S) break
-        panelLines.push(areaPanel(vals[si], globalMax, colorFor(si), params.columns[si], firstLabel, lastLabel, panelW))
-      }
-      if (panelLines.length === 1) {
-        lines.push(...panelLines[0])
-      } else {
-        // Zip panel lines side by side with a 2-space gutter.
-        const height = Math.max(...panelLines.map((p) => p.length))
-        for (let li = 0; li < height; li++) {
-          lines.push(panelLines.map((p) => p[li] ?? " ".repeat(panelW + 2)).join("  "))
-        }
-      }
-      if (row < Math.ceil(S / COLS) - 1) lines.push("")
+    const panelW = areaWidth(n)
+    for (let si = 0; si < S; si++) {
+      lines.push(...areaPanel(vals[si], globalMax, colorFor(si), params.columns[si], firstLabel, lastLabel, panelW))
+      if (si < S - 1) lines.push("")
     }
   }
 
