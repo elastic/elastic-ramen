@@ -114,6 +114,7 @@ steps:
 
   - label: ":apple: macOS sign"
     trigger: unified-release-macos-signing
+    # key is required by collect-signed.sh to lookup the triggered build ID
     key: macos-sign-service
     depends_on: "pack-mac"
     build:
@@ -122,6 +123,7 @@ steps:
 
   - label: ":windows: Windows sign"
     trigger: unified-release-windows-signing
+    # key is required by collect-signed.sh to lookup the triggered build ID
     key: windows-sign-service
     depends_on: "pack-windows"
     build:
@@ -131,6 +133,7 @@ steps:
 
   - label: ":lock: GPG sign linux archives"
     trigger: unified-release-gpg-signing
+    # key is required by collect-signed.sh to lookup the triggered build ID
     key: gpg-sign-service
     depends_on: "pack-linux"
     build:
