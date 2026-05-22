@@ -15,5 +15,9 @@ if (!existsSync(runner)) {
 // submodule — their package.json exports point to dist/*.js so they must be compiled
 // before any runtime import can succeed.
 if (!existsSync(esSchemaDist) || !existsSync(configResolverDist)) {
-  execSync("node_modules/.bin/tsc -b packages/es-schemas packages/config-resolver", { cwd: cli, stdio: "inherit" })
+  execSync("node_modules/.bin/tsc -b packages/es-schemas packages/config-resolver", {
+    cwd: cli,
+    stdio: "inherit",
+    env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=4096" },
+  })
 }

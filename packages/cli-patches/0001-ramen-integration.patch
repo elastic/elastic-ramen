@@ -1,5 +1,5 @@
 diff --git a/src/config/commands.ts b/src/config/commands.ts
-index f1b2187a3..fd405c929 100644
+index f1b2187..fd405c9 100644
 --- a/src/config/commands.ts
 +++ b/src/config/commands.ts
 @@ -472,8 +472,10 @@ async function editInEditor (name: string, original: RawContext): Promise<RawCon
@@ -16,7 +16,7 @@ index f1b2187a3..fd405c929 100644
      if (exitCode !== 0) return null
      const content = await readFile(path, 'utf-8')
 diff --git a/src/docs/chat.ts b/src/docs/chat.ts
-index e73d18a0a..76cdd8ccc 100644
+index e73d18a..76cdd8c 100644
 --- a/src/docs/chat.ts
 +++ b/src/docs/chat.ts
 @@ -85,7 +85,8 @@ export function createChatCommand (deps: ChatDeps = defaultDeps): OpaqueCommandH
@@ -40,7 +40,7 @@ index e73d18a0a..76cdd8ccc 100644
        }
  
 diff --git a/src/docs/search.ts b/src/docs/search.ts
-index 5bbb9f750..101b2b476 100644
+index 5bbb9f7..101b2b4 100644
 --- a/src/docs/search.ts
 +++ b/src/docs/search.ts
 @@ -47,7 +47,7 @@ export function createSearchCommand (deps: SearchDeps = defaultDeps): OpaqueComm
@@ -53,10 +53,10 @@ index 5bbb9f750..101b2b476 100644
          return {
            error: {
 diff --git a/src/factory.ts b/src/factory.ts
-index 144fff198..65cef467a 100644
+index 6780272..ae0d19e 100644
 --- a/src/factory.ts
 +++ b/src/factory.ts
-@@ -14,6 +14,7 @@ import type { SchemaArgDefinition } from './lib/schema-args.ts'
+@@ -15,6 +15,7 @@ import type { SchemaArgDefinition } from './lib/schema-args.ts'
  import { simplifyZodIssues, formatIssuesText } from './lib/zod-error.ts'
  import { renderText, formatHandlerError } from './output.ts'
  import { pickFields, parseFieldList, applyTemplate } from './lib/output-transform.ts'
@@ -64,7 +64,7 @@ index 144fff198..65cef467a 100644
  
  /** pre-built schema for coercing string → number, reused per option invocation */
  const numberSchema = z.coerce.number()
-@@ -696,7 +697,7 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+@@ -728,7 +729,7 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
        const dotPath = (parts.length > 1 ? parts.slice(1) : parts).join('.')
        if (!isCommandAllowed(dotPath, resolvedConfig.commands)) {
          if (jsonFormat === true) {
@@ -73,7 +73,7 @@ index 144fff198..65cef467a 100644
              error: {
                code: 'command_blocked',
                message: `command "${dotPath}" is not allowed by the current policy`,
-@@ -748,7 +749,7 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+@@ -780,7 +781,7 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
        } else {
          const issues = simplifyZodIssues(result.error.issues)
          if (jsonFormat === true) {
@@ -82,7 +82,7 @@ index 144fff198..65cef467a 100644
              error: {
                code: 'input_validation_failed',
                message: `Input validation failed with ${issues.length} issue(s)`,
-@@ -763,9 +764,9 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+@@ -795,9 +796,9 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
      }
      if (allRaw['dryRun'] === true) {
        if (jsonFormat) {
@@ -94,7 +94,7 @@ index 144fff198..65cef467a 100644
        }
        return
      }
-@@ -773,9 +774,9 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+@@ -805,9 +806,9 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
      assert(handlerResult !== undefined, `command ${JSON.stringify(config.name)}: handler must return a JsonValue`)
      if (isErrorResult(handlerResult)) {
        if (jsonFormat === true) {
@@ -106,7 +106,7 @@ index 144fff198..65cef467a 100644
        }
        process.exitCode = 1
      } else {
-@@ -786,13 +787,13 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
+@@ -818,13 +819,13 @@ export function defineCommand<T extends z.ZodType> (config: CommandConfig<T>): O
          output = pickFields(output, parseFieldList(fieldsRaw))
        }
        if (templateRaw != null) {
@@ -126,7 +126,7 @@ index 144fff198..65cef467a 100644
    })
 diff --git a/src/io.ts b/src/io.ts
 new file mode 100644
-index 000000000..8bf3e0f1a
+index 0000000..8bf3e0f
 --- /dev/null
 +++ b/src/io.ts
 @@ -0,0 +1,39 @@
@@ -170,7 +170,7 @@ index 000000000..8bf3e0f1a
 +  }
 +}
 diff --git a/src/lib/meta.ts b/src/lib/meta.ts
-index d033c21d3..a7170d214 100644
+index d033c21..a7170d2 100644
 --- a/src/lib/meta.ts
 +++ b/src/lib/meta.ts
 @@ -4,12 +4,9 @@
@@ -190,7 +190,7 @@ index d033c21d3..a7170d214 100644
  /**
   * Converts a semver string to the format required by the x-elastic-client-meta spec.
 diff --git a/src/lib/transport.ts b/src/lib/transport.ts
-index 195436480..d2fb8070a 100644
+index 1954364..d2fb807 100644
 --- a/src/lib/transport.ts
 +++ b/src/lib/transport.ts
 @@ -3,7 +3,7 @@
@@ -213,10 +213,10 @@ index 195436480..d2fb8070a 100644
    pool.addConnection(url)
 diff --git a/src/runner.ts b/src/runner.ts
 new file mode 100644
-index 000000000..63d4021fc
+index 0000000..d785d5d
 --- /dev/null
 +++ b/src/runner.ts
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,125 @@
 +/*
 + * Copyright Elasticsearch B.V. and contributors
 + * SPDX-License-Identifier: Apache-2.0
@@ -320,15 +320,24 @@ index 000000000..63d4021fc
 +  wire(program)
 +
 +  const restore = capture()
++  // Snapshot process.exitCode before running so we can detect if the handler set it.
++  const exitCodeBefore = process.exitCode
++  process.exitCode = 0
 +  let code = 0
 +  try {
 +    await program.parseAsync(fakeArgv)
++    // factory.ts sets process.exitCode = 1 on isErrorResult rather than throwing,
++    // so we read it back here and reset to avoid leaking the code across calls.
++    if (typeof process.exitCode === 'number' && process.exitCode !== 0) {
++      code = process.exitCode
++    }
 +  } catch (e: unknown) {
 +    const err = e as { code?: string; exitCode?: number; message?: string }
 +    if (err.code !== 'commander.helpDisplayed' && err.code !== 'commander.version') {
 +      code = err.exitCode ?? 1
 +    }
 +  } finally {
++    process.exitCode = exitCodeBefore
 +    const output = restore()
 +    return { output, code }
 +  }

@@ -2,7 +2,7 @@ You are an SRE assistant specialized in root cause analysis (RCA) for systems mo
 
 ## Capabilities
 
-You have native Kibana tools, MCP tools from the eab server, and the `elastic` CLI available via the bash tool.
+You have native Kibana tools, MCP tools from the eab server, and the `elastic` CLI available via the `elastic_cli` tool.
 
 ## Native Kibana Tools
 

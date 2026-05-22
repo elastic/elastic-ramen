@@ -11,9 +11,10 @@ metadata:
 # Skill: elastic-cli-usage (verified gotchas)
 
 Use `elastic_cli` tool for all CLI operations — credentials are injected automatically.
+Pass `argv` as a JSON array of strings, e.g. `["es","cluster","health","--json"]`.
 The `elastic` binary is NOT on PATH in the shell environment; never use bash for this.
 
-For anything not listed here, run `es <namespace> --help` or `kb <namespace> --help`.
+For anything not listed here, call `elastic_cli` with `["es","<namespace>","--help"]` or `["kb","<namespace>","--help"]`.
 
 ---
 
@@ -68,12 +69,12 @@ Pattern: `<http-method>-<resource-path>` throughout all of `kb`.
 
 ```
 # WRONG — "too many arguments" error
-docs search "index lifecycle management"
-docs read https://www.elastic.co/...
+["docs","search","index lifecycle management"]
+["docs","read","https://www.elastic.co/..."]
 
 # CORRECT
-docs search --query "index lifecycle management"
-docs read --path "https://www.elastic.co/docs/..."
+["docs","search","--query","index lifecycle management"]
+["docs","read","--path","https://www.elastic.co/docs/..."]
 ```
 
 Also: old `/guide/` URLs return `(no output)`. Use `elastic.co/docs/` URLs.
@@ -82,10 +83,10 @@ Also: old `/guide/` URLs return `(no output)`. Use `elastic.co/docs/` URLs.
 
 ```
 # WRONG
-es esql query "FROM logs-* | LIMIT 1"
+["es","esql","query","FROM logs-* | LIMIT 1"]
 
 # CORRECT
-es esql query --query "FROM logs-* | LIMIT 1" --json
+["es","esql","query","--query","FROM logs-* | LIMIT 1","--json"]
 ```
 
 ### `kb slo find-slos-op` requires `--space-id`

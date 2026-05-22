@@ -52,6 +52,8 @@ jobs:
       - name: Build CLI workspace packages
         run: node_modules/.bin/tsc -b packages/es-schemas packages/config-resolver
         working-directory: packages/cli
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Run unit tests
         run: bun turbo test
