@@ -419,18 +419,10 @@ describe("ES|QL auto-extraction", () => {
 })
 
 describe("areaWidth", () => {
-  test("minimum is 20", () => {
-    expect(areaWidth(1)).toBe(20)
-    expect(areaWidth(0)).toBe(20)
-  })
-
-  test("maximum is 80", () => {
-    expect(areaWidth(1000)).toBe(80)
-  })
-
-  test("ceil(n/2) for mid-range n", () => {
-    expect(areaWidth(40)).toBe(20)
-    expect(areaWidth(42)).toBe(21)
-    expect(areaWidth(80)).toBe(40)
+  test("always returns 60 — fixed target width with interpolation", () => {
+    expect(areaWidth(1)).toBe(60)
+    expect(areaWidth(0)).toBe(60)
+    expect(areaWidth(40)).toBe(60)
+    expect(areaWidth(1000)).toBe(60)
   })
 })

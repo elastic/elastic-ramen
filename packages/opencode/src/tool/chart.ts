@@ -15,7 +15,9 @@ export const BRAILLE_DOTS = [
 
 /** Width in braille chars for an area chart with `n` data points. */
 export function areaWidth(n: number): number {
-  return Math.min(80, Math.max(20, Math.ceil(n / 2)))
+  // Each braille char holds 2 pixel columns. Target 60 chars (120 pixel cols)
+  // to fill a typical terminal; data is interpolated across the full width.
+  return Math.min(80, Math.max(20, 60))
 }
 
 const ANSI_COLORS = ["\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[31m"]
@@ -91,13 +93,19 @@ export function areaGrid(
   const S = vals.length
   const bits = Array.from({ length: H }, () => new Array(width).fill(0))
   const dom = Array.from({ length: H }, () => new Array(width).fill(-1))
-  for (let di = 0; di < n; di++) {
-    const cx = Math.floor(di / 2)
-    if (cx >= width) break
-    const dcol = di % 2
+  // Each braille char is 2 pixel columns wide; iterate over pixel columns.
+  const pixelCols = width * 2
+  for (let px = 0; px < pixelCols; px++) {
+    const cx = Math.floor(px / 2)
+    const dcol = px % 2
+    // Map pixel column to a data index via linear interpolation.
+    const di = n <= 1 ? 0 : (px / (pixelCols - 1)) * (n - 1)
+    const lo = Math.floor(di)
+    const hi = Math.min(n - 1, lo + 1)
+    const t = di - lo
     let base = 0
     for (let si = 0; si < S; si++) {
-      const v = vals[si][di] ?? 0
+      const v = (vals[si][lo] ?? 0) * (1 - t) + (vals[si][hi] ?? 0) * t
       const top = stacked ? base + v : v
       const fillTop = Math.min(LEVELS, Math.round((top / max) * LEVELS))
       const fillBase = stacked ? Math.round((base / max) * LEVELS) : 0
