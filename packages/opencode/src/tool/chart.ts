@@ -93,6 +93,8 @@ export function areaGrid(
   const S = vals.length
   const bits = Array.from({ length: H }, () => new Array(width).fill(0))
   const dom = Array.from({ length: H }, () => new Array(width).fill(-1))
+  // Track dot count per cell per series to determine dominant color per cell.
+  const dotCount = Array.from({ length: H }, () => Array.from({ length: width }, () => new Array(S).fill(0)))
   // Each braille char is 2 pixel columns wide; iterate over pixel columns.
   const pixelCols = width * 2
   for (let px = 0; px < pixelCols; px++) {
@@ -113,9 +115,21 @@ export function areaGrid(
         const cy = H - 1 - Math.floor(lev / 4)
         const row = 3 - (lev % 4)
         bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
-        dom[cy][cx] = si
+        dotCount[cy][cx][si]++
       }
       if (stacked) base += v
+    }
+  }
+  // Assign each cell's color to the series that contributed the most dots.
+  for (let cy = 0; cy < H; cy++) {
+    for (let cx = 0; cx < width; cx++) {
+      let best = -1
+      let bestCount = 0
+      for (let si = 0; si < S; si++) {
+        const c = dotCount[cy][cx][si]
+        if (c > bestCount) { bestCount = c; best = si }
+      }
+      dom[cy][cx] = best
     }
   }
   return { bits, dom }

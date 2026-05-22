@@ -369,6 +369,14 @@ describe("areaGrid", () => {
     expect(dom.flat().some((s) => s === 1)).toBe(true)
   })
 
+  test("stacked series: both series appear as dominant in different cells", () => {
+    // Series 0 fills bottom half, series 1 fills top half → both colors present.
+    const { dom } = areaGrid([[50], [50]], 100, true, 5)
+    const flat = dom.flat().filter((s) => s >= 0)
+    expect(flat.some((s) => s === 0)).toBe(true)
+    expect(flat.some((s) => s === 1)).toBe(true)
+  })
+
   test("data beyond width is ignored", () => {
     const { bits } = areaGrid([Array.from({ length: 100 }, (_, i) => i)], 99, false, 5)
     expect(bits[0].length).toBe(5)
