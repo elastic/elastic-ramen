@@ -48,7 +48,7 @@ steps:
     agents:
       provider: "gcp"
       image: "family/core-ubuntu-2204-aarch64"
-      machineType: "n4a-standard-2"
+      machineType: "t2a-standard-2"
     command: ./.buildkite/scripts/smoke.sh linux arm64 pre-sign
 
   - label: ":penguin: smoke linux arm64-musl (pre-sign)"
@@ -57,7 +57,7 @@ steps:
     agents:
       provider: "gcp"
       image: "family/core-ubuntu-2204-aarch64"
-      machineType: "n4a-standard-2"
+      machineType: "t2a-standard-2"
     command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl pre-sign
 
   - label: ":apple: smoke darwin arm64 (pre-sign)"
@@ -211,7 +211,7 @@ steps:
     agents:
       provider: "gcp"
       image: "family/core-ubuntu-2204-aarch64"
-      machineType: "n4a-standard-2"
+      machineType: "t2a-standard-2"
     command: ./.buildkite/scripts/smoke.sh linux arm64 post-sign
 
   - label: ":penguin: smoke linux arm64-musl (post-sign)"
@@ -220,7 +220,7 @@ steps:
     agents:
       provider: "gcp"
       image: "family/core-ubuntu-2204-aarch64"
-      machineType: "n4a-standard-2"
+      machineType: "t2a-standard-2"
     command: ./.buildkite/scripts/smoke-musl-docker.sh arm64-musl post-sign
 
   - label: ":apple: smoke darwin arm64 (post-sign)"
