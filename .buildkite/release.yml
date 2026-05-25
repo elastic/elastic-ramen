@@ -7,7 +7,7 @@ steps:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
       cpu: 2000m
       memory: 2048Mi
-    if: build.branch =~ /^ci\//
+    if: build.branch =~ /^ci\// || build.tag =~ /^v/
     env:
       DRY_RUN: "true"
       BUN_VERSION: "1.3.14"
@@ -222,3 +222,18 @@ steps:
           setup:
             variant: ["x64", "x64-baseline"]
         command: ./.buildkite/scripts/smoke.ps1 -Variant {{matrix.variant}} -Stage post-sign
+
+  - label: ":rocket: publish GitHub release"
+    key: "publish-release"
+    depends_on: "smoke-post"
+    if: build.tag =~ /^v/
+    env:
+      GH_REPO: "elastic/elastic-ramen"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+    command: |
+      if ! command -v gh >/dev/null 2>&1; then
+        apt-get update
+        apt-get install -y gh
+      fi
+      bash ./.buildkite/scripts/publish-release.sh
