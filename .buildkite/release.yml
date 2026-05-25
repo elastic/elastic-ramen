@@ -6,7 +6,7 @@ steps:
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
       cpu: 2000m
-      memory: 2048Mi
+      memory: 4096Mi
     if: build.branch =~ /^ci\// || build.tag =~ /^v/
     env:
       DRY_RUN: "true"
