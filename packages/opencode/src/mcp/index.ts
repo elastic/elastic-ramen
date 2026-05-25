@@ -26,7 +26,6 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { ElasticAuth } from "@/elastic/auth"
-import { ElasticBin } from "@/elastic/bin"
 import open from "open"
 
 export namespace MCP {
@@ -185,6 +184,10 @@ export namespace MCP {
     return typeof entry === "object" && entry !== null && "type" in entry
   }
 
+  function mcpTimeout(mcp: Config.Mcp): number {
+    return mcp.timeout ?? DEFAULT_TIMEOUT
+  }
+
   async function descendants(pid: number): Promise<number[]> {
     if (process.platform === "win32") return []
     const pids: number[] = []
@@ -207,10 +210,31 @@ export namespace MCP {
     return pids
   }
 
+  /**
+   * Merge persisted MCP config with a live EAB entry derived from the active Elastic
+   * profile, migrating the legacy `mcp.ab` key to `mcp.eab` when present.
+   *
+   * Calls `ElasticAuth.check()` once and shares the result between
+   * `ensureEabMcpOnDisk` and `remoteEabMcp` to avoid redundant credential lookups.
+   */
+  async function resolvedMcpConfig(): Promise<Record<string, any>> {
+    const auth = await ElasticAuth.check()
+    await ElasticAuth.ensureEabMcpOnDisk(auth)
+    const cfg = await Config.get()
+    const base = { ...(cfg.mcp ?? {}) }
+    const injected = ElasticAuth.eabMcpFromAuth(auth)
+    if (injected) base.eab = injected
+    const legacy = base.ab
+    if (legacy && typeof legacy === "object" && legacy !== null && "type" in legacy && isMcpConfigured(legacy as McpEntry)) {
+      if (!base.eab) base.eab = legacy
+      delete base.ab
+    }
+    return base
+  }
+
   const state = Instance.state(
     async () => {
-      const cfg = await Config.get()
-      const config: Record<string, any> = { ...cfg.mcp }
+      const config = await resolvedMcpConfig()
 
       const clients: Record<string, MCPClient> = {}
       const status: Record<string, Status> = {}
@@ -394,6 +418,16 @@ export namespace MCP {
       }
     }
 
+    // Skip legacy local `elastic ab mcp proxy` entries written by older ramen versions.
+    // The Go binary no longer ships; eab is now a Kibana-hosted remote MCP endpoint.
+    if (mcp.type === "local" && mcp.command[0] === "elastic" && mcp.command[1] === "ab") {
+      log.info("skipping legacy elastic ab mcp proxy entry", { key })
+      return {
+        mcpClient: undefined,
+        status: { status: "disabled" as const },
+      }
+    }
+
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined
@@ -440,7 +474,7 @@ export namespace MCP {
       ]
 
       let lastError: Error | undefined
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = mcpTimeout(mcp)
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
@@ -509,16 +543,7 @@ export namespace MCP {
     }
 
     if (mcp.type === "local") {
-      let [cmd, ...args] = mcp.command
-      // Resolve the elastic CLI binary via ElasticBin so it works even when not on PATH
-      if (cmd === "elastic") {
-        try {
-          cmd = await ElasticBin.resolve()
-          log.info("resolved elastic CLI binary", { key, path: cmd })
-        } catch (err) {
-          log.error("failed to resolve elastic CLI binary", { key, error: err instanceof Error ? err.message : String(err) })
-        }
-      }
+      const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
         stderr: "pipe",
@@ -538,7 +563,7 @@ export namespace MCP {
         log.info(`mcp stderr: ${text}`, { key })
       })
 
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = mcpTimeout(mcp)
       try {
         const client = new Client({
           name: "ramen",
@@ -581,7 +606,7 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
+    const result = await withTimeout(mcpClient.listTools(), mcpTimeout(mcp)).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
@@ -613,8 +638,7 @@ export namespace MCP {
 
   export async function status() {
     const s = await state()
-    const cfg = await Config.get()
-    const config = cfg.mcp ?? {}
+    const config = await resolvedMcpConfig()
     const result: Record<string, Status> = {}
 
     // Include all configured MCPs from config, not just connected ones
@@ -631,8 +655,9 @@ export namespace MCP {
   }
 
   export async function connect(name: string) {
-    const cfg = await Config.get()
-    const config = cfg.mcp ?? {}
+    // resolvedMcpConfig() already injects a live eab entry from the active profile,
+    // so no separate remoteEabMcp() call is needed here.
+    const config = await resolvedMcpConfig()
     const mcp = config[name]
     if (!mcp) {
       log.error("MCP config not found", { name })
@@ -644,46 +669,16 @@ export namespace MCP {
       return
     }
 
-    const result = await create(name, { ...mcp, enabled: true }).catch((err) => {
-      log.error("MCP connect create failed", { name, error: err instanceof Error ? err.message : String(err) })
+    // Delegate to add() which handles closing stale clients and updating state.
+    await add(name, { ...mcp, enabled: true }).catch((err) => {
+      log.error("MCP connect failed", { name, error: err instanceof Error ? err.message : String(err) })
       Bus.publish(TuiEvent.ToastShow, {
         title: "MCP Connect Failed",
         message: `Server "${name}": ${err instanceof Error ? err.message : String(err)}`,
         variant: "error",
         duration: 8000,
       }).catch(() => {})
-      return undefined
     })
-
-    if (!result) {
-      const s = await state()
-      s.status[name] = {
-        status: "failed",
-        error: "Unknown error during connection",
-      }
-      return
-    }
-
-    const s = await state()
-    s.status[name] = result.status
-    if (result.status.status === "failed") {
-      Bus.publish(TuiEvent.ToastShow, {
-        title: "MCP Connect Failed",
-        message: `Server "${name}": ${result.status.error ?? "unknown error"}`,
-        variant: "error",
-        duration: 8000,
-      }).catch(() => {})
-    }
-    if (result.mcpClient) {
-      // Close existing client if present to prevent memory leaks
-      const existingClient = s.clients[name]
-      if (existingClient) {
-        await existingClient.close().catch((error) => {
-          log.error("Failed to close existing MCP client", { name, error })
-        })
-      }
-      s.clients[name] = result.mcpClient
-    }
   }
 
   export async function disconnect(name: string) {
@@ -950,11 +945,12 @@ export namespace MCP {
       await new Promise<void>((resolve, reject) => {
         // Give the process a moment to fail if it's going to
         const timeout = setTimeout(() => resolve(), 500)
-        subprocess.on("error", (error) => {
+        const proc = subprocess as unknown as NodeJS.EventEmitter
+        proc.on("error", (error) => {
           clearTimeout(timeout)
           reject(error)
         })
-        subprocess.on("exit", (code) => {
+        proc.on("exit", (code: number | null) => {
           if (code !== null && code !== 0) {
             clearTimeout(timeout)
             reject(new Error(`Browser open failed with exit code ${code}`))

@@ -149,7 +149,7 @@ export namespace Installation {
   )
 
   export async function upgrade(method: Method, target: string) {
-    let result: Awaited<ReturnType<typeof upgradeCurl>> | undefined
+    let result: Process.Result | undefined
     switch (method) {
       case "curl":
         result = await upgradeCurl(target)

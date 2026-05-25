@@ -3,3 +3,5 @@ dist
 gen
 app.log
 src/provider/models-snapshot.ts
+src/elastic/cli-es-apis.generated.ts
+src/elastic/cli-kb-apis.generated.ts

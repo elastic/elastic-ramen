@@ -8,10 +8,9 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { Link } from "@tui/ui/link"
 import { ElasticAuth } from "@/elastic/auth"
-import { ElasticBin } from "@/elastic/bin"
+import { ElasticCli } from "@/elastic/cli"
 import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
-import { Process } from "@/util/process"
 import { Spinner } from "./spinner"
 
 export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () => Promise<void>; onEscape?: () => void }) {
@@ -62,13 +61,9 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     if (error()) return
 
     setStep("Verifying connection…")
-    const bin = await ElasticBin.resolve()
-    const health = await Process.text([bin, "es", "cluster", "health"], { nothrow: true }).catch(() => ({
-      text: "",
-      code: 1,
-    }))
+    const health = await ElasticCli.run(["es", "cluster", "health"]).catch(() => ({ output: "", code: 1 }))
 
-    if (health.code !== 0 && health.text?.includes("error")) {
+    if (health.code !== 0 && health.output?.includes("error")) {
       setSaving(false)
       setError("Saved, but could not connect. Check your credentials and try again.")
       return

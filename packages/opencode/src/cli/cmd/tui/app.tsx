@@ -396,6 +396,7 @@ function App() {
         duration: 8000,
       })
 
+    await ElasticAuth.ensureEabMcpOnDisk().catch((err) => stepFail("EAB MCP config sync failed", err))
     await sdk.client.instance.dispose().catch(() => {})
     await KibanaSkillsSync.sync({ force: true }).catch((err) => stepFail("Kibana skills sync failed", err))
     try {

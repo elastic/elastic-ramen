@@ -15,6 +15,9 @@ function ptyCat() {
   return { command: "cat", args: [] as string[] }
 }
 
+/** Bun subprocess I/O on Windows is slower than on Unix; use a longer wait there. */
+const ptyEchoDelay = process.platform === "win32" ? 500 : 100
+
 describe("pty", () => {
   test("does not leak output when websocket objects are reused", async () => {
     await using dir = await tmpdir({ git: true })
@@ -55,7 +58,7 @@ describe("pty", () => {
 
           // Output from a must never show up in b.
           Pty.write(a.id, "AAA\n")
-          await sleep(100)
+          await sleep(ptyEchoDelay)
 
           expect(outB.join("")).not.toContain("AAA")
         } finally {
@@ -100,7 +103,7 @@ describe("pty", () => {
           }
 
           Pty.write(a.id, "AAA\n")
-          await sleep(100)
+          await sleep(ptyEchoDelay)
 
           expect(outB.join("")).not.toContain("AAA")
         } finally {
@@ -140,7 +143,7 @@ describe("pty", () => {
           ctx.connId = 2
 
           Pty.write(a.id, "AAA\n")
-          await sleep(100)
+          await sleep(ptyEchoDelay)
 
           expect(out.join("")).toContain("AAA")
         } finally {

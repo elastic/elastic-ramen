@@ -1272,7 +1272,7 @@ export namespace Config {
       "path" in options ? options.path : { source: options.source, dir: options.dir },
     )
 
-    const normalized = (() => {
+    const normalized = await (async () => {
       if (!data || typeof data !== "object" || Array.isArray(data)) return data
       const copy = { ...(data as Record<string, unknown>) }
       // Migrate legacy `autoshare: true` to `share: "auto"` on the raw data so
@@ -1280,6 +1280,33 @@ export namespace Config {
       if (copy.autoshare === true && copy.share === undefined) {
         copy.share = "auto"
       }
+      // Strip legacy local `elastic ab mcp proxy` entry written by older ramen versions.
+      // The Go CLI no longer ships; eab is now a Kibana-hosted remote MCP endpoint.
+      const mcp = copy.mcp as Record<string, unknown> | undefined
+      if (mcp && "ab" in mcp) {
+        if (!("eab" in mcp) && typeof mcp["ab"] === "object" && mcp["ab"] !== null) {
+          mcp["eab"] = mcp["ab"]
+        }
+        delete mcp["ab"]
+        if (Object.keys(mcp).length === 0) delete copy.mcp
+        if (isFile) {
+          await Filesystem.writeJson(options.path, copy).catch(() => {})
+          log.info("normalized mcp.ab to mcp.eab", { path: source })
+        }
+      }
+      const mcp2 = copy.mcp as Record<string, unknown> | undefined
+      if (mcp2?.["eab"] && typeof mcp2["eab"] === "object") {
+        const eab = mcp2["eab"] as Record<string, unknown>
+        if (eab.type === "local" && Array.isArray(eab.command) && eab.command[0] === "elastic") {
+          delete mcp2["eab"]
+          if (Object.keys(mcp2).length === 0) delete copy.mcp
+          if (isFile) {
+            await Filesystem.writeJson(options.path, copy).catch(() => {})
+            log.info("removed legacy elastic ab mcp proxy from config", { path: source })
+          }
+        }
+      }
+
       const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
       if (!hadLegacy) return copy
       delete copy.theme

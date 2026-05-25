@@ -1,0 +1,3 @@
+[submodule "packages/cli"]
+	path = packages/cli
+	url = https://github.com/elastic/cli.git
