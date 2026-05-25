@@ -30,7 +30,7 @@ steps:
     steps:
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-linux-x64-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
         matrix:
@@ -40,7 +40,7 @@ steps:
 
       - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, pre-sign)"
         key: "smoke-linux-x64-musl-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204"
@@ -51,7 +51,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64 (pre-sign)"
         key: "smoke-linux-arm64-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -60,7 +60,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64-musl (pre-sign)"
         key: "smoke-linux-arm64-musl-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -69,7 +69,7 @@ steps:
 
       - label: ":apple: smoke darwin arm64 (pre-sign)"
         key: "smoke-darwin-arm64-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-arm"
@@ -77,7 +77,7 @@ steps:
 
       - label: ":apple: smoke darwin x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-darwin-x64-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-x64"
@@ -88,7 +88,7 @@ steps:
 
       - label: ":windows: smoke windows x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-windows-x64-pre"
-        if: build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-windows-2022"
@@ -129,7 +129,6 @@ steps:
     # key is required by collect-signed.sh to lookup the triggered build ID
     key: macos-sign-service
     depends_on: "pack-mac"
-    if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true")
     build:
       env:
         INPUT_PATH: "buildkite://"
@@ -139,7 +138,6 @@ steps:
     # key is required by collect-signed.sh to lookup the triggered build ID
     key: windows-sign-service
     depends_on: "pack-windows"
-    if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true")
     build:
       env:
         INPUT_PATH: "buildkite://"
@@ -150,14 +148,12 @@ steps:
     # key is required by collect-signed.sh to lookup the triggered build ID
     key: gpg-sign-service
     depends_on: "pack-linux"
-    if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true")
     build:
       env:
         INPUT_PATH: "buildkite://"
 
   - label: ":inbox_tray: collect signed artifacts"
     key: "collect"
-    if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true")
     depends_on:
       - "macos-sign-service"
       - "windows-sign-service"
@@ -179,7 +175,7 @@ steps:
     steps:
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-linux-x64-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
         matrix:
@@ -189,7 +185,7 @@ steps:
 
       - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, post-sign)"
         key: "smoke-linux-x64-musl-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204"
@@ -200,7 +196,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64 (post-sign)"
         key: "smoke-linux-arm64-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -209,7 +205,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64-musl (post-sign)"
         key: "smoke-linux-arm64-musl-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -218,7 +214,7 @@ steps:
 
       - label: ":apple: smoke darwin arm64 (post-sign)"
         key: "smoke-darwin-arm64-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-arm"
@@ -226,7 +222,7 @@ steps:
 
       - label: ":apple: smoke darwin x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-darwin-x64-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-x64"
@@ -237,7 +233,7 @@ steps:
 
       - label: ":windows: smoke windows x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-windows-x64-post"
-        if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true") && build.env("SKIP_SMOKE") != "true"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-windows-2022"
