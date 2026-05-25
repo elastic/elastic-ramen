@@ -1,9 +1,5 @@
 # Copyright (c) 2026-present, Elastic NV
 
-env:
-  SKIP_SMOKE: "false"
-  OVERRIDE_PUBLISH: "false"
-
 steps:
   - label: ":package: build binaries"
     key: "build"
