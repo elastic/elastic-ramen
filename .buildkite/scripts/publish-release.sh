@@ -2,8 +2,6 @@
 # Copyright (c) 2026-present, Elastic NV
 set -euo pipefail
 
-: "${BUILDKITE_TAG:?BUILDKITE_TAG must be set for release publish}"
-
 if ! command -v gh >/dev/null 2>&1; then
   echo "gh CLI is required but not installed" >&2
   exit 1
@@ -17,6 +15,17 @@ fi
 export GH_TOKEN="${token}"
 
 repo="${GH_REPO:-elastic/elastic-ramen}"
+
+if [[ -z "${BUILDKITE_TAG:-}" ]]; then
+  echo "BUILDKITE_TAG not set — looking for an in-progress draft release in ${repo}"
+  BUILDKITE_TAG="$(gh release list --repo "${repo}" --json tagName,isDraft \
+    --jq '[.[] | select(.isDraft == true)] | first | .tagName')"
+  if [[ -z "${BUILDKITE_TAG}" ]]; then
+    echo "No draft release found in ${repo}" >&2
+    exit 1
+  fi
+  echo "Found draft release: ${BUILDKITE_TAG}"
+fi
 
 echo "Resolving draft release for tag ${BUILDKITE_TAG} in ${repo}"
 draft="$(gh release view "${BUILDKITE_TAG}" --repo "${repo}" --json isDraft --jq '.isDraft')"
