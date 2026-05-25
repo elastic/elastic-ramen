@@ -254,7 +254,7 @@ steps:
   - label: ":rocket: publish GitHub release"
     key: "publish-release"
     depends_on: "smoke-post"
-    if: build.tag =~ /^v/ && (build.branch !~ /^ci\// || build.env("OVERRIDE_PUBLISH") == "true")
+    if: build.tag =~ /^v/ || (build.branch =~ /^ci\// && build.env("OVERRIDE_PUBLISH") == "true")
     env:
       GH_REPO: "elastic/elastic-ramen"
     agents:
