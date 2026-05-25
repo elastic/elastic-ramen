@@ -23,6 +23,13 @@ steps:
     key: "smoke-pre"
     depends_on: "build"
     steps:
+      - label: ":fast_forward: skip smoke (ci branch, pre-sign)"
+        key: "smoke-pre-skip"
+        if: build.branch =~ /^ci\//
+        agents:
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+        command: "echo 'Skipping pre-sign smoke on CI branch'"
+
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-linux-x64-pre"
         if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
@@ -168,6 +175,13 @@ steps:
     key: "smoke-post"
     depends_on: "collect"
     steps:
+      - label: ":fast_forward: skip smoke (ci branch, post-sign)"
+        key: "smoke-post-skip"
+        if: build.branch =~ /^ci\//
+        agents:
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+        command: "echo 'Skipping post-sign smoke on CI branch'"
+
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-linux-x64-post"
         if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
