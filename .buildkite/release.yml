@@ -259,6 +259,8 @@ steps:
       GH_REPO: "elastic/elastic-ramen"
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+    plugins:
+      - elastic/vault-github-token#v0.1.0:
     command: |
       if ! command -v gh >/dev/null 2>&1; then
         apt-get update
