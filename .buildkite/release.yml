@@ -17,11 +17,6 @@ steps:
         - exit_status: "*"
           limit: 2
     command: |
-      if [[ "${BUILDKITE_BRANCH:-}" =~ ^ci/ ]]; then
-        export DRY_RUN="true"
-      else
-        export DRY_RUN="false"
-      fi
       ./.buildkite/scripts/release-build.sh
 
   - group: ":mag: pre-sign smoke tests"
