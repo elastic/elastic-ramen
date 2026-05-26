@@ -16,7 +16,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +28,16 @@ jobs:
         id: fetch-token
         with:
           token-policy: token-policy-909fc0514fde
+
+      - name: Create and push tag
+        env:
+          GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
+        run: |
+          tag="v${{ inputs.version }}"
+          git config user.name "elasticmachine"
+          git config user.email "elasticmachine@users.noreply.github.com"
+          git tag -a "$tag" -m "Elastic RAMEN $tag"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$tag"
 
       - name: Create GitHub release
         id: create-release
