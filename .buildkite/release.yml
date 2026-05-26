@@ -6,10 +6,9 @@ steps:
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
       cpu: 2000m
-      memory: 2048Mi
-    if: build.branch =~ /^ci\//
+      memory: 4096Mi
+    if: build.branch =~ /^ci\// || build.tag =~ /^v/
     env:
-      DRY_RUN: "true"
       BUN_VERSION: "1.3.14"
     artifact_paths:
       - "packages/opencode/dist/ramen-*/bin/*"
@@ -17,14 +16,23 @@ steps:
       automatic:
         - exit_status: "*"
           limit: 2
-    command: ./.buildkite/scripts/release-build.sh
+    command: |
+      ./.buildkite/scripts/release-build.sh
 
   - group: ":mag: pre-sign smoke tests"
     key: "smoke-pre"
     depends_on: "build"
     steps:
+      - label: ":fast_forward: skip smoke (ci branch, pre-sign)"
+        key: "smoke-pre-skip"
+        if: build.branch =~ /^ci\//
+        agents:
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+        command: "echo 'Skipping pre-sign smoke on CI branch'"
+
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-linux-x64-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
         matrix:
@@ -34,6 +42,7 @@ steps:
 
       - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, pre-sign)"
         key: "smoke-linux-x64-musl-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204"
@@ -44,6 +53,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64 (pre-sign)"
         key: "smoke-linux-arm64-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -52,6 +62,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64-musl (pre-sign)"
         key: "smoke-linux-arm64-musl-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -60,6 +71,7 @@ steps:
 
       - label: ":apple: smoke darwin arm64 (pre-sign)"
         key: "smoke-darwin-arm64-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-arm"
@@ -67,6 +79,7 @@ steps:
 
       - label: ":apple: smoke darwin x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-darwin-x64-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-x64"
@@ -77,6 +90,7 @@ steps:
 
       - label: ":windows: smoke windows x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-windows-x64-pre"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-windows-2022"
@@ -161,8 +175,16 @@ steps:
     key: "smoke-post"
     depends_on: "collect"
     steps:
+      - label: ":fast_forward: skip smoke (ci branch, post-sign)"
+        key: "smoke-post-skip"
+        if: build.branch =~ /^ci\//
+        agents:
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+        command: "echo 'Skipping post-sign smoke on CI branch'"
+
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-linux-x64-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
         matrix:
@@ -172,6 +194,7 @@ steps:
 
       - label: ":penguin: smoke linux x64-musl ({{matrix.variant}}, post-sign)"
         key: "smoke-linux-x64-musl-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204"
@@ -182,6 +205,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64 (post-sign)"
         key: "smoke-linux-arm64-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -190,6 +214,7 @@ steps:
 
       - label: ":penguin: smoke linux arm64-musl (post-sign)"
         key: "smoke-linux-arm64-musl-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-ubuntu-2204-aarch64"
@@ -198,6 +223,7 @@ steps:
 
       - label: ":apple: smoke darwin arm64 (post-sign)"
         key: "smoke-darwin-arm64-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-arm"
@@ -205,6 +231,7 @@ steps:
 
       - label: ":apple: smoke darwin x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-darwin-x64-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "orka"
           imagePrefix: "generic-13-ventura-x64"
@@ -215,6 +242,7 @@ steps:
 
       - label: ":windows: smoke windows x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-windows-x64-post"
+        if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
           provider: "gcp"
           image: "family/core-windows-2022"
@@ -222,3 +250,17 @@ steps:
           setup:
             variant: ["x64", "x64-baseline"]
         command: ./.buildkite/scripts/smoke.ps1 -Variant {{matrix.variant}} -Stage post-sign
+
+  - label: ":rocket: publish GitHub release"
+    key: "publish-release"
+    depends_on: "smoke-post"
+    if: build.tag =~ /^v/ || (build.branch =~ /^ci\// && build.env("OVERRIDE_PUBLISH") == "true")
+    env:
+      GH_REPO: "elastic/elastic-ramen"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+    plugins:
+      - elastic/vault-github-token#v0.2.1:
+      - elastic/gh-cli#v0.1.1:
+          version: "2.92.0"
+    command: bash ./.buildkite/scripts/publish-release.sh

@@ -143,6 +143,20 @@ Some debug methods that can be problematic:
 
 With that said, you may want to try these methods, as they might work for you.
 
+## Releasing
+
+A release is one click:
+
+1. Run the `Release Elastic RAMEN` GitHub Actions workflow (`Actions → Release Elastic RAMEN → Run workflow`) and pass the version (e.g. `0.3.0`).
+2. The workflow creates a draft release `v0.3.0` on the repo, which also pushes the `v0.3.0` git tag.
+3. The tag push triggers the `elastic-ramen-release` Buildkite pipeline. It builds binaries for all platforms, runs pre-sign smoke tests, sends Mac/Windows/Linux artifacts through the unified signing services, runs post-sign smoke tests, uploads the signed artifacts to the draft, and flips it to published.
+4. Flipping the release to published fires the `Publish to npm` GitHub Actions workflow (`.github/workflows/publish.yml`), which rebuilds the CLI and publishes the new version to npm with provenance.
+
+### Pipeline environment variables
+
+- `SKIP_SMOKE=true` — skips both pre- and post-sign smoke test groups. Intended for iterating on the pipeline itself; do not use for real releases.
+- `OVERRIDE_PUBLISH=true` — allows the publish step to run on a `ci/...` branch without a `v*` tag. Used to exercise the publish flow end-to-end against an existing draft. When multiple drafts exist, also set `BUILDKITE_TAG` to disambiguate — the script refuses to guess.
+
 ## Pull Request Expectations
 
 ### Issue First Policy
