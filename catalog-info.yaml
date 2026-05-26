@@ -24,22 +24,17 @@ spec:
     spec:
       repository: elastic/elastic-ramen
       pipeline_file: ".buildkite/release.yml"
-      # Triggered by elastic/oblt-actions/buildkite/run from
-      # .github/workflows/release-ramen.yml. Disable native git triggers
-      # so PRs and tags don't accidentally fire the signing pipeline.
+      # Triggered natively by tag pushes (v*) from the
+      # .github/workflows/release-ramen.yml release workflow, or manually
+      # via ci/* branches for pipeline iteration. PR builds stay disabled.
       provider_settings:
-        # Auto-run pipeline only for ci/* branches.
+        # Auto-run pipeline for ci/* branches and v* tag pushes.
         build_branches: true
         filter_condition: |
-          build.branch =~ /^ci\//
+          build.branch =~ /^ci\// || build.tag =~ /^v/
         filter_enabled: true
-        # Normal branch run scaffold (disabled):
-        # build_branches: true
-        # filter_condition: |
-        #   true
-        # filter_enabled: true
         build_pull_requests: false
-        build_tags: false
+        build_tags: true
       cancel_intermediate_builds: false
       skip_intermediate_builds: false
       teams:
