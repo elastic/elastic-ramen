@@ -34,6 +34,9 @@ if [[ "${draft}" != "true" ]]; then
   echo "Release ${BUILDKITE_TAG} is not draft; continuing to upload assets and publish state update"
 fi
 
+mkdir -p final
+buildkite-agent artifact download "final/*" .
+
 shopt -s nullglob
 assets=(final/*)
 if ((${#assets[@]} == 0)); then
