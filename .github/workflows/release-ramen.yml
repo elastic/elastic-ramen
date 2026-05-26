@@ -61,5 +61,6 @@ jobs:
         run: |
           tag="v$VERSION"
           gh release create "$tag" \
+            --draft \
             --title "$tag" \
             --notes "Elastic RAMEN $tag"
