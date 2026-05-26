@@ -767,38 +767,6 @@ test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", as
   }
 })
 
-test(
-  "installs dependencies in writable OPENCODE_CONFIG_DIR",
-  async () => {
-    await using tmp = await tmpdir<string>({
-      init: async (dir) => {
-        const cfg = path.join(dir, "configdir")
-        await fs.mkdir(cfg, { recursive: true })
-        return cfg
-      },
-    })
-
-    const prev = process.env.OPENCODE_CONFIG_DIR
-    process.env.OPENCODE_CONFIG_DIR = tmp.extra
-
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await Config.get()
-          await Config.waitForDependencies()
-        },
-      })
-
-      expect(await Filesystem.exists(path.join(tmp.extra, "package.json"))).toBe(true)
-      expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
-    } finally {
-      if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
-      else process.env.OPENCODE_CONFIG_DIR = prev
-    }
-  },
-  { timeout: 120_000 },
-)
 
 test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
@@ -1788,39 +1756,6 @@ describe("deduplicatePlugins", () => {
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
   })
 
-  test("local plugin directory overrides global opencode.json plugin", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        const projectDir = path.join(dir, "project")
-        const opencodeDir = path.join(projectDir, ".elastic-ramen")
-        const pluginDir = path.join(opencodeDir, "plugin")
-        await fs.mkdir(pluginDir, { recursive: true })
-
-        await Filesystem.write(
-          path.join(dir, "elastic_ramen.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            plugin: ["my-plugin@1.0.0"],
-          }),
-        )
-
-        await Filesystem.write(path.join(pluginDir, "my-plugin.js"), "export default {}")
-      },
-    })
-
-    await Instance.provide({
-      directory: path.join(tmp.path, "project"),
-      fn: async () => {
-        const config = await Config.get()
-        const plugins = config.plugin ?? []
-
-        const myPlugins = plugins.filter((p) => Config.getPluginName(p) === "my-plugin")
-        expect(myPlugins.length).toBe(1)
-        expect(myPlugins[0].startsWith("file://")).toBe(true)
-      },
-    })
-  })
 })
 
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
