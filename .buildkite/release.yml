@@ -261,9 +261,6 @@ steps:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
     plugins:
       - elastic/vault-github-token#v0.1.0:
-    command: |
-      if ! command -v gh >/dev/null 2>&1; then
-        apt-get update
-        apt-get install -y gh
-      fi
-      bash ./.buildkite/scripts/publish-release.sh
+      - elastic/gh-cli#v0.1.1:
+          version: "2.92.0"
+    command: bash ./.buildkite/scripts/publish-release.sh
