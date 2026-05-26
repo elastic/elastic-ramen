@@ -1,8 +1,19 @@
 import z from "zod"
 import { Tool } from "./tool"
+import type { MessageV2 } from "../session/message-v2"
 
 export const EIGHTHS = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
 export const BAR_WIDTH = 20
+export const AREA_HEIGHT = 12
+/** Width in braille chars (each char = 2 pixel columns). Data is interpolated across this width. */
+export const AREA_WIDTH = 60
+/** Braille dot bitmasks indexed by [row 0-3][col 0-1]. Row 0 is the topmost dot, row 3 the bottommost. */
+export const BRAILLE_DOTS = [
+  [0x01, 0x08],
+  [0x02, 0x10],
+  [0x04, 0x20],
+  [0x40, 0x80],
+]
 
 const ANSI_COLORS = ["\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[31m"]
 const ANSI_RESET = "\x1b[0m"
@@ -30,7 +41,7 @@ function pad(s: string, w: number): string {
   return s + " ".repeat(Math.max(0, w - visible(s).length))
 }
 
-function colorFor(i: number): string {
+export function colorFor(i: number): string {
   return ANSI_COLORS[i % ANSI_COLORS.length]
 }
 
@@ -59,6 +70,64 @@ export function ansiStack(values: number[], globalMax: number, width: number): s
   const used = sw.reduce((a, b) => a + b, 0)
   if (used < width) out += " ".repeat(width - used)
   return out
+}
+
+/** Build the braille grid for a single-series area chart. Returns bit patterns per cell. */
+export function areaGrid(series: number[], max: number, width: number): number[][] {
+  const H = AREA_HEIGHT
+  const LEVELS = H * 4
+  const n = series.length
+  const bits = Array.from({ length: H }, () => new Array(width).fill(0))
+  const pixelCols = width * 2
+  for (let px = 0; px < pixelCols; px++) {
+    const cx = Math.floor(px / 2)
+    const dcol = px % 2
+    const di = n <= 1 ? 0 : (px / (pixelCols - 1)) * (n - 1)
+    const lo = Math.floor(di)
+    const hi = Math.min(n - 1, lo + 1)
+    const t = di - lo
+    const v = (series[lo] ?? 0) * (1 - t) + (series[hi] ?? 0) * t
+    const fillTop = Math.min(LEVELS, Math.round((v / max) * LEVELS))
+    for (let lev = 0; lev < fillTop; lev++) {
+      const cy = H - 1 - Math.floor(lev / 4)
+      const row = 3 - (lev % 4)
+      bits[cy][cx] |= BRAILLE_DOTS[row][dcol]
+    }
+  }
+  return bits
+}
+
+function brailleArea(series: number[], max: number, color: string, width: number): string[] {
+  const bits = areaGrid(series, max, width)
+  return bits.map((row) =>
+    row
+      .map((b) => {
+        const ch = String.fromCharCode(0x2800 + b)
+        return b > 0 ? color + ch + ANSI_RESET : ch
+      })
+      .join(""),
+  )
+}
+
+/** Render one area panel: box + x-axis labels. Width is in braille chars. */
+function areaPanel(
+  series: number[],
+  max: number,
+  color: string,
+  label: string,
+  firstLabel: string,
+  lastLabel: string,
+  width: number,
+): string[] {
+  const lines: string[] = []
+  lines.push(color + label + ANSI_RESET)
+  lines.push("┌" + "─".repeat(width) + "┐")
+  for (const row of brailleArea(series, max, color, width)) {
+    lines.push("│" + row + "│")
+  }
+  lines.push("└" + "─".repeat(width) + "┘")
+  lines.push(" " + firstLabel + " ".repeat(Math.max(0, width - firstLabel.length - lastLabel.length)) + lastLabel)
+  return lines
 }
 
 function barChart(params: {
@@ -108,8 +177,9 @@ function barChart(params: {
     lines.push("")
     lines.push(legend)
   } else {
+    const hdr = params.columns.map((c, i) => colorFor(i) + c + ANSI_RESET)
     lines.push(border("┌", "┬", "┐"))
-    lines.push(rowLine("Category", params.columns))
+    lines.push(rowLine("Category", hdr))
     lines.push(border("├", "┼", "┤"))
     lines.push(
       ...params.rows.map((r, ri) =>
@@ -120,18 +190,99 @@ function barChart(params: {
       ),
     )
     lines.push(border("└", "┴", "┘"))
+    if (params.columns.length > 1) {
+      lines.push("")
+      lines.push(params.columns.map((c, i) => `${colorFor(i)}█${ANSI_RESET} ${c}`).join("  "))
+    }
   }
 
   return { lines, maxes }
 }
 
+function areaChart(params: {
+  title?: string
+  columns: string[]
+  rows: { label: string; values: number[] }[]
+}): { lines: string[]; maxes: number[] } {
+  const n = params.rows.length
+  const S = params.columns.length
+  const vals = params.columns.map((_, si) => params.rows.map((r) => r.values[si] ?? 0))
+  const maxes = params.columns.map((_, i) => Math.max(0, ...params.rows.map((r) => r.values[i] ?? 0)))
+  const firstLabel = n > 0 ? params.rows[0].label : ""
+  const lastLabel = n > 0 ? params.rows[n - 1].label : ""
+
+  const lines: string[] = []
+  if (params.title) {
+    lines.push(params.title)
+    lines.push("")
+  }
+
+  if (S === 1) {
+    const max = Math.max(1, ...vals[0])
+    lines.push(...areaPanel(vals[0], max, colorFor(0), params.columns[0], firstLabel, lastLabel, AREA_WIDTH))
+  } else {
+    const globalMax = Math.max(1, ...vals.flat())
+    for (let si = 0; si < S; si++) {
+      lines.push(...areaPanel(vals[si], globalMax, colorFor(si), params.columns[si], firstLabel, lastLabel, AREA_WIDTH))
+      if (si < S - 1) lines.push("")
+    }
+  }
+
+  return { lines, maxes }
+}
+
+const NUMERIC_ESQL = new Set([
+  "long", "integer", "double", "float", "unsigned_long", "byte", "short", "half_float", "scaled_float",
+])
+
+type EsqlResult = { columns: { name: string; type: string }[]; values: unknown[][] }
+
+function lastEsqlResult(messages: MessageV2.WithParts[]): EsqlResult | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    for (let j = msg.parts.length - 1; j >= 0; j--) {
+      const part = msg.parts[j]
+      if (part.type !== "tool" || part.state.status !== "completed") continue
+      try {
+        const data = JSON.parse(part.state.output)
+        if (
+          Array.isArray(data?.columns) &&
+          Array.isArray(data?.values) &&
+          data.columns.every(
+            (c: unknown) =>
+              typeof c === "object" &&
+              c !== null &&
+              typeof (c as { name?: unknown }).name === "string" &&
+              typeof (c as { type?: unknown }).type === "string",
+          )
+        ) return data as EsqlResult
+      } catch {}
+    }
+  }
+}
+
+function esqlToChart(data: EsqlResult): { columns: string[]; rows: { label: string; values: number[] }[] } {
+  const labelIdx = data.columns.findIndex((c) => !NUMERIC_ESQL.has(c.type))
+  const valueIdxs = data.columns.flatMap((c, i) => (NUMERIC_ESQL.has(c.type) ? [i] : []))
+  const columns = valueIdxs.map((i) => data.columns[i].name)
+  const rows = data.values.map((row, ri) => ({
+    label: labelIdx >= 0 ? String(row[labelIdx]) : String(ri),
+    values: valueIdxs.map((i) => Number(row[i]) || 0),
+  }))
+  return { columns, rows }
+}
+
 export const chartParameters = z.object({
+  type: z
+    .enum(["bar", "area"])
+    .default("bar")
+    .describe("Chart type: bar for tabular bar chart, area for braille horizontal area chart"),
   stacked: z
     .boolean()
     .default(false)
     .describe("When true and there are multiple columns, stack their values into one bar per row"),
   title: z.string().optional().describe("Optional chart title"),
-  columns: z.array(z.string()).describe("Headers for the numerical value columns"),
+  columns: z.array(z.string()).optional().describe("Headers for the numerical value columns. Omit to reuse the last ES|QL result automatically."),
   rows: z
     .array(
       z.object({
@@ -140,8 +291,10 @@ export const chartParameters = z.object({
       }),
     )
     .min(1)
-    .describe("Data rows with category labels and numerical values"),
+    .optional()
+    .describe("Data rows with category labels and numerical values. Omit to reuse the last ES|QL result automatically."),
 }).superRefine((d, ctx) => {
+  if (!d.rows || !d.columns) return
   for (let i = 0; i < d.rows.length; i++) {
     if (d.rows[i].values.length !== d.columns.length) {
       ctx.addIssue({
@@ -155,7 +308,7 @@ export const chartParameters = z.object({
 
 export const ChartTool = Tool.define("chart", {
   description: [
-    "Render tabular data as an inline bar chart in the ramen terminal UI.",
+    "Render tabular data as an inline chart in the ramen terminal UI.",
     "Call this automatically whenever you have ES|QL query results or any other",
     "tabular data with numeric columns worth visualizing — do not wait to be asked.",
     "",
@@ -165,37 +318,50 @@ export const ChartTool = Tool.define("chart", {
     "IMPORTANT: after rendering the chart, do NOT repeat the same data in text.",
     "The chart is the answer. Avoid statements like 'as you can see, X is 42 and Y is 99'.",
     "",
-    "Layout: table with one horizontal magnitude bar per numeric cell (category × column).",
+    "AUTO-EXTRACTION: if you omit both `columns` and `rows`, the tool automatically",
+    "reads the most recent ES|QL query result from the conversation and builds the chart",
+    "from it. Prefer this — just call chart with type/title after an ES|QL query.",
     "",
-    "Stacking: set stacked=true when columns are parts of a whole (e.g. success + error).",
-    "Unstacked (default) shows columns side-by-side per row for comparison.",
+    "Chart types:",
+    "  bar  — table with one horizontal magnitude bar per numeric cell (category × column). Default.",
+    "  area — braille-based area chart. Use for time series or sequential data.",
+    "         Each numeric column gets its own panel. Two series render side by side;",
+    "         more than two render in a vertical grid. All panels share the same y scale.",
     "",
-    "Example — ES|QL result {rows: [{category:'web', count:120, p99:340}, ...]}:",
-    '  stacked: false',
-    '  columns: ["count", "p99_ms"]',
-    "  rows: [",
-    '    { label: "web",   values: [120, 340] },',
-    '    { label: "db",    values: [45,  890] }',
-    "  ]",
+    "Stacking (bar only): set stacked=true when columns are parts of a whole (e.g. success + error).",
+    "",
+    "Example — after an ES|QL query, just call:",
+    '  { type: "area", title: "Request rate over time" }',
+    "",
+    "Example — manual data:",
+    '  type: "bar", columns: ["count", "p99_ms"]',
+    "  rows: [{ label: \"web\", values: [120, 340] }, ...]",
   ].join("\n"),
   parameters: chartParameters,
-  async execute(params) {
+  async execute(params, ctx) {
+    let { columns, rows } = params
+    if (!columns || !rows) {
+      const esql = lastEsqlResult(ctx.messages)
+      if (!esql) throw new Error("No ES|QL result found in conversation. Provide columns and rows explicitly.")
+      const derived = esqlToChart(esql)
+      columns = derived.columns
+      rows = derived.rows
+    }
     const stacked = params.stacked
-    const result = barChart({ ...params, stacked })
-
+    const result = params.type === "area" ? areaChart({ ...params, columns, rows }) : barChart({ ...params, columns, rows, stacked })
     const lines = result.lines
     const t = params.title
     const body = t && lines[0] === t ? lines.slice(lines[1] === "" ? 2 : 1) : lines
 
     return {
-      title: params.title ?? "bar chart",
+      title: params.title ?? (params.type === "area" ? "area chart" : "bar chart"),
       metadata: {
         data: {
-          type: "bar" as const,
+          type: params.type as "bar" | "area",
           stacked,
           title: params.title,
-          columns: params.columns,
-          rows: params.rows,
+          columns,
+          rows,
           maxes: result.maxes,
         },
       },

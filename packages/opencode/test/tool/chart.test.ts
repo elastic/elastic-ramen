@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { z } from "zod"
-import { ChartTool, chartParameters, render, fmt, ansiStack, segSizes, BAR_WIDTH, EIGHTHS } from "../../src/tool/chart"
+import { ChartTool, chartParameters, render, fmt, ansiStack, segSizes, BAR_WIDTH, EIGHTHS, areaGrid, AREA_HEIGHT, AREA_WIDTH, BRAILLE_DOTS } from "../../src/tool/chart"
 
 function vis(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "")
@@ -231,5 +231,213 @@ describe("ChartTool", () => {
         rows: [{ label: "web", values: [1, 2, 3] }],
       }),
     ).toThrow(/expected 2/)
+  })
+
+  test("multi-column unstacked bar has colored column headers", async () => {
+    const res = await exec({
+      columns: ["a", "b"],
+      rows: [{ label: "x", values: [10, 20] }],
+    })
+    const headerLine = res.output.split("\n").find((ln) => ln.includes("a") && ln.includes("b") && ln.includes("│"))
+    expect(headerLine).toBeDefined()
+    expect(headerLine).toContain("\x1b[32m")
+    expect(headerLine).toContain("\x1b[33m")
+  })
+
+  test("multi-column unstacked bar has legend at bottom", async () => {
+    const res = await exec({
+      columns: ["alpha", "beta"],
+      rows: [
+        { label: "x", values: [10, 20] },
+        { label: "y", values: [5, 15] },
+      ],
+    })
+    const lines = res.output.split("\n")
+    const borderIdx = lines.findLastIndex((ln) => ln.startsWith("└"))
+    expect(borderIdx).toBeGreaterThan(-1)
+    const legend = lines.slice(borderIdx + 1).join("\n")
+    expect(legend).toContain("alpha")
+    expect(legend).toContain("beta")
+  })
+
+  test("single-column bar has no legend", async () => {
+    const res = await exec({
+      columns: ["count"],
+      rows: [
+        { label: "a", values: [1] },
+        { label: "b", values: [2] },
+      ],
+    })
+    const lines = res.output.split("\n")
+    const borderIdx = lines.findLastIndex((ln) => ln.startsWith("└"))
+    const after = lines.slice(borderIdx + 1).filter((l) => l.trim().length > 0)
+    expect(after.length).toBe(0)
+  })
+
+  test("area chart type and title", async () => {
+    const res = await exec({
+      type: "area",
+      columns: ["count"],
+      rows: [
+        { label: "t1", values: [10] },
+        { label: "t2", values: [20] },
+      ],
+    })
+    expect(res.metadata.data.type).toBe("area")
+    expect(res.title).toBe("area chart")
+  })
+
+  test("area chart output contains braille characters", async () => {
+    const res = await exec({
+      type: "area",
+      columns: ["n"],
+      rows: Array.from({ length: 10 }, (_, i) => ({ label: `t${i}`, values: [i * 10] })),
+    })
+    expect(/[\u2800-\u28FF]/.test(res.output)).toBe(true)
+    expect(res.output).toContain("┌")
+    expect(res.output).toContain("└")
+  })
+
+  test("area chart has x-axis first and last labels", async () => {
+    const res = await exec({
+      type: "area",
+      columns: ["v"],
+      rows: [
+        { label: "start", values: [5] },
+        { label: "middle", values: [10] },
+        { label: "end", values: [3] },
+      ],
+    })
+    const lines = res.output.split("\n")
+    const labelLine = lines[lines.length - 1]
+    expect(labelLine).toContain("start")
+    expect(labelLine).toContain("end")
+  })
+
+  test("area chart with multiple columns has panel labels", async () => {
+    const res = await exec({
+      type: "area",
+      columns: ["ok", "err"],
+      rows: [
+        { label: "t1", values: [80, 20] },
+        { label: "t2", values: [70, 30] },
+      ],
+    })
+    expect(res.output).toContain("ok")
+    expect(res.output).toContain("err")
+  })
+
+  test("area chart with multiple series renders separate panels", async () => {
+    const res = await exec({
+      type: "area",
+      columns: ["ok", "err"],
+      rows: [
+        { label: "t1", values: [80, 20] },
+        { label: "t2", values: [60, 40] },
+      ],
+    })
+    expect(/[\u2800-\u28FF]/.test(res.output)).toBe(true)
+    // Each series has its own label header and box
+    expect(res.output).toContain("ok")
+    expect(res.output).toContain("err")
+    // Two distinct colors used
+    expect(res.output).toContain("\x1b[32m")
+    expect(res.output).toContain("\x1b[33m")
+  })
+})
+
+describe("areaGrid", () => {
+  test("returns grid of correct dimensions", () => {
+    const bits = areaGrid([10, 20, 30], 30, 10)
+    expect(bits.length).toBe(AREA_HEIGHT)
+    expect(bits[0].length).toBe(10)
+  })
+
+  test("all-zero input produces no filled dots", () => {
+    const bits = areaGrid([0, 0, 0], 10, 5)
+    expect(bits.flat().every((b) => b === 0)).toBe(true)
+  })
+
+  test("full value fills bottom rows of grid", () => {
+    const bits = areaGrid([100], 100, 5)
+    expect(bits[AREA_HEIGHT - 1][0] & BRAILLE_DOTS[3][0]).toBe(BRAILLE_DOTS[3][0])
+  })
+
+  test("data beyond width is ignored", () => {
+    const bits = areaGrid(Array.from({ length: 100 }, (_, i) => i), 99, 5)
+    expect(bits[0].length).toBe(5)
+  })
+})
+
+describe("ES|QL auto-extraction", () => {
+  function ctxWithEsql(columns: { name: string; type: string }[], values: unknown[][]) {
+    return {
+      ...ctx,
+      messages: [
+        {
+          info: { id: "msg_1", sessionID: "ses_test", role: "assistant", time: { created: 0 }, agent: "build", model: { providerID: "x", modelID: "y" } },
+          parts: [
+            {
+              type: "tool",
+              id: "p1",
+              sessionID: "ses_test",
+              messageID: "msg_1",
+              callID: "c1",
+              tool: "esql_query",
+              state: { status: "completed", input: {}, output: JSON.stringify({ columns, values }), title: "esql", metadata: {}, time: { start: 0, end: 1 } },
+            },
+          ],
+        },
+      ],
+    } as any
+  }
+
+  test("auto-extracts numeric columns from last ES|QL result", async () => {
+    const tool = await ChartTool.init()
+    const result = await tool.execute(
+      chartParameters.parse({ type: "bar", title: "auto" }),
+      ctxWithEsql(
+        [{ name: "service", type: "keyword" }, { name: "count", type: "long" }],
+        [["web", 120], ["db", 45]],
+      ),
+    )
+    expect(result.metadata.data.columns).toEqual(["count"])
+    expect(result.metadata.data.rows[0].label).toBe("web")
+    expect(result.metadata.data.rows[0].values).toEqual([120])
+  })
+
+  test("throws when no ES|QL result and no data provided", async () => {
+    const tool = await ChartTool.init()
+    expect(tool.execute(chartParameters.parse({ type: "bar" }), ctx as any)).rejects.toThrow("No ES|QL result")
+  })
+
+  test("ignores tool outputs with bare-string columns (not ES|QL shape)", async () => {
+    const tool = await ChartTool.init()
+    const lookalike = {
+      ...ctx,
+      messages: [
+        {
+          info: { id: "msg_1", sessionID: "ses_test", role: "assistant", time: { created: 0 }, agent: "build", model: { providerID: "x", modelID: "y" } },
+          parts: [
+            {
+              type: "tool",
+              id: "p1",
+              sessionID: "ses_test",
+              messageID: "msg_1",
+              callID: "c1",
+              tool: "other_tool",
+              state: { status: "completed", input: {}, output: JSON.stringify({ columns: ["a", "b"], values: [[1, 2]] }), title: "x", metadata: {}, time: { start: 0, end: 1 } },
+            },
+          ],
+        },
+      ],
+    } as any
+    expect(tool.execute(chartParameters.parse({ type: "bar" }), lookalike)).rejects.toThrow("No ES|QL result")
+  })
+})
+
+describe("AREA_WIDTH", () => {
+  test("is 60 braille chars wide", () => {
+    expect(AREA_WIDTH).toBe(60)
   })
 })
