@@ -68,7 +68,6 @@ export namespace ToolRegistry {
         Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
       ),
     )
-    if (matches.length) await Config.waitForDependencies()
     for (const match of matches) {
       const namespace = path.basename(match, path.extname(match))
       const mod = await import(pathToFileURL(match).href)

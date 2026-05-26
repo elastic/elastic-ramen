@@ -3,7 +3,7 @@
 // and has been modified by Elastic NV. Changes: updated config file lookup to use elastic_ramen naming, updated doc/schema URLs to elastic.co
 import { Log } from "../util/log"
 import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
+import { pathToFileURL } from "url"
 import { createRequire } from "module"
 import os from "os"
 import z from "zod"
@@ -25,17 +25,13 @@ import {
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { constants, existsSync } from "fs"
+import { existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
-import { proxied } from "@/util/proxied"
-import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
@@ -145,8 +141,6 @@ export namespace Config {
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
 
-    const deps = []
-
     for (const dir of unique(directories)) {
       if (dir.endsWith(".elastic-ramen") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["elastic_ramen.jsonc", "elastic_ramen.json"]) {
@@ -159,17 +153,9 @@ export namespace Config {
         }
       }
 
-      deps.push(
-        iife(async () => {
-          const shouldInstall = await needsInstall(dir)
-          if (shouldInstall) await installDependencies(dir)
-        }),
-      )
-
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
     }
 
     // Inline config content overrides all non-managed config sources.
@@ -264,90 +250,9 @@ export namespace Config {
     return {
       config: result,
       directories,
-      deps,
     }
   })
 
-  export async function waitForDependencies() {
-    const deps = await state().then((x) => x.deps)
-    await Promise.all(deps)
-  }
-
-  export async function installDependencies(dir: string) {
-    const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
-
-    const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
-      dependencies: {},
-    }))
-    json.dependencies = {
-      ...json.dependencies,
-      "@opencode-ai/plugin": targetVersion,
-    }
-    await Filesystem.writeJson(pkg, json)
-
-    const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Filesystem.exists(gitignore)
-    if (!hasGitIgnore)
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
-
-    // Install any additional dependencies defined in the package.json
-    // This allows local plugins and custom tools to use external packages
-    await BunProc.run(
-      [
-        "install",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
-      ],
-      { cwd: dir },
-    ).catch((err) => {
-      log.warn("failed to install dependencies", { dir, error: err })
-    })
-  }
-
-  async function isWritable(dir: string) {
-    try {
-      await fs.access(dir, constants.W_OK)
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  export async function needsInstall(dir: string) {
-    // Some config dirs may be read-only.
-    // Installing deps there will fail; skip installation in that case.
-    const writable = await isWritable(dir)
-    if (!writable) {
-      log.debug("config dir is not writable, skipping dependency install", { dir })
-      return false
-    }
-
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
-
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
-
-    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
-
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!isOutdated) return false
-      log.info("Cached version is outdated, proceeding with install", {
-        pkg: "@opencode-ai/plugin",
-        cachedVersion: depVersion,
-      })
-      return true
-    }
-    if (depVersion === targetVersion) return false
-    return true
-  }
 
   function rel(item: string, patterns: string[]) {
     const normalizedItem = item.replaceAll("\\", "/")
@@ -476,19 +381,6 @@ export namespace Config {
     return result
   }
 
-  async function loadPlugin(dir: string) {
-    const plugins: string[] = []
-
-    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      plugins.push(pathToFileURL(item).href)
-    }
-    return plugins
-  }
 
   /**
    * Extracts a canonical plugin name from a plugin specifier.
