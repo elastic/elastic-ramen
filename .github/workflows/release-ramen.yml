@@ -34,6 +34,10 @@ jobs:
           GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
         run: |
           tag="v${{ inputs.version }}"
+          if git ls-remote --tags origin "refs/tags/$tag" | grep -q "refs/tags/$tag$"; then
+            echo "Error: tag $tag already exists on the remote. Aborting to prevent duplicate release." >&2
+            exit 1
+          fi
           git config user.name "elasticmachine"
           git config user.email "elasticmachine@users.noreply.github.com"
           git tag -a "$tag" -m "Elastic RAMEN $tag"
