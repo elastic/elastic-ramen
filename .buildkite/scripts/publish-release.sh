@@ -18,12 +18,18 @@ repo="${GH_REPO:-elastic/elastic-ramen}"
 
 if [[ -z "${BUILDKITE_TAG:-}" ]]; then
   echo "BUILDKITE_TAG not set — looking for an in-progress draft release in ${repo}"
-  BUILDKITE_TAG="$(gh release list --repo "${repo}" --json tagName,isDraft \
-    --jq '[.[] | select(.isDraft == true)] | first | .tagName')"
-  if [[ -z "${BUILDKITE_TAG}" ]]; then
+  drafts="$(gh release list --repo "${repo}" --json tagName,isDraft \
+    --jq '[.[] | select(.isDraft == true) | .tagName]')"
+  count="$(echo "${drafts}" | jq 'length')"
+  if [[ "${count}" -eq 0 ]]; then
     echo "No draft release found in ${repo}" >&2
     exit 1
+  elif [[ "${count}" -gt 1 ]]; then
+    echo "Multiple draft releases found in ${repo}; set BUILDKITE_TAG explicitly:" >&2
+    echo "${drafts}" | jq -r '.[]' >&2
+    exit 1
   fi
+  BUILDKITE_TAG="$(echo "${drafts}" | jq -r '.[0]')"
   echo "Found draft release: ${BUILDKITE_TAG}"
 fi
 
