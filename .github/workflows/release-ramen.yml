@@ -34,14 +34,19 @@ jobs:
           GH_TOKEN: ${{ steps.fetch-token.outputs.token }}
         run: |
           tag="v${{ inputs.version }}"
-          if git ls-remote --tags origin "refs/tags/$tag" | grep -qF "refs/tags/$tag"; then
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --silent >/dev/null 2>&1; then
             echo "Error: tag $tag already exists on the remote. Aborting to prevent duplicate release." >&2
             exit 1
           fi
-          git config user.name "elasticmachine"
-          git config user.email "elasticmachine@users.noreply.github.com"
-          git tag -a "$tag" -m "Elastic RAMEN $tag"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$tag"
+          tag_sha=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="$tag" \
+            -f message="Elastic RAMEN $tag" \
+            -f object="${GITHUB_SHA}" \
+            -f type=commit \
+            --jq .sha)
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/$tag" \
+            -f sha="$tag_sha"
 
       - name: Create GitHub release
         id: create-release
