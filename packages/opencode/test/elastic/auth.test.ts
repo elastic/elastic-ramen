@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { ElasticAuth } from "../../src/elastic/auth"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
+import { KibanaGateway } from "../../src/elastic/kibana-gateway"
 
 describe("ElasticAuth.canon", () => {
   test("falls back to `default` for empty, whitespace-only, and all-invalid input", () => {
@@ -245,5 +247,100 @@ describe("ElasticAuth.save → global config", () => {
     expect(localAfter.provider).toBeUndefined()
     expect(localAfter.model).toBeUndefined()
     expect(localAfter.agents.keep).toEqual({})
+  })
+})
+
+describe("ElasticAuth.bootstrapFromEnv", () => {
+  let originalGlobalConfig: string
+  let originalCwd: string
+  let originalCloudId: string | undefined
+  let originalApiKey: string | undefined
+  let globalDir: Awaited<ReturnType<typeof tmpdir>>
+  let projectDir: Awaited<ReturnType<typeof tmpdir>>
+
+  beforeEach(async () => {
+    originalGlobalConfig = Global.Path.config
+    originalCwd = process.cwd()
+    originalCloudId = process.env["ELASTIC_RAMEN_CLOUD_ID"]
+    originalApiKey = process.env["ELASTIC_RAMEN_API_KEY"]
+    globalDir = await tmpdir()
+    projectDir = await tmpdir()
+    ;(Global.Path as { config: string }).config = globalDir.path
+    await fs.rm(path.dirname(ElasticAuth.configPath()), { recursive: true, force: true }).catch(() => {})
+    process.chdir(projectDir.path)
+  })
+
+  afterEach(async () => {
+    mock.restore()
+    if (originalCloudId === undefined) delete process.env["ELASTIC_RAMEN_CLOUD_ID"]
+    else process.env["ELASTIC_RAMEN_CLOUD_ID"] = originalCloudId
+    if (originalApiKey === undefined) delete process.env["ELASTIC_RAMEN_API_KEY"]
+    else process.env["ELASTIC_RAMEN_API_KEY"] = originalApiKey
+    await fs.rm(path.dirname(ElasticAuth.configPath()), { recursive: true, force: true }).catch(() => {})
+    process.chdir(originalCwd)
+    ;(Global.Path as { config: string }).config = originalGlobalConfig
+    await globalDir[Symbol.asyncDispose]()
+    await projectDir[Symbol.asyncDispose]()
+  })
+
+  test("creates Elastic and global RAMEN config from cloud env vars when auth config is absent", async () => {
+    process.env["ELASTIC_RAMEN_CLOUD_ID"] =
+      "acme:dXMtZWFzdC0xLmF3cy5lbGFzdGljLWNsb3VkLmNvbSRlc3V1aWQka2J1dWlk"
+    process.env["ELASTIC_RAMEN_API_KEY"] = "env-key"
+    const buildProvider = spyOn(KibanaGateway, "buildProvider").mockResolvedValue({
+      kibana: {
+        models: { default: { id: "default" } },
+      },
+    } as never)
+
+    expect(await ElasticAuth.bootstrapFromEnv()).toBe(true)
+    expect(buildProvider).toHaveBeenCalledWith("https://kbuuid.us-east-1.aws.elastic-cloud.com", "env-key")
+
+    const status = await ElasticAuth.check()
+    expect(status.configured).toBe(true)
+    expect(status.name).toBe("kbuuid")
+    expect(status.context?.cloud_id).toBe(process.env["ELASTIC_RAMEN_CLOUD_ID"])
+    expect(status.context?.elasticsearch_url).toBe("https://esuuid.us-east-1.aws.elastic-cloud.com")
+    expect(status.context?.kibana_url).toBe("https://kbuuid.us-east-1.aws.elastic-cloud.com")
+    expect(status.context?.api_key).toBe("env-key")
+
+    const globalCfg = (await Filesystem.readJson(path.join(globalDir.path, "elastic_ramen.json"))) as Record<string, any>
+    expect(globalCfg.model).toBe("kibana/default")
+    expect(globalCfg.provider.kibana.models.default.id).toBe("default")
+    expect(globalCfg.mcp.eab.url).toBe("https://kbuuid.us-east-1.aws.elastic-cloud.com/api/agent_builder/mcp")
+    expect(globalCfg.mcp.eab.headers.Authorization).toBe("ApiKey env-key")
+    expect(globalCfg.permission["eab_*"]).toBe("allow")
+  })
+
+  test("does not overwrite an existing Elastic config", async () => {
+    process.env["ELASTIC_RAMEN_CLOUD_ID"] =
+      "acme:dXMtZWFzdC0xLmF3cy5lbGFzdGljLWNsb3VkLmNvbSRlc3V1aWQka2J1dWlk"
+    process.env["ELASTIC_RAMEN_API_KEY"] = "env-key"
+    const existing = `current-context: default
+contexts:
+  default:
+    elasticsearch_url: "https://existing-es.example.com"
+    kibana_url: "https://existing-kb.example.com"
+    api_key: "existing-key"
+`
+    await Filesystem.write(ElasticAuth.configPath(), existing)
+    const buildProvider = spyOn(KibanaGateway, "buildProvider")
+
+    expect(await ElasticAuth.bootstrapFromEnv()).toBe(false)
+    expect(buildProvider).not.toHaveBeenCalled()
+    expect(await Bun.file(ElasticAuth.configPath()).text()).toBe(existing)
+    expect(await Filesystem.exists(path.join(globalDir.path, "elastic_ramen.json"))).toBe(false)
+  })
+
+  test("throws for an invalid cloud id", async () => {
+    process.env["ELASTIC_RAMEN_CLOUD_ID"] = "not-a-valid-cloud-id"
+    process.env["ELASTIC_RAMEN_API_KEY"] = "env-key"
+    const buildProvider = spyOn(KibanaGateway, "buildProvider")
+
+    await expect(ElasticAuth.bootstrapFromEnv()).rejects.toThrow(
+      "ELASTIC_RAMEN_CLOUD_ID must decode to both Elasticsearch and Kibana URLs",
+    )
+    expect(buildProvider).not.toHaveBeenCalled()
+    expect(await Filesystem.exists(ElasticAuth.configPath())).toBe(false)
   })
 })

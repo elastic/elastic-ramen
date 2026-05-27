@@ -105,7 +105,7 @@ contexts:
     api_key: "your-api-key"
 ```
 
-For headless commands (`elastic-ramen run`, `elastic-ramen serve`), the config file must exist before launch.
+For headless commands (`elastic-ramen run`, `elastic-ramen serve`), RAMEN will bootstrap the Elastic config and global `elastic_ramen.json` automatically when no Elastic config exists and both `ELASTIC_RAMEN_CLOUD_ID` and `ELASTIC_RAMEN_API_KEY` are set. Otherwise, the config file must exist before launch.
 
 ### Resetting auth
 

@@ -149,6 +149,7 @@ let cli = yargs(hideBin(process.argv))
     const cmd = args.find((a) => !a.startsWith("-"))
     const headless = cmd === "run" || cmd === "serve"
     if (headless) {
+      await ElasticAuth.bootstrapFromEnv()
       const status = await ElasticAuth.check()
       if (!status.configured) {
         const missing = status.missing?.join(", ") ?? "credentials"
