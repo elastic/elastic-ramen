@@ -111,6 +111,14 @@ describe("session.prompt special characters", () => {
   test("handles filenames with # character", async () => {
     await using tmp = await tmpdir({
       git: true,
+      config: {
+        provider: { openai: { options: { apiKey: "test" } } },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
       init: async (dir) => {
         await Bun.write(path.join(dir, "file#name.txt"), "special content\n")
       },
@@ -133,6 +141,7 @@ describe("session.prompt special characters", () => {
 
         const message = await SessionPrompt.prompt({
           sessionID: session.id,
+          agent: "build",
           parts,
           noReply: true,
         })
