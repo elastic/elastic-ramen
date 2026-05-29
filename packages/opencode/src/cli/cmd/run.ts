@@ -8,6 +8,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
+import { mergeStdin } from "../message"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
 import { resolveModelLabel } from "../../util/model-label"
@@ -368,7 +369,7 @@ export const RunCommand = cmd({
       }
     }
 
-    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+    message = await mergeStdin(message)
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")

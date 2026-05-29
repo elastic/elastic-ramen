@@ -40,6 +40,7 @@ import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { ElasticAuth } from "./elastic/auth"
+import { headless } from "./cli/headless"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -146,9 +147,7 @@ let cli = yargs(hideBin(process.argv))
 
     // Check elastic auth for headless commands (TUI has its own setup dialog)
     const args = process.argv.slice(2)
-    const cmd = args.find((a) => !a.startsWith("-"))
-    const headless = cmd === "run" || cmd === "serve"
-    if (headless) {
+    if (headless(args)) {
       await ElasticAuth.bootstrapFromEnv()
       const status = await ElasticAuth.check()
       if (!status.configured) {
