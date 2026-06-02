@@ -1,5 +1,7 @@
 // Copyright (c) 2026-present, Elastic NV
+import os from "node:os"
 import { ElasticAuth } from "./auth"
+import { Installation } from "../installation"
 
 export interface ConversationRound {
   id: string
@@ -58,6 +60,7 @@ export namespace KibanaClient {
       "x-elastic-internal-origin": "kibana",
       "elastic-api-version": "2023-10-31",
       "Content-Type": "application/json",
+      "user-agent": `elastic-ramen/${Installation.VERSION} (${os.platform()} ${os.arch()})`,
       Authorization: `ApiKey ${key}`,
     }
   }
