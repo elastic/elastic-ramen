@@ -1,8 +1,6 @@
 ---
 name: elastic-cli-usage
-description: >
-  Use when invoking the elastic CLI via elastic_cli or choosing CLI vs MCP/native
-  Kibana tools. Covers shorthands, serverless gotchas, command names, and docs/ESQL flags.
+description: "Guides execution of elasticsearch CLI commands via elastic_cli, resolves serverless-specific errors, and routes tasks between CLI and MCP/Kibana API tools. Use when running es or kb commands, debugging elastic CLI argument syntax, hitting 410 serverless errors, or deciding whether to use elastic_cli vs native Kibana tools."
 metadata:
   version: 0.3.0
   visibility: public
