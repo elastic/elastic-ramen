@@ -6,6 +6,7 @@ on:
 permissions:
   actions: read
   contents: read
+  copilot-requests: write
   discussions: write
   issues: write
   pull-requests: write
@@ -13,5 +14,3 @@ permissions:
 jobs:
   run:
     uses: elastic/ai-github-actions/.github/workflows/gh-aw-issue-triage.lock.yml@v0
-    secrets:
-      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
