@@ -6,6 +6,7 @@ on:
 permissions:
   actions: read
   contents: write
+  copilot-requests: write
   discussions: write
   issues: write
   pull-requests: write
@@ -16,5 +17,3 @@ jobs:
       github.event.issue.pull_request == null &&
       (startsWith(github.event.comment.body, '/ai'))
     uses: elastic/ai-github-actions/.github/workflows/gh-aw-mention-in-issue.lock.yml@v0
-    secrets:
-      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
