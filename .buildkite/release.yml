@@ -4,7 +4,7 @@ steps:
   - label: ":package: build binaries"
     key: "build"
     agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
       cpu: 2000m
       memory: 4096Mi
     if: build.branch =~ /^ci\// || build.tag =~ /^v/
@@ -27,14 +27,14 @@ steps:
         key: "smoke-pre-skip"
         if: build.branch =~ /^ci\//
         agents:
-          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
         command: "echo 'Skipping pre-sign smoke on CI branch'"
 
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, pre-sign)"
         key: "smoke-linux-x64-pre"
         if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
-          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
         matrix:
           setup:
             variant: ["x64", "x64-baseline"]
@@ -105,7 +105,7 @@ steps:
     key: "pack-mac"
     depends_on: "smoke-pre"
     agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
     artifact_paths:
       - "artifacts-to-sign/ramen-darwin-*.tar.gz"
     command: ./.buildkite/scripts/pack-mac.sh
@@ -114,7 +114,7 @@ steps:
     key: "pack-windows"
     depends_on: "smoke-pre"
     agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
     artifact_paths:
       - "artifacts-to-sign/ramen-windows-*.exe"
     command: ./.buildkite/scripts/pack-windows.sh
@@ -123,7 +123,7 @@ steps:
     key: "pack-linux"
     depends_on: "smoke-pre"
     agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
     artifact_paths:
       - "artifacts-to-sign/ramen-linux-*.tgz"
     command: ./.buildkite/scripts/pack-linux.sh
@@ -163,7 +163,7 @@ steps:
       - "windows-sign-service"
       - "gpg-sign-service"
     agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
     plugins:
       - elastic/vault-secrets#v0.1.0:
           path: "kv/ci-shared/observability-ci/buildkite-read-build-access"
@@ -181,14 +181,14 @@ steps:
         key: "smoke-post-skip"
         if: build.branch =~ /^ci\//
         agents:
-          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
         command: "echo 'Skipping post-sign smoke on CI branch'"
 
       - label: ":penguin: smoke linux x64 ({{matrix.variant}}, post-sign)"
         key: "smoke-linux-x64-post"
         if: build.branch !~ /^ci\// && build.env("SKIP_SMOKE") != "true"
         agents:
-          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+          image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
         matrix:
           setup:
             variant: ["x64", "x64-baseline"]
@@ -262,7 +262,7 @@ steps:
     env:
       GH_REPO: "elastic/elastic-ramen"
     agents:
-      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential@sha256:f25d024a1b9e2490c6201a2ef9822d73e604911e1a616d0f2b02537e5176f66c # was :latest on 2026-06-24
     plugins:
       - elastic/vault-github-token#v0.2.1:
       - elastic/gh-cli#v0.1.1:
