@@ -247,6 +247,34 @@ export namespace ElasticAuth {
     return { configured: true, name, context: ctx }
   }
 
+  export async function bootstrapFromEnv() {
+    const cloudId = process.env["ELASTIC_RAMEN_CLOUD_ID"]?.trim()
+    const apiKey = process.env["ELASTIC_RAMEN_API_KEY"]?.trim()
+    if (!cloudId || !apiKey) return false
+
+    const fp = filepath()
+    const existing = await Bun.file(fp).text().catch(() => "")
+    if (existing.trim()) return false
+
+    const decoded = decodeCloudId(cloudId)
+    if (!decoded?.elasticsearch_url || !decoded?.kibana_url) {
+      throw new Error("ELASTIC_RAMEN_CLOUD_ID must decode to both Elasticsearch and Kibana URLs")
+    }
+
+    const provider = await KibanaGateway.buildProvider(decoded.kibana_url, apiKey)
+    await save({
+      cloud_id: cloudId,
+      elasticsearch_url: decoded.elasticsearch_url,
+      kibana_url: decoded.kibana_url,
+      api_key: apiKey,
+      auth_mode: "cloud",
+      context: profileNameFromSetup(decoded.kibana_url, decoded.elasticsearch_url),
+      provider,
+      model: "kibana/default",
+    })
+    return true
+  }
+
   function isEnoent(e: unknown): boolean {
     return !!e && typeof e === "object" && "code" in e && (e as { code: string }).code === "ENOENT"
   }
