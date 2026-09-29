@@ -2,6 +2,7 @@
 import os from "node:os"
 import { ElasticAuth } from "./auth"
 import { Installation } from "../installation"
+import { hydrate } from "./timeline"
 
 export interface ConversationRound {
   id: string
@@ -34,6 +35,8 @@ export interface Conversation {
   conversation_rounds: ConversationRound[]
   attachments?: unknown[]
   state?: unknown
+  events?: unknown[]
+  schema_version?: number
 }
 
 export type ConversationSummary = Omit<Conversation, "conversation_rounds">
@@ -253,7 +256,8 @@ export namespace KibanaClient {
         return request(api("/internal/elastic_ramen/conversations", qs ? "?" + qs : "", space))
       },
       async get(id: string): Promise<Conversation> {
-        return request(api("/internal/elastic_ramen/conversations", `/${encodeURIComponent(id)}`, space))
+        const conv = await request<Conversation>(api("/internal/elastic_ramen/conversations", `/${encodeURIComponent(id)}`, space))
+        return hydrate(conv)
       },
       async create(body: { agent_id: string; title: string; conversation_rounds: ConversationRound[]; user_name?: string; attachments?: unknown[] }): Promise<{ id: string }> {
         return request(api("/internal/elastic_ramen/conversations", "", space), { method: "POST", body })

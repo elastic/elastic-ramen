@@ -1178,7 +1178,7 @@ export namespace SessionPrompt {
 
                 await ReadTool.init()
                   .then(async (t) => {
-                    const model = await Provider.getModel(info.model.providerID, info.model.modelID)
+                    const model = await Provider.getModel(info.model.providerID, info.model.modelID).catch(() => undefined)
                     const readCtx: Tool.Context = {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,

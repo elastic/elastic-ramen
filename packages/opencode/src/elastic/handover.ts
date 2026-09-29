@@ -46,7 +46,7 @@ export namespace Handover {
 
   export function format(conv: Conversation): string {
     const lines = [`Continuing from Kibana Agent Builder conversation: "${conv.title}"`, "", "Previous conversation:", "---"]
-    for (const round of conv.conversation_rounds) {
+    for (const round of conv.conversation_rounds ?? []) {
       lines.push(`User: ${round.input.message}`)
       for (const step of round.steps) {
         if (step.type === "tool_call") {
@@ -62,7 +62,7 @@ export namespace Handover {
   }
 
   export function rounds(conv: Conversation) {
-    return conv.conversation_rounds.map((r) => ({
+    return (conv.conversation_rounds ?? []).map((r) => ({
       input: r.input.message,
       output: r.response.message,
       started: r.started_at,
