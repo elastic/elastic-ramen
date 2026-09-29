@@ -104,7 +104,7 @@ export const TuiThreadCommand = cmd({
       })
       .option("kibana-base", {
         type: "string",
-        describe: "Kibana base URL (experimental: enables Kibana callback onboarding flow)",
+        describe: "Kibana base URL (shows a link to the credentials page during setup)",
       })
       .option("kibana-agent", {
         type: "string",

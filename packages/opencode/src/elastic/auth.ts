@@ -307,16 +307,18 @@ export namespace ElasticAuth {
     await Filesystem.writeJson(fp, merged)
   }
 
-  /** Strip `provider`/`model` from any project-local config left over from old setups. */
+  /** Strip `provider`/`model` from project configs between cwd and the git worktree. */
   async function stripProjectProviderModel() {
     const cwd = process.cwd()
-    const candidates = [
-      path.join(cwd, "elastic_ramen.json"),
-      path.join(cwd, "elastic_ramen.jsonc"),
-      path.join(cwd, ".elastic-ramen", "elastic_ramen.json"),
-      path.join(cwd, ".elastic-ramen", "elastic_ramen.jsonc"),
-    ]
-    for (const fp of candidates) {
+    const git = (await Filesystem.findUp(".git", cwd))[0]
+    const stop = git ? path.dirname(git) : cwd
+    const found = await Promise.all(
+      ["elastic_ramen.json", "elastic_ramen.jsonc"].flatMap((name) => [
+        Filesystem.findUp(name, cwd, stop),
+        Filesystem.findUp(path.join(".elastic-ramen", name), cwd, stop),
+      ]),
+    )
+    for (const fp of found.flat()) {
       const json = await readConfigFile(fp).catch(() => undefined)
       if (!json) continue
       if (!("provider" in json) && !("model" in json)) continue
@@ -421,6 +423,7 @@ export namespace ElasticAuth {
     pushEabMcpPatches(patches, existing, kibana)
     if (patches.length === 0) return
     await patchConfigFile(cfgPath, patches)
+    Config.global.reset()
   }
 
   /**
@@ -452,6 +455,7 @@ export namespace ElasticAuth {
 
     await patchConfigFile(cfg, patches)
     await stripProjectProviderModel()
+    Config.global.reset()
   }
 
   /**
@@ -508,6 +512,7 @@ export namespace ElasticAuth {
       ])
     }
     await stripProjectProviderModel()
+    Config.global.reset()
   }
 
   export async function save(input: SaveInput) {

@@ -1,15 +1,14 @@
 // Copyright (c) 2026-present, Elastic NV
 // This file is derived from opencode (https://github.com/anomalyco/opencode)
-// and has been modified by Elastic NV. Changes: updated Kibana app path to elasticRamen, switched to JSON-based manual auth input, added kibana-url mode and multi-step setup flow
+// and has been modified by Elastic NV. Changes: updated Kibana app path to elasticRamen, switched to JSON-based manual auth input
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
-import { createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createSignal, onMount, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { Link } from "@tui/ui/link"
 import { ElasticAuth } from "@/elastic/auth"
 import { ElasticCli } from "@/elastic/cli"
-import { ElasticCallback } from "@/elastic/callback"
 import { KibanaGateway } from "@/elastic/kibana-gateway"
 import { Spinner } from "./spinner"
 
@@ -19,16 +18,10 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
   const [error, setError] = createSignal("")
   const [saving, setSaving] = createSignal(false)
   const [step, setStep] = createSignal("")
-  const [mode, setMode] = createSignal<"kibana-url" | "kibana-callback" | "manual-json">(
-    props.kibanaBase ? "kibana-callback" : "kibana-url",
-  )
-  const [kibanaUrl, setKibanaUrl] = createSignal("")
 
   let jsonInput: TextareaRenderable
-  let urlInput: TextareaRenderable
-  let cb: ElasticCallback.Handle | undefined
 
-  const base = () => (props.kibanaBase || kibanaUrl())?.replace(/\/+$/, "")
+  const base = () => props.kibanaBase?.replace(/\/+$/, "")
   const link = () => {
     if (!base()) return undefined
     return base() + "/app/elasticRamen"
@@ -74,14 +67,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     dialog.clear()
   }
 
-  async function submitManual() {
+  async function submit() {
     const raw = jsonInput?.plainText?.trim() ?? ""
     if (!raw) {
       setError("Paste the JSON from the Kibana onboarding page")
       return
     }
 
-    let parsed: Record<string, any>
+    let parsed: Record<string, unknown>
     try {
       parsed = JSON.parse(raw)
     } catch {
@@ -89,11 +82,19 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       return
     }
 
-    const esUrl = parsed.elasticsearchUrl || parsed.elasticsearch_url || parsed.es_url
-    const key = parsed.apiKey || parsed.api_key
-    const kibUrl = parsed.kibanaUrl || parsed.kibana_url
+    const str = (...keys: string[]) => {
+      for (const key of keys) {
+        const val = parsed[key]
+        if (typeof val === "string" && val) return val
+      }
+    }
 
-    if (!esUrl && !parsed.cloud_id) {
+    const es = str("elasticsearchUrl", "elasticsearch_url", "es_url")
+    const key = str("apiKey", "api_key")
+    const kib = str("kibanaUrl", "kibana_url")
+    const cloud = str("cloud_id")
+
+    if (!es && !cloud) {
       setError("JSON is missing an Elasticsearch URL or Cloud ID")
       return
     }
@@ -103,14 +104,14 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     }
 
     const input: ElasticAuth.SaveInput = { api_key: key }
-    if (parsed.cloud_id) input.cloud_id = parsed.cloud_id
-    else input.elasticsearch_url = esUrl
+    if (cloud) input.cloud_id = cloud
+    else input.elasticsearch_url = es
 
-    if (kibUrl) {
-      input.kibana_url = kibUrl
+    if (kib) {
+      input.kibana_url = kib
       input.auth_mode = "kibana"
       try {
-        input.provider = await KibanaGateway.buildProvider(kibUrl, key)
+        input.provider = await KibanaGateway.buildProvider(kib, key)
       } catch (e) {
         setError("Could not reach Kibana to load connectors: " + (e as Error).message)
         return
@@ -121,65 +122,6 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
     await save(input)
   }
 
-  function submitKibanaUrl() {
-    const raw = urlInput?.plainText?.trim() ?? ""
-    if (!raw) {
-      setError("Enter your Kibana URL")
-      return
-    }
-    // Validate it looks like a URL
-    if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
-      setError("Enter a valid URL starting with http:// or https://")
-      return
-    }
-    let url: string
-    try {
-      const parsed = new URL(raw)
-      // Keep the full URL including base path (e.g. http://host:5601/oiy)
-      // but strip any trailing slash
-      url = raw.replace(/\/+$/, "")
-      // Basic sanity check
-      if (!parsed.hostname) throw new Error("no hostname")
-    } catch {
-      setError("Invalid URL")
-      return
-    }
-    setError("")
-    setKibanaUrl(url)
-    setMode("kibana-callback")
-    startCallback(url)
-  }
-
-  function startCallback(base: string) {
-    cb?.stop()
-    cb = ElasticCallback.start()
-    cb.promise.then(async (payload) => {
-      const parsed = payload as Record<string, any>
-      const es = parsed.es_url || parsed.elasticsearch_url
-      const key = parsed.api_key
-      const kb = parsed.kibana_url
-      // Prefer the --kibana-base / user-entered URL over what the callback reports,
-      // since the callback may return the internal port without the base path.
-      const effectiveKb = base || kb
-      const input: ElasticAuth.SaveInput = { api_key: key, elasticsearch_url: es, auth_mode: "kibana" }
-      if (effectiveKb) input.kibana_url = effectiveKb
-      // Always construct provider ourselves to ensure correct baseURL and headers
-      if (effectiveKb && key) {
-        try {
-          input.provider = await KibanaGateway.buildProvider(effectiveKb, key)
-        } catch (e) {
-          setError("Could not reach Kibana to load connectors: " + (e as Error).message)
-          return
-        }
-      }
-      if (parsed.model && typeof parsed.model === "string") input.model = parsed.model
-      else if (input.provider) input.model = "kibana/default"
-      await save(input)
-    }).catch((e: Error) => {
-      setError("Setup failed: " + e.message)
-    })
-  }
-
   useKeyboard((evt) => {
     if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && props.onEscape) {
       props.onEscape()
@@ -188,11 +130,7 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
       return
     }
     if (evt.name === "return") {
-      if (mode() === "manual-json") {
-        submitManual().catch((e: Error) => setError("Setup failed: " + e.message))
-      } else if (mode() === "kibana-url") {
-        submitKibanaUrl()
-      }
+      submit().catch((e: Error) => setError("Setup failed: " + e.message))
       evt.preventDefault()
       evt.stopPropagation()
     }
@@ -200,15 +138,8 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
 
   onMount(() => {
     dialog.setSize("large")
-
-    if (props.kibanaBase) {
-      startCallback(props.kibanaBase)
-    } else {
-      setTimeout(() => urlInput && !urlInput.isDestroyed && urlInput.focus(), 1)
-    }
+    setTimeout(() => jsonInput && !jsonInput.isDestroyed && jsonInput.focus(), 1)
   })
-
-  onCleanup(() => cb?.stop())
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
@@ -218,23 +149,35 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
         </text>
       </box>
 
-      {/* Full-panel connecting state — shown across all modes */}
       <Show when={saving()}>
         <box flexDirection="column" gap={1} paddingTop={1} paddingBottom={1}>
           <Spinner color={theme.primary}>{step()}</Spinner>
         </box>
       </Show>
 
-      {/* Step 1: Ask for Kibana URL if not passed via --kibana-base */}
-      <Show when={!saving() && mode() === "kibana-url"}>
+      <Show when={!saving()}>
+        <Show when={!!settingsLink()}>
+          <box flexDirection="row" gap={0}>
+            <text fg={theme.textMuted}>Requires </text>
+            <text fg={theme.text}>elasticRamen:enabled</text>
+            <text fg={theme.textMuted}> in Kibana </text>
+            <Link href={settingsLink()!} fg={theme.primary}><b>Advanced Settings</b></Link>
+          </box>
+        </Show>
+
         <text fg={theme.textMuted}>
-          {"Enter your Kibana URL to connect:"}
+          {"In Kibana, open /app/elasticRamen, create credentials, then paste the JSON here."}
         </text>
 
+        <Show when={link()}>
+          <text fg={theme.textMuted}>Create credentials: </text>
+          <Link href={link()!} fg={theme.primary} wrapMode="char">{link()!}</Link>
+        </Show>
+
         <textarea
-          height={1}
-          ref={(val: TextareaRenderable) => { urlInput = val }}
-          placeholder={"https://my-kibana.example.com:5601"}
+          height={5}
+          ref={(val: TextareaRenderable) => { jsonInput = val }}
+          placeholder={'{"kibanaUrl": "...", "elasticsearchUrl": "...", "apiKey": "..."}'}
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.primary}
@@ -251,80 +194,6 @@ export function DialogElasticSetup(props: { kibanaBase?: string; onComplete: () 
           <Show when={!!props.onEscape}>
             <text fg={theme.textMuted}>escape / ctrl+c  quit</text>
           </Show>
-        </box>
-
-        <box paddingTop={1}>
-          <text
-            fg={theme.textMuted}
-            onMouseUp={() => {
-              setMode("manual-json")
-              setTimeout(() => jsonInput && !jsonInput.isDestroyed && jsonInput.focus(), 1)
-            }}
-          >
-            {"Or paste credentials JSON manually ↓"}
-          </text>
-        </box>
-      </Show>
-
-      {/* Step 2: Waiting for Kibana callback */}
-      <Show when={!saving() && mode() === "kibana-callback"}>
-        <box flexDirection="row" gap={0}>
-          <text fg={theme.textMuted}>Requires </text>
-          <text fg={theme.text}>elasticRamen:enabled</text>
-          <text fg={theme.textMuted}> in Kibana </text>
-          <Link href={settingsLink() ?? "#"} fg={theme.primary}><b>Advanced Settings</b></Link>
-        </box>
-        <text fg={theme.textMuted}>
-          {"Open the Kibana onboarding page — credentials will be sent here automatically."}
-        </text>
-
-        <Show when={link()}>
-          <text fg={theme.textMuted}>Click here to open onboarding page: </text>
-          <Link href={link()!} fg={theme.primary} wrapMode="char">{link()!}</Link>
-        </Show>
-
-        <Show when={error()}>
-          <text fg={"#ff6b6b"}>{error()}</text>
-        </Show>
-
-        <text fg={theme.textMuted}>Waiting for Kibana...</text>
-
-        <box paddingTop={1}>
-          <text
-            fg={theme.textMuted}
-            onMouseUp={() => {
-              setMode("manual-json")
-              setTimeout(() => jsonInput && !jsonInput.isDestroyed && jsonInput.focus(), 1)
-            }}
-          >
-            {"Or paste credentials JSON ↓"}
-          </text>
-        </box>
-      </Show>
-
-      {/* Manual JSON paste mode */}
-      <Show when={!saving() && mode() === "manual-json"}>
-        <text fg={theme.textMuted}>
-          {"Paste the JSON from the Kibana onboarding page:"}
-        </text>
-
-        <textarea
-          height={5}
-          ref={(val: TextareaRenderable) => { jsonInput = val }}
-          placeholder={'{"kibanaUrl": "...", "elasticsearchUrl": "...", "apiKey": "..."}'}
-          textColor={theme.text}
-          focusedTextColor={theme.text}
-          cursorColor={theme.primary}
-        />
-
-        <Show when={error()}>
-          <text fg={"#ff6b6b"}>{error()}</text>
-        </Show>
-
-        <box paddingBottom={1}>
-          <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>connect</span>
-          </text>
         </box>
       </Show>
     </box>

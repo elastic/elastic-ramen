@@ -49,9 +49,9 @@ Run the CLI:
 elastic-ramen
 ```
 
-On first launch (or when no Kibana connection is configured), RAMEN will prompt you to enter your Kibana URL. This starts the Kibana callback auth flow — open the link in your browser, click **Generate credentials**, and Kibana will automatically deliver your credentials.
+On first launch (or when no Kibana connection is configured), RAMEN asks you to paste the credentials JSON from Kibana. In Kibana, open `/app/elasticRamen`, click **Create credentials**, copy the JSON, and paste it into RAMEN.
 
-Alternatively, pass the Kibana URL directly:
+Pass `--kibana-base` to show a direct link to that page:
 
 ```bash
 elastic-ramen --kibana-base=http://localhost:5601

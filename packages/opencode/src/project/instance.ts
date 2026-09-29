@@ -114,6 +114,8 @@ export const Instance = {
   },
   async dispose() {
     Log.Default.info("disposing instance", { directory: Instance.directory })
+    const { Config } = await import("@/config/config")
+    Config.global.reset()
     await State.dispose(Instance.directory)
     cache.delete(Instance.directory)
     emit(Instance.directory)

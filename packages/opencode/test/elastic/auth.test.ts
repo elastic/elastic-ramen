@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { ElasticAuth } from "../../src/elastic/auth"
 import { Global } from "../../src/global"
+import { Config } from "../../src/config/config"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
@@ -114,12 +115,14 @@ describe("ElasticAuth.save → global config", () => {
     globalDir = await tmpdir()
     projectDir = await tmpdir()
     ;(Global.Path as { config: string }).config = globalDir.path
+    Config.global.reset()
     process.chdir(projectDir.path)
   })
 
   afterEach(async () => {
     process.chdir(originalCwd)
     ;(Global.Path as { config: string }).config = originalGlobalConfig
+    Config.global.reset()
     await globalDir[Symbol.asyncDispose]()
     await projectDir[Symbol.asyncDispose]()
   })
@@ -245,5 +248,44 @@ describe("ElasticAuth.save → global config", () => {
     expect(localAfter.provider).toBeUndefined()
     expect(localAfter.model).toBeUndefined()
     expect(localAfter.agents.keep).toEqual({})
+  })
+
+  test("invalidates Config.global after save so a later load sees kibana", async () => {
+    await Config.getGlobal()
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: { id: "x" } } } },
+      model: "kibana/default",
+    })
+    const cfg = await Config.getGlobal()
+    expect(cfg.model).toBe("kibana/default")
+    expect(cfg.provider?.kibana?.models?.default?.id).toBe("x")
+  })
+
+  test("strips provider/model from a parent project config when cwd is a subdirectory", async () => {
+    const root = path.join(projectDir.path, "repo")
+    const child = path.join(root, "packages", "opencode")
+    const { mkdir } = await import("fs/promises")
+    await mkdir(path.join(root, ".git"), { recursive: true })
+    await mkdir(child, { recursive: true })
+    await Filesystem.writeJson(path.join(root, "elastic_ramen.json"), {
+      permission: { "eab_*": "allow" },
+      provider: {},
+      model: "",
+    })
+    process.chdir(child)
+
+    await ElasticAuth.save({
+      kibana_url: "https://kibana.example.com:5601",
+      api_key: "test-key",
+      provider: { kibana: { models: { default: {} } } },
+      model: "kibana/default",
+    })
+
+    const after = (await Filesystem.readJson(path.join(root, "elastic_ramen.json"))) as Record<string, any>
+    expect(after.provider).toBeUndefined()
+    expect(after.model).toBeUndefined()
+    expect(after.permission["eab_*"]).toBe("allow")
   })
 })

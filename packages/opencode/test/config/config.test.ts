@@ -115,6 +115,40 @@ test("loads project config from Cygwin paths on Windows", async () => {
   })
 })
 
+test("empty project provider/model do not override global kibana", async () => {
+  await using globalTmp = await tmpdir()
+  await using tmp = await tmpdir({ git: true })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await writeConfig(globalTmp.path, {
+      $schema: "https://elastic.co/config.json",
+      provider: { kibana: { models: { default: { name: "Default" } } } },
+      model: "kibana/default",
+    })
+    await writeConfig(tmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      permission: { "eab_*": "allow" },
+      provider: {},
+      model: "",
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const cfg = await Config.get()
+        expect(cfg.model).toBe("kibana/default")
+        expect(cfg.provider?.kibana?.models?.default?.name).toBe("Default")
+        expect(cfg.permission?.["eab_*"]).toBe("allow")
+      },
+    })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
+})
+
 test("ignores legacy tui keys in opencode config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

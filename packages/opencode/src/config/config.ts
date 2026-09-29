@@ -1199,6 +1199,12 @@ export namespace Config {
         }
       }
 
+      const prov = copy.provider
+      if (prov && typeof prov === "object" && !Array.isArray(prov) && Object.keys(prov).length === 0) {
+        delete copy.provider
+      }
+      if (copy.model === "") delete copy.model
+
       const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
       if (!hadLegacy) return copy
       delete copy.theme
