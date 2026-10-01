@@ -1673,6 +1673,11 @@ describe("ProviderTransform.message - kibana LLM gateway", () => {
     expect(result[0].providerOptions).toBeUndefined()
     expect(result[1].providerOptions).toBeUndefined()
   })
+
+  test("sends the session id as prompt_cache_key", () => {
+    const result = ProviderTransform.options({ model: kibanaModel, sessionID: "ses_kibana" })
+    expect(result.prompt_cache_key).toBe("ses_kibana")
+  })
 })
 
 describe("ProviderTransform.variants", () => {
