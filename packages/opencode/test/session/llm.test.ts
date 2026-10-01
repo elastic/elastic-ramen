@@ -324,6 +324,89 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("sends session id as prompt_cache_key to the kibana gateway", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const modelID = ".anthropic-claude-4.5-sonnet-chat_completion"
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "elastic_ramen.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["kibana"],
+            provider: {
+              kibana: {
+                name: "Kibana LLM Gateway",
+                npm: "@ai-sdk/openai-compatible",
+                env: [],
+                models: {
+                  [modelID]: { id: modelID, name: "Sonnet", tool_call: true, temperature: true },
+                },
+                options: {
+                  apiKey: "ignored",
+                  baseURL: `${server.url.origin}/internal/elastic_ramen/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel("kibana", modelID)
+        const sessionID = SessionID.make("session-test-kibana")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-1"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: "kibana", modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        expect(capture.url.pathname).toBe("/internal/elastic_ramen/v1/chat/completions")
+        expect(capture.body.prompt_cache_key).toBe(sessionID)
+      },
+    })
+  })
+
   test("sends responses API payload for OpenAI models", async () => {
     const server = state.server
     if (!server) {
